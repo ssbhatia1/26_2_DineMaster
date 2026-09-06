@@ -34,9 +34,10 @@ jobs:
         run: flutter pub get
 
       - name: Static analysis (dart analyze)
-        # --no-fatal-infos allows the build to pass on info-level lints only;
-        # warnings are NOT ignored and will fail the job.
-        run: dart analyze --no-fatal-infos
+        # Info-level lints do NOT fail the job; warnings DO (fatal-warnings is
+        # the CLI default, kept explicit here). --fatal-infos has no negation,
+        # so plain `dart analyze` is the correct non-fatal-infos form.
+        run: dart analyze --fatal-warnings
 
       - name: Run unit & widget tests
         run: flutter test
