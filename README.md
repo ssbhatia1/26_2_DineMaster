@@ -142,10 +142,13 @@ The repository ships three workflows under `.github/workflows/`:
 - **`ci.yml`** — Runs on every push to `master`. Runs the full quality gate, then
   builds production packages and uploads them as GitHub Actions **artifacts**
   for Windows, Linux, macOS, iOS, Android, and Web.
-- **`release.yml`** — Runs when a `v*` tag is pushed (e.g. `v1.0.0`). Runs the
-  complete test + build pipeline for all platforms, creates a **GitHub Release**,
-  and attaches the platform-specific build artifacts. The Linux desktop build is
-  best-effort and does **not** block the release.
+- **`release.yml`** — Runs when a `v*` tag is pushed **or** a GitHub Release is
+  published (e.g. `v1.0.0`, or via the **Releases → Draft a new release** UI).
+  Runs the complete test + build pipeline for all platforms, creates/populates a
+  **GitHub Release**, and attaches the platform-specific build artifacts. A
+  dedup guard skips the run when the release already has artifacts, so
+  tag-push + release-publish for the same version produces a single release.
+  The Linux desktop build is best-effort and does **not** block the release.
 
 The reusable `validate.yml` and `build.yml` keep the workflows DRY and consistent.
 Actions versions are pinned to major versions (`v2`, `v4`) and Flutter/Dart caching
