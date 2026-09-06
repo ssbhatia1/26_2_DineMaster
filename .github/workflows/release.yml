@@ -1,4 +1,4 @@
-name: Release
+﻿name: Release
 
 on:
   push:
@@ -8,9 +8,6 @@ on:
 permissions:
   contents: write
   actions: write
-
-env:
-  ARCHIVE_NAME: dine-master
 
 jobs:
   versions:
@@ -38,7 +35,7 @@ jobs:
     with:
       runner: ubuntu-latest
       platform: android
-      archive-name: ${{ env.ARCHIVE_NAME }}
+      archive-name: dine-master
       version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
     secrets:
@@ -53,7 +50,7 @@ jobs:
     with:
       runner: ubuntu-latest
       platform: web
-      archive-name: ${{ env.ARCHIVE_NAME }}
+      archive-name: dine-master
       version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
 
@@ -64,7 +61,7 @@ jobs:
     with:
       runner: windows-latest
       platform: windows
-      archive-name: ${{ env.ARCHIVE_NAME }}
+      archive-name: dine-master
       version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
 
@@ -75,7 +72,7 @@ jobs:
     with:
       runner: macos-latest
       platform: macos
-      archive-name: ${{ env.ARCHIVE_NAME }}
+      archive-name: dine-master
       version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
     secrets:
@@ -90,7 +87,7 @@ jobs:
     with:
       runner: macos-latest
       platform: ios
-      archive-name: ${{ env.ARCHIVE_NAME }}
+      archive-name: dine-master
       version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
       upload-ios: true
@@ -114,7 +111,7 @@ jobs:
     with:
       runner: ubuntu-latest
       platform: linux
-      archive-name: ${{ env.ARCHIVE_NAME }}
+      archive-name: dine-master
       version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
 

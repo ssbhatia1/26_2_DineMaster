@@ -4,10 +4,6 @@ on:
   push:
     branches: [main]
 
-env:
-  ARCHIVE_NAME: dine-master
-  VERSION_NAME: 1.0.0
-
 jobs:
   validate:
     name: Validate & Test
@@ -24,8 +20,8 @@ jobs:
     with:
       runner: ubuntu-latest
       platform: android
-      archive-name: ${{ env.ARCHIVE_NAME }}
-      version-name: ${{ env.VERSION_NAME }}
+      archive-name: dine-master
+      version-name: 1.0.0
       build-number: ${{ github.run_number }}
     secrets:
       ANDROID_CREDENTIALS: ${{ secrets.ANDROID_CREDENTIALS }}
@@ -39,8 +35,8 @@ jobs:
     with:
       runner: ubuntu-latest
       platform: web
-      archive-name: ${{ env.ARCHIVE_NAME }}
-      version-name: ${{ env.VERSION_NAME }}
+      archive-name: dine-master
+      version-name: 1.0.0
       build-number: ${{ github.run_number }}
 
   build-windows:
@@ -50,8 +46,8 @@ jobs:
     with:
       runner: windows-latest
       platform: windows
-      archive-name: ${{ env.ARCHIVE_NAME }}
-      version-name: ${{ env.VERSION_NAME }}
+      archive-name: dine-master
+      version-name: 1.0.0
       build-number: ${{ github.run_number }}
 
   build-linux:
@@ -61,8 +57,8 @@ jobs:
     with:
       runner: ubuntu-latest
       platform: linux
-      archive-name: ${{ env.ARCHIVE_NAME }}
-      version-name: ${{ env.VERSION_NAME }}
+      archive-name: dine-master
+      version-name: 1.0.0
       build-number: ${{ github.run_number }}
 
   build-macos:
@@ -72,8 +68,8 @@ jobs:
     with:
       runner: macos-latest
       platform: macos
-      archive-name: ${{ env.ARCHIVE_NAME }}
-      version-name: ${{ env.VERSION_NAME }}
+      archive-name: dine-master
+      version-name: 1.0.0
       build-number: ${{ github.run_number }}
     secrets:
       MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
@@ -87,8 +83,8 @@ jobs:
     with:
       runner: macos-latest
       platform: ios
-      archive-name: ${{ env.ARCHIVE_NAME }}
-      version-name: ${{ env.VERSION_NAME }}
+      archive-name: dine-master
+      version-name: 1.0.0
       build-number: ${{ github.run_number }}
     secrets:
       APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
