@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nexodine/core/theme/app_colors.dart';
-import '../../models/product_model.dart';
+import '../../../models/product_model.dart';
 
 class ItemCustomizationDialog extends StatefulWidget {
   final ProductModel product;

@@ -48,7 +48,7 @@ class _TableConfigurationDialogState extends State<TableConfigurationDialog> wit
       _loadData();
     } catch (e) {
       if (mounted) {
-        if(false) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Item may already exist!')));
+
       }
     }
   }

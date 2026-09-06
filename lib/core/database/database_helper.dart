@@ -361,7 +361,6 @@ class DatabaseHelper {
     const intType = 'INTEGER NOT NULL';
     const realType = 'REAL NOT NULL';
     const textNullable = 'TEXT';
-    const realNullable = 'REAL';
 
     // Restaurants Table
     await db.execute('''
@@ -907,7 +906,6 @@ CREATE TABLE bookings (
   Future<void> restoreDatabase(String backupPath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'nexodine_restaurant.db');
-    final dbFile = File(path);
     final backupFile = File(backupPath);
     if (await backupFile.exists()) {
       final db = await database;

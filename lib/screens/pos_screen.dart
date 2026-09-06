@@ -159,9 +159,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       
       _posTabController.animateTo(0);
       
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order #$orderId loaded into cart.')),
-      );
+
     } catch (e) {
       print('Error reopening order: $e');
     }
@@ -445,16 +443,13 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Future<void> _processBilling() async {
     if (_cartItems.isEmpty) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cart is empty')),
-      );
+
       return;
     }
 
     try {
       final db = await DatabaseHelper.instance.database;
       final now = DateTime.now().toIso8601String();
-      final subtotal = _getSubtotal();
       final discount = _getDiscount();
       final total = _getTotal();
 
@@ -635,90 +630,25 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       if (isSplit) {
         _showSplitPaymentCheckoutDialog(orderId, total);
       } else {
-        if(false) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Order #$orderId processed and paid successfully!')),
-        );
+
       }
 
       _loadTables();
       _loadActiveOrders();
     } catch (e) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error processing billing: $e')),
-      );
+
     }
-  }
-
-  Future<void> _showHoldPrompt() async {
-    if (_cartItems.isEmpty) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cart is empty')),
-      );
-      return;
-    }
-
-    final nameController = TextEditingController();
-    final phoneController = TextEditingController();
-
-    if (_editingOrderId != null) {
-      // Pre-fill if editing an existing order
-      try {
-        final db = await DatabaseHelper.instance.database;
-        final details = await db.query('orders', where: 'id = ?', whereArgs: [_editingOrderId]);
-        if (details.isNotEmpty) {
-          nameController.text = details.first['customer_name'] as String? ?? '';
-          phoneController.text = details.first['customer_phone'] as String? ?? '';
-        }
-      } catch (_) {}
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Hold Order Details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Customer Name (Optional)'),
-            ),
-            TextField(
-              controller: phoneController,
-              decoration: const InputDecoration(labelText: 'Contact Number (Optional)'),
-              keyboardType: TextInputType.phone,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _holdOrder(nameController.text, phoneController.text);
-            },
-            child: const Text('Hold Order'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _holdOrder(String customerName, String customerPhone) async {
     if (_cartItems.isEmpty) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cart is empty')),
-      );
+
       return;
     }
 
     try {
       final db = await DatabaseHelper.instance.database;
       final now = DateTime.now().toIso8601String();
-      final subtotal = _getSubtotal();
       final discount = _getDiscount();
       final total = _getTotal();
 
@@ -842,14 +772,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         _customerPhoneController.clear();
       });
 
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order #$orderId held and KOT generated!')),
-      );
+
       _loadTables();
     } catch (e) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error holding order: $e')),
-      );
+
     }
   }
 
@@ -1575,16 +1501,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                             // Broadcast the change instantly via WebSocket
                             SyncService.instance.broadcastEvent('database_update', {});
 
-                            if(false) ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  fullyPaid 
-                                      ? 'Payment fully settled for Order #$orderId!' 
-                                      : 'Partial payment saved! Remaining: ₹${(totalBill - totalPaid).toStringAsFixed(2)}'
-                                ),
-                                backgroundColor: fullyPaid ? Colors.green : Colors.orange,
-                              ),
-                            );
+
 
                             _loadTables();
                             _loadActiveOrders();
@@ -2024,7 +1941,6 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Widget _buildCartPanel(BuildContext context, bool isDark, {bool isMobile = false}) {
     final subtotal = _getSubtotal();
-    final discount = _getDiscount();
     final tax = _getTax();
     final total = _getTotal();
 
@@ -2636,9 +2552,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
   void _showVideoTutorialDialog(String path, String productName) {
     final file = File(path);
     if (!file.existsSync()) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Video file not found on disk.')),
-      );
+
       return;
     }
 
@@ -2813,13 +2727,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   );
 
                   Navigator.pop(context);
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Table booked successfully!')),
-                  );
+
                 } else {
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter name and select a table')),
-                  );
+
                 }
               },
               child: const Text('Book'),
@@ -2832,9 +2742,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Future<pw.Document?> _createCartPdfDocument() async {
     if (_cartItems.isEmpty) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cart is empty')),
-      );
+
       return null;
     }
     
@@ -2930,9 +2838,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
     try {
       await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     } catch (e) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to generate/print invoice: $e')),
-      );
+
     }
   }
 

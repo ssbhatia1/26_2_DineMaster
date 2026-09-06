@@ -1,0 +1,256 @@
+name: Build
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+        description: 'GitHub-hosted runner OS for this build.'
+      platform:
+        required: true
+        type: string
+        description: 'Target platform: windows | linux | macos | ios | android | web'
+      archive-name:
+        required: true
+        type: string
+        description: 'Artifact name prefix (e.g. dine-master).'
+      version-name:
+        required: true
+        type: string
+        description: 'SemVer version (e.g. 1.0.0).'
+      build-number:
+        required: true
+        type: string
+        description: 'Incrementing build number (e.g. 1, 2, ...).'
+      upload-ios:
+        required: false
+        type: boolean
+        default: false
+        description: 'Upload the built iOS app to App Store Connect (TestFlight). Only set true when signing + App Store Connect secrets are configured.'
+    secrets:
+      ANDROID_CREDENTIALS:
+        required: false
+        description: 'Base64-encoded Google Play service account JSON (Android).'
+      ANDROID_KEY_PROPERTIES:
+        required: false
+        description: 'Base64-encoded Android key.properties (release signing).'
+      ANDROID_KEYSTORE:
+        required: false
+        description: 'Base64-encoded Android upload keystore (.jks).'
+      MACOS_CERTIFICATE:
+        required: false
+        description: 'Base64-encoded Apple certificate (.p12) for macOS codesigning.'
+      MACOS_CERTIFICATE_PWD:
+        required: false
+        description: 'Password for the macOS .p12 certificate.'
+      MACOS_CERTIFICATE_NAME:
+        required: false
+        description: 'Name of the macOS import key (matching the certificate).'
+      APPLE_CERTIFICATE_P12:
+        required: false
+        description: 'Base64-encoded Apple Distribution certificate (.p12) for iOS.'
+      APPLE_CERTIFICATE_PASSWORD:
+        required: false
+        description: 'Password for the iOS .p12 certificate.'
+      APPLE_CERTIFICATE_FILENAME:
+        required: false
+        description: 'Filename for the iOS .p12 certificate (e.g. dist.p12).'
+      APPLE_PROVISIONING_PROFILE:
+        required: false
+        description: 'Base64-encoded Apple provisioning profile (.mobileprovision) for iOS.'
+      APPLE_PROVISIONING_FILENAME:
+        required: false
+        description: 'Filename for the iOS provisioning profile.'
+      APP_STORE_CONNECT_ISSUER_ID:
+        required: false
+        description: 'App Store Connect API Key Issuer ID.'
+      APP_STORE_CONNECT_KEY_ID:
+        required: false
+        description: 'App Store Connect API Key ID.'
+      APP_STORE_CONNECT_KEY:
+        required: false
+        description: 'App Store Connect API private key (.p8) contents.'
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Linux desktop
+        if: ${{ runner.os == 'Linux' }}
+        run: flutter config --enable-linux-desktop
+
+      - name: Enable macOS desktop
+        if: ${{ runner.os == 'macOS' }}
+        run: flutter config --enable-macos-desktop
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Prepare dist directory
+        shell: bash
+        run: mkdir -p build/dist
+
+      # ============ PREPARE SIGNING (conditional by platform) ============
+      - name: Set up Android signing
+        if: ${{ inputs.platform == 'android' }}
+        shell: bash
+        env:
+          CREDENTIALS: ${{ secrets.ANDROID_CREDENTIALS }}
+          KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+        run: |
+          if [ -z "$CREDENTIALS" ]; then
+            echo "::warning::Android signing secrets not configured; the APK will be signed with the debug keystore."
+            exit 0
+          fi
+          mkdir -p "$HOME/.secrets"
+          echo "$CREDENTIALS" | base64 --decode > "$HOME/.secrets/play-account.json"
+          echo "$KEYSTORE" | base64 --decode > "$HOME/.secrets/upload-keystore.jks"
+          # Write android/key.properties (rootProject location) consumed by
+          # android/app/build.gradle.kts. Fix the storeFile to the decoded path.
+          echo "$KEY_PROPERTIES" | base64 --decode > android/key.properties
+          sed -i 's|^\s*storeFile=.*|storeFile='"$HOME"'/.secrets/upload-keystore.jks|' android/key.properties
+
+      - name: Set up iOS signing
+        if: ${{ inputs.platform == 'ios' }}
+        shell: bash
+        env:
+          CERT_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          CERT_PWD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          CERT_FILENAME: ${{ secrets.APPLE_CERTIFICATE_FILENAME }}
+          PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+          PROFILE_FILENAME: ${{ secrets.APPLE_PROVISIONING_FILENAME }}
+        run: |
+          if [ -z "$CERT_P12" ]; then
+            echo "::warning::iOS signing secrets not configured; building unsigned."
+            exit 0
+          fi
+          echo "$CERT_P12" | base64 --decode > /tmp/$CERT_FILENAME
+          echo "$PROFILE" | base64 --decode > "/tmp/$PROFILE_FILENAME"
+          KEYCHAIN="build.keychain"
+          KEYCHAIN_PWD="$(openssl rand -base64 12)"
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security import "/tmp/$CERT_FILENAME" -k "$KEYCHAIN" -P "$CERT_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security list-keychains -s "$KEYCHAIN"
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+          cp "/tmp/$PROFILE_FILENAME" "$PROFILE_DIR/$PROFILE_FILENAME"
+
+      - name: Set up macOS signing
+        if: ${{ inputs.platform == 'macos' }}
+        shell: bash
+        env:
+          CERT: ${{ secrets.MACOS_CERTIFICATE }}
+          CERT_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          CERT_NAME: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+        run: |
+          if [ -z "$CERT" ]; then
+            echo "::warning::macOS signing secrets not configured; building unsigned (arm64 build still produced)."
+            exit 0
+          fi
+          CERT_PATH="$RUNNER_TEMP/macos_cert.p12"
+          echo "$CERT" | base64 --decode > "$CERT_PATH"
+          KEYCHAIN="build.keychain"
+          KEYCHAIN_PWD="$(openssl rand -base64 12)"
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security import "$CERT_PATH" -k "$KEYCHAIN" -P "$CERT_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security list-keychains -s "$KEYCHAIN"
+          # Expose the certificate identity so the build step can sign with it.
+          echo "MACOS_CERT_IDENTITY=$CERT_NAME" >> "$GITHUB_ENV"
+
+      # ============ BUILD PER PLATFORM ============
+      - name: Build Windows
+        if: ${{ inputs.platform == 'windows' }}
+        shell: bash
+        run: |
+          flutter build windows --release
+          cd build/windows/x64/runner/Release
+          powershell -NoProfile -Command "Compress-Archive -Path '*' -DestinationPath '$GITHUB_WORKSPACE/build/dist/nexodine-windows-x64.zip' -Force"
+
+      - name: Build Linux
+        if: ${{ inputs.platform == 'linux' }}
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev
+          flutter build linux --release
+          cd build/linux/x64/release/bundle
+          tar -czf "$GITHUB_WORKSPACE/build/dist/nexodine-linux-x64.tar.gz" .
+
+      - name: Build macOS
+        if: ${{ inputs.platform == 'macos' }}
+        shell: bash
+        run: |
+          flutter build macos --release
+          cd build/macos/Build/Products/Release
+          APP_BUNDLE="$(ls -d *.app | head -n 1)"
+          ditto -c -k --keepParent "$APP_BUNDLE" "$GITHUB_WORKSPACE/build/dist/nexodine-macos.app.zip"
+
+      - name: Build Android
+        if: ${{ inputs.platform == 'android' }}
+        shell: bash
+        run: |
+          flutter build apk --release --build-name ${{ inputs.version-name }} --build-number ${{ inputs.build-number }}
+          cd build/app/outputs/flutter-apk
+          cp app-release.apk "$GITHUB_WORKSPACE/build/dist/nexodine-release.apk"
+
+      - name: Build Web
+        if: ${{ inputs.platform == 'web' }}
+        shell: bash
+        run: |
+          flutter build web --release
+          cd build/web
+          tar -czf "$GITHUB_WORKSPACE/build/dist/nexodine-web.tar.gz" .
+
+      - name: Build iOS (ipa)
+        if: ${{ inputs.platform == 'ios' }}
+        shell: bash
+        run: |
+          flutter build ios --release --no-codesign --build-name ${{ inputs.version-name }} --build-number ${{ inputs.build-number }}
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -R Runner.app Payload/Runner.app
+          zip -r "$GITHUB_WORKSPACE/build/dist/nexodine-ios.ipa" Payload
+
+      - name: Upload iOS to App Store Connect (TestFlight)
+        if: ${{ inputs.platform == 'ios' && inputs.upload-ios && success() }}
+        shell: bash
+        env:
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          if [ -z "$API_KEY" ] || [ -z "$API_KEY_ID" ] || [ -z "$ISSUER_ID" ]; then
+            echo "::warning::App Store Connect secrets not configured; skipping TestFlight upload."
+            exit 0
+          fi
+          # The .ipa produced above is unsigned. TestFlight requires a signed
+          # build exported with an App Store distribution profile. Once the
+          # iOS signing secrets and a real bundle identifier are configured,
+          # build with automatic signing and archive/export here. This step is
+          # a placeholder hook that is skipped until signing is configured.
+          echo "TestFlight upload requires codesigned build; skipped (unsigned archive)."
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.archive-name }}-${{ inputs.platform }}
+          path: build/dist/*
+          if-no-files-found: ignore
+          retention-days: 14

@@ -340,9 +340,7 @@ class SettingsScreen extends StatelessWidget {
                               }
                               rateController.clear();
                             } else {
-                              if(false) ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Please enter a valid rate between 0 and 100')),
-                              );
+
                             }
                           },
                           style: ElevatedButton.styleFrom(
@@ -385,9 +383,7 @@ class SettingsScreen extends StatelessWidget {
                 ElevatedButton(
                   onPressed: () async {
                     if (scale.isEmpty) {
-                      if(false) ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('GST scale cannot be empty. Add at least one slab.')),
-                      );
+
                       return;
                     }
                     
@@ -396,9 +392,7 @@ class SettingsScreen extends StatelessWidget {
                     
                     if (context.mounted) {
                       Navigator.pop(context);
-                      if(false) ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('GST Scale saved successfully!')),
-                      );
+
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
@@ -409,22 +403,6 @@ class SettingsScreen extends StatelessWidget {
           },
         );
       },
-    );
-  }
-
-  void _showMockDialog(BuildContext context, String title) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: const Text('This feature is currently under development.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -497,7 +475,7 @@ class SettingsScreen extends StatelessWidget {
                     ElevatedButton.icon(
                       onPressed: () async {
                         try {
-                          final path = await DatabaseHelper.instance.backupDatabase();
+                          await DatabaseHelper.instance.backupDatabase();
                           // Reload files list
                           List<File> updatedBackups = [];
                           if (await backupDir.exists()) {
@@ -512,15 +490,11 @@ class SettingsScreen extends StatelessWidget {
                             backups = updatedBackups;
                           });
                           if (context.mounted) {
-                            if(false) ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Backup created successfully: $path')),
-                            );
+
                           }
                         } catch (e) {
                           if (context.mounted) {
-                            if(false) ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error creating backup: $e')),
-                            );
+
                           }
                         }
                       },
@@ -614,15 +588,11 @@ class SettingsScreen extends StatelessWidget {
               try {
                 await DatabaseHelper.instance.restoreDatabase(path);
                 if (context.mounted) {
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Database successfully restored! Restarting app/DB context.')),
-                  );
+
                 }
               } catch (e) {
                 if (context.mounted) {
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error restoring: $e')),
-                  );
+
                 }
               }
             },
@@ -721,15 +691,11 @@ class SettingsScreen extends StatelessWidget {
                       onPressed: () async {
                         final ip = ipController.text.trim();
                         if (ip.isEmpty) {
-                          if(false) ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please enter an IP address')),
-                          );
+
                           return;
                         }
                         
-                        if(false) ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Testing connection...')),
-                        );
+
                         
                         final client = HttpClient();
                         client.connectionTimeout = const Duration(seconds: 3);
@@ -738,22 +704,16 @@ class SettingsScreen extends StatelessWidget {
                           final response = await request.close();
                           if (response.statusCode == 200) {
                             if (context.mounted) {
-                              if(false) ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Connection SUCCESSFUL! Port 8082 is reachable.')),
-                              );
+
                             }
                           } else {
                             if (context.mounted) {
-                              if(false) ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Connection failed. Server returned status ${response.statusCode}')),
-                              );
+
                             }
                           }
                         } catch (e) {
                           if (context.mounted) {
-                            if(false) ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Connection failed: $e')),
-                            );
+
                           }
                         } finally {
                           client.close();
@@ -786,9 +746,7 @@ class SettingsScreen extends StatelessWidget {
                     
                     if (context.mounted) {
                       Navigator.pop(context);
-                      if(false) ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Network settings saved successfully!')),
-                      );
+
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),

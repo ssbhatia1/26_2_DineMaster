@@ -261,13 +261,9 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
       });
 
       _loadAllTrackingData(silent: true);
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order #$orderId marked as $newStatus')),
-      );
+
     } catch (e) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating order: $e')),
-      );
+
     }
   }
 
@@ -290,27 +286,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
         return 0.0;
       default:
         return 0.1;
-    }
-  }
-
-  String _getStatusDescription(String status) {
-    switch (status) {
-      case 'Received':
-        return 'We have received your order at the counter.';
-      case 'Sent to Kitchen':
-        return 'Kitchen staff has accepted your ticket.';
-      case 'Preparing':
-        return 'Chef is actively preparing your delicious food!';
-      case 'Ready':
-        return 'Your hot meal is ready to be collected/served!';
-      case 'Served':
-        return 'Food has been served at your table.';
-      case 'Completed':
-        return 'Billing is paid and order is completed. Thank you!';
-      case 'Cancelled':
-        return 'This order has been cancelled.';
-      default:
-        return 'Processing your order...';
     }
   }
 

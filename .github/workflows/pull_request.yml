@@ -1,0 +1,16 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-test:
+    name: Analyze & Test  (ubuntu-latest)
+    uses: ./.github/workflows/validate.yml
+    with:
+      os: ubuntu-latest

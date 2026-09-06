@@ -1,0 +1,101 @@
+name: CI - Push to Main
+
+on:
+  push:
+    branches: [main]
+
+env:
+  ARCHIVE_NAME: dine-master
+  VERSION_NAME: 1.0.0
+
+jobs:
+  validate:
+    name: Validate & Test
+    uses: ./.github/workflows/validate.yml
+    with:
+      os: ubuntu-latest
+
+  # Android is built on ubuntu-latest (Linux runner) rather than triggering a
+  # separate job so caching and secret wiring stays consistent.
+  build-android:
+    name: Build Android
+    needs: validate
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: ubuntu-latest
+      platform: android
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ env.VERSION_NAME }}
+      build-number: ${{ github.run_number }}
+    secrets:
+      ANDROID_CREDENTIALS: ${{ secrets.ANDROID_CREDENTIALS }}
+      ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+      ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+
+  build-web:
+    name: Build Web
+    needs: validate
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: ubuntu-latest
+      platform: web
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ env.VERSION_NAME }}
+      build-number: ${{ github.run_number }}
+
+  build-windows:
+    name: Build Windows
+    needs: validate
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: windows-latest
+      platform: windows
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ env.VERSION_NAME }}
+      build-number: ${{ github.run_number }}
+
+  build-linux:
+    name: Build Linux
+    needs: validate
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: ubuntu-latest
+      platform: linux
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ env.VERSION_NAME }}
+      build-number: ${{ github.run_number }}
+
+  build-macos:
+    name: Build macOS
+    needs: validate
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: macos-latest
+      platform: macos
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ env.VERSION_NAME }}
+      build-number: ${{ github.run_number }}
+    secrets:
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+      MACOS_CERTIFICATE_NAME: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+
+  build-ios:
+    name: Build iOS
+    needs: validate
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: macos-latest
+      platform: ios
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ env.VERSION_NAME }}
+      build-number: ${{ github.run_number }}
+    secrets:
+      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_CERTIFICATE_FILENAME: ${{ secrets.APPLE_CERTIFICATE_FILENAME }}
+      APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+      APPLE_PROVISIONING_FILENAME: ${{ secrets.APPLE_PROVISIONING_FILENAME }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}

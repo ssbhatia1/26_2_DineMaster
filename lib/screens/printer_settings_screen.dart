@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PrinterSettingsScreen extends StatefulWidget {
@@ -36,9 +36,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     await prefs.setString('printer_port', _portController.text.trim());
     await prefs.setString('printer_name', _nameController.text.trim());
 
-    if(false) ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Printer settings saved successfully')),
-    );
+
   }
 
   @override
@@ -100,9 +98,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () {
-                        if(false) ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Test print sent...')),
-                        );
+
                       },
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
@@ -579,9 +579,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
       });
     }
 
-    if(false) ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Payment of order #$orderId processed via $method')),
-    );
+
     _loadOrders(); // Refresh list
   }
 
@@ -728,9 +726,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                 Navigator.pop(context);
                 _loadOrders();
               } else {
-                if(false) ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Total split amounts must match the order total')),
-                );
+
               }
             },
             child: const Text('Pay'),
@@ -772,14 +768,10 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
       await db.delete('orders', where: 'id = ?', whereArgs: [orderId]);
       await db.delete('payments', where: 'order_id = ?', whereArgs: [orderId]);
       
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order #$orderId deleted successfully')),
-      );
+
       _loadOrders(); // Refresh list
     } catch (e) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting order: $e')),
-      );
+
     }
   }
 

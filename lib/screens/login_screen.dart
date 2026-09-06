@@ -206,9 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             final password = _passwordController.text.trim();
 
                             if (username.isEmpty || password.isEmpty) {
-                              if(false) ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Please fill all fields')),
-                              );
+
                               return;
                             }
 
@@ -226,9 +224,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               await prefs.setString('role', _selectedRole);
                               context.go('/branch_selection');
                             } else {
-                              if(false) ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Invalid credentials or role')),
-                              );
+
                             }
                           },
                           style: ElevatedButton.styleFrom(
@@ -342,9 +338,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 final password = passwordController.text.trim();
 
                 if (name.isEmpty || username.isEmpty || password.isEmpty) {
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please fill all fields')),
-                  );
+
                   return;
                 }
 
@@ -359,13 +353,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     'created_at': DateTime.now().toIso8601String(),
                   });
                   Navigator.pop(context);
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Account created successfully!')),
-                  );
+
                 } catch (e) {
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error creating account: $e')),
-                  );
+
                 }
               },
               child: const Text('Register'),

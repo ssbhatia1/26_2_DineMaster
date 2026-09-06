@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../core/database/database_helper.dart';
 import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
@@ -238,9 +238,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
       _loadKOTs(silent: true);
     } catch (e) {
       if (mounted) {
-        if(false) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating KOT status: $e')),
-        );
+
       }
     }
   }
@@ -831,7 +829,6 @@ class _KitchenScreenState extends State<KitchenScreen> {
     final int orderId = kot['order_id'];
     final String kotNumber = kot['kot_number'];
     final String tableNumber = kot['table_number'];
-    final String orderType = kot['type'];
     final String notes = kot['notes'] as String;
     final String status = kot['status'];
     final String timeStr = kot['time'] as String;

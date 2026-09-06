@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:nexodine/core/theme/app_colors.dart';
 import '../core/database/database_helper.dart';
@@ -17,7 +17,6 @@ class _AccountsScreenState extends State<AccountsScreen> with SingleTickerProvid
   double _totalSales = 0.0;
   double _totalExpenses = 0.0;
   double _totalTaxes = 0.0;
-  int _totalOrdersCount = 0;
   bool _isLoading = true;
 
   List<Map<String, dynamic>> _salesTransactions = [];
@@ -97,7 +96,6 @@ class _AccountsScreenState extends State<AccountsScreen> with SingleTickerProvid
         _totalSales = salesSum;
         _totalTaxes = taxSum;
         _totalExpenses = expenseSum;
-        _totalOrdersCount = orderMaps.length;
         _isLoading = false;
       });
     } catch (e) {
@@ -119,14 +117,10 @@ class _AccountsScreenState extends State<AccountsScreen> with SingleTickerProvid
         'restaurant_id': restId,
       });
 
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Expense added successfully!')),
-      );
+
       _loadAccountsData();
     } catch (e) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error adding expense: $e')),
-      );
+
     }
   }
 
@@ -134,14 +128,10 @@ class _AccountsScreenState extends State<AccountsScreen> with SingleTickerProvid
     try {
       final db = await _dbHelper.database;
       await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Expense deleted successfully!')),
-      );
+
       _loadAccountsData();
     } catch (e) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting expense: $e')),
-      );
+
     }
   }
 

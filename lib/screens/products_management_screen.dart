@@ -108,7 +108,6 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
     final prepTimeController = TextEditingController(text: (existingProduct?.prepTime ?? 5).toString());
     final cookTimeController = TextEditingController(text: (existingProduct?.cookTime ?? 10).toString());
     final customNotesController = TextEditingController(text: existingProduct?.customDietaryNotes ?? '');
-    final ingredientController = TextEditingController();
     final recipeQtyController = TextEditingController();
     final stepController = TextEditingController();
     int? selectedIngredientId;
@@ -774,9 +773,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                           final desc = descController.text.trim();
 
                           if (name.isEmpty || price <= 0) {
-                            if(false) ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Please enter valid dish name and price')),
-                            );
+
                             return;
                           }
 
@@ -824,12 +821,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
 
                           Navigator.pop(context);
                           _loadProducts();
-                          if(false) ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Product "$name" saved successfully!'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
+
                         },
                       ),
                     ],
@@ -1035,9 +1027,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                             _loadCategories();
                             Navigator.pop(context);
                           } catch (e) {
-                            if(false) ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Category already exists')),
-                            );
+
                           }
                         }
                       },

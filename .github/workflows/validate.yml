@@ -1,0 +1,42 @@
+name: Validate & Test
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        required: true
+        type: string
+        description: 'GitHub-hosted runner OS to execute on.'
+
+jobs:
+  analyze-and-test:
+    name: Analyze & Test  (${{ inputs.os }})
+    runs-on: ${{ inputs.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Flutter desktop support
+        if: ${{ runner.os != 'Windows' }}
+        run: flutter config --enable-linux-desktop
+
+      - name: Enable macOS desktop support
+        if: ${{ runner.os == 'macOS' }}
+        run: flutter config --enable-macos-desktop
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Static analysis (dart analyze)
+        # --no-fatal-infos allows the build to pass on info-level lints only;
+        # warnings are NOT ignored and will fail the job.
+        run: dart analyze --no-fatal-infos
+
+      - name: Run unit & widget tests
+        run: flutter test

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../core/database/database_helper.dart';
 import 'package:nexodine/core/theme/app_colors.dart';
 import '../services/sync_service.dart';
@@ -176,9 +176,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                 final shift = shiftController.text.trim();
 
                 if (name.isEmpty || username.isEmpty || password.isEmpty) {
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please fill name, username, and password')),
-                  );
+
                   return;
                 }
 
@@ -207,9 +205,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
 
                 if (context.mounted) {
                   Navigator.pop(context);
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(isEditing ? 'Employee profile updated' : 'Employee added successfully')),
-                  );
+
                 }
                 _loadUsers();
               },
@@ -246,9 +242,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                 await db.delete('users', where: 'id = ?', whereArgs: [id]);
                 if (context.mounted) {
                   Navigator.pop(context);
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Employee removed successfully')),
-                  );
+
                 }
                 _loadUsers();
               } catch (e) {

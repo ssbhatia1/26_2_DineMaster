@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:file_picker/file_picker.dart' as fp;
@@ -117,9 +117,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
         _initializeVideoPlayer();
       }
     } catch (e) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error picking video: $e')),
-      );
+
     }
   }
 
@@ -138,9 +136,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
       } else {
-        if(false) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch system media player.')),
-        );
+
       }
     }
   }
@@ -190,9 +186,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
     }
 
     if (mounted) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Recipe updated successfully!')),
-      );
+
       Navigator.pop(context, true);
     }
   }

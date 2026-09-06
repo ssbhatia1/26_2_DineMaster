@@ -289,9 +289,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             _selectedRestaurantId = value;
                             DatabaseHelper.currentRestaurantId = value;
                           });
-                          if(false) ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Switched to ${_restaurants.firstWhere((r) => r['id'] == value)['name']}')),
-                          );
+
                         },
                       ),
                     const SizedBox(width: 8),

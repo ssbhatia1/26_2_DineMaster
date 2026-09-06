@@ -130,7 +130,7 @@ class ServerService {
 
     // Order Placement Endpoint
     router.post('/api/order', (Request request) async {
-      final payload = await request.readAsString();
+      await request.readAsString();
       // Handle order creation here
       return Response.ok(
         jsonEncode({'status': 'success', 'message': 'Order received'}),

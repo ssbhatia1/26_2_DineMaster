@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:nexodine/core/theme/app_colors.dart';
 import 'dart:math';
@@ -810,9 +810,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              if(false) ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('GST tax report successfully compiled and saved to Documents.')),
-              );
+
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
             child: const Text('GST Tax Audit'),
@@ -820,9 +818,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              if(false) ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Daily sales report exported to PDF.')),
-              );
+
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
             child: const Text('Sales Statement (PDF)'),

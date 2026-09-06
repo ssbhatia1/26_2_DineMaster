@@ -461,9 +461,9 @@ class _TablesScreenState extends State<TablesScreen> {
                           child: TextField(
                             controller: capacityCtrl,
                             keyboardType: TextInputType.number,
-                            enabled: !isEditing || (existingTable?.status == 'Available'),
+                            enabled: !isEditing || (existingTable.status == 'Available'),
                             decoration: InputDecoration(
-                              labelText: (!isEditing || (existingTable?.status == 'Available')) ? 'Seating Capacity *' : 'Capacity Locked (Active Order)',
+                              labelText: (!isEditing || (existingTable.status == 'Available')) ? 'Seating Capacity *' : 'Capacity Locked (Active Order)',
                               prefixIcon: const Icon(Icons.chair_alt),
                               border: const OutlineInputBorder(),
                             ),
@@ -596,9 +596,7 @@ class _TablesScreenState extends State<TablesScreen> {
                   final cap = int.tryParse(capacityCtrl.text.trim()) ?? 0;
 
                   if (num.isEmpty || cap <= 0) {
-                    if(false) ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please enter valid table number and seating capacity')),
-                    );
+
                     return;
                   }
 
@@ -626,21 +624,11 @@ class _TablesScreenState extends State<TablesScreen> {
                     if (mounted) {
                       Navigator.pop(context);
                       _loadTables();
-                      if(false) ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Table $num saved successfully!'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
+
                     }
                   } catch (e) {
                     if (mounted) {
-                      if(false) ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error saving table: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
+
                     }
                   }
                 },
@@ -873,12 +861,7 @@ class _TablesScreenState extends State<TablesScreen> {
                       if (mounted) {
                         Navigator.pop(context);
                         _loadTables();
-                        if(false) ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Order transferred to ${destinationTable!.tableNumber}! Table ${sourceTable.tableNumber} set to Cleaning.'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
+
                       }
                     },
               child: const Text('Confirm Transfer'),
@@ -975,7 +958,7 @@ class _TablesScreenState extends State<TablesScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
               onPressed: () async {
                 if (nameCtrl.text.trim().isEmpty) {
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter customer name')));
+
                   return;
                 }
 
@@ -1005,9 +988,7 @@ class _TablesScreenState extends State<TablesScreen> {
                 if (mounted) {
                   Navigator.pop(context);
                   _loadTables();
-                  if(false) ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${table.displayName} reserved for ${nameCtrl.text.trim()}!'), backgroundColor: Colors.green),
-                  );
+
                 }
               },
               child: const Text('Confirm Reservation'),
@@ -1033,9 +1014,7 @@ class _TablesScreenState extends State<TablesScreen> {
               if (mounted) {
                 Navigator.pop(context);
                 _loadTables();
-                if(false) ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Table "$number" deleted')),
-                );
+
               }
             },
             child: const Text('Delete'),

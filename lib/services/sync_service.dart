@@ -86,7 +86,6 @@ class SyncService {
 
   void broadcastEvent(String eventType, Map<String, dynamic> data) {
     // If we are the client, send the event to the server to broadcast to everyone else
-    final payload = '{"event": "$eventType", "data": ${kIsWeb ? '' : '...'}';
     // For simplicity, we just format as JSON
     final jsonStr = '{"event": "$eventType", "timestamp": "${DateTime.now().toIso8601String()}"}';
     

@@ -195,7 +195,7 @@ void main() {
       final glasses = 4;
       final cutlery = true;
       final tissues = true;
-      final saltPepper = false;
+      final saltPepper = true;
       final notes = 'With lemon slices';
 
       final List<String> serviceItems = ['$waterType ($glasses Glasses)'];
@@ -205,7 +205,7 @@ void main() {
       if (notes.isNotEmpty) serviceItems.add('Note: $notes');
 
       final fullNote = '[WATER SERVICE] ${serviceItems.join(" • ")}';
-      expect(fullNote, '[WATER SERVICE] Chilled Drinking Water (4 Glasses) • Extra Cutlery • Napkin Refill • Note: With lemon slices');
+      expect(fullNote, '[WATER SERVICE] Chilled Drinking Water (4 Glasses) • Extra Cutlery • Napkin Refill • Salt/Pepper • Note: With lemon slices');
     });
 
     test('Dietary and taste preferences format correctly for KOT item notes', () {
@@ -223,8 +223,8 @@ void main() {
     });
 
     test('Mineral water billable calculations and pricing are correct', () {
-      const isPaidMineralWater = true;
-      const double waterPrice = isPaidMineralWater ? 20.0 : 0.0;
+      // Paid mineral water is chargeable at a fixed rate; GST applied on top.
+      const double waterPrice = 20.0;
       final double totalWithGst = waterPrice * 1.05;
 
       expect(waterPrice, 20.0);

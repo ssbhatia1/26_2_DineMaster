@@ -8,14 +8,10 @@ import '../models/product_model.dart';
 import '../models/table_model.dart';
 import '../repositories/product_repository.dart';
 import '../services/sync_service.dart';
-import '../widgets/searchable_dropdown.dart';
 import 'waiter/waiter_models.dart';
 import 'waiter/components/waiter_cart_panel.dart';
 import 'waiter/components/waiter_menu_view.dart';
 import 'waiter/components/waiter_floor_plan_view.dart';
-
-import '../widgets/food_attributes_badge.dart';
-
 
 class WaiterOrderScreen extends StatefulWidget {
   final int? selectedTableId;
@@ -470,16 +466,12 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   // --- SUBMIT WAITER ORDER (KOT) ---
   Future<void> _submitWaiterOrder() async {
     if (_cartItems.isEmpty) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot place empty order.')),
-      );
+
       return;
     }
 
     if (_orderType == 'Dine-In' && _selectedTableId == null) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a table for Dine-In orders.')),
-      );
+
       return;
     }
 
@@ -600,17 +592,13 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       });
 
       if (!mounted) return;
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order successfully sent to kitchen! (Bill #$orderId)')),
-      );
+
 
       _loadDashboardAndProducts();
       SyncService.instance.broadcastEvent('database_update', {});
     } catch (e) {
       if (!mounted) return;
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to submit order: $e')),
-      );
+
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -675,9 +663,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       await DatabaseHelper.instance.logOrderStatus(orderId, 'Served', notes: 'Food successfully served to customer by Waiter.');
 
       if (!mounted) return;
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order marked as served.')),
-      );
+
       _loadDashboardAndProducts();
       SyncService.instance.broadcastEvent('database_update', {});
     } catch (e) {
@@ -713,9 +699,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       await DatabaseHelper.instance.logOrderStatus(orderId, 'Billing Pending', notes: 'Waiter requested checkout and billing.');
 
       if (!mounted) return;
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Billing request sent to Cashier.')),
-      );
+
       _loadDashboardAndProducts();
       SyncService.instance.broadcastEvent('database_update', {});
     } catch (e) {
@@ -811,16 +795,12 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       });
 
       if (!mounted) return;
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Table transfer completed successfully.')),
-      );
+
       _loadDashboardAndProducts();
       SyncService.instance.broadcastEvent('database_update', {});
     } catch (e) {
       if (!mounted) return;
-      if(false) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Transfer failed: $e')),
-      );
+
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -855,22 +835,6 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
         return const Color(0xFF546E7A); // Slate Grey
       default:
         return Colors.blueGrey;
-    }
-  }
-
-  IconData _getTableTypeIcon(String tableType) {
-    switch (tableType) {
-      case 'Booth':
-        return Icons.weekend_outlined;
-      case 'Round Table':
-        return Icons.circle_outlined;
-      case 'Counter':
-      case 'Bar Counter':
-        return Icons.wine_bar;
-      case 'Outdoor Table':
-        return Icons.deck_outlined;
-      default:
-        return Icons.table_restaurant;
     }
   }
 
@@ -949,21 +913,6 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
     );
   }
 
-  Widget _buildLegendChip(Color color, String text) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 5),
-        Text(text, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
-
   Future<void> _promptGuestCountAndTakeOrder(TableModel table) async {
     final tableInfo = _tableInfoList.firstWhere((t) => t.table.id == table.id, orElse: () => _tableInfoList.first);
     setState(() {
@@ -982,7 +931,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
         .toList();
 
     if (availableTables.isEmpty) {
-      if(false) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No available tables to merge with.')));
+
       return;
     }
 
@@ -1424,7 +1373,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
             showChefAssignment: _showChefAssignment,
             onOrderTypeChanged: (val) {
               setState(() {
-                _orderType = val!;
+                _orderType = val;
                 if (_orderType != 'Dine-In') {
                   _selectedTableId = null;
                   _selectedTableDisplayName = 'Takeaway';

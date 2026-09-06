@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  ARCHIVE_NAME: dine-master
+
+jobs:
+  versions:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version-name: ${{ steps.clean.outputs.version-name }}
+    steps:
+      - name: Strip v prefix from tag
+        id: clean
+        shell: bash
+        run: echo "version-name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+  validate:
+    name: Validate & Test
+    needs: versions
+    uses: ./.github/workflows/validate.yml
+    with:
+      os: ubuntu-latest
+
+  build-apk:
+    name: Build Android APK
+    needs: [versions, validate]
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: ubuntu-latest
+      platform: android
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ needs.versions.outputs.version-name }}
+      build-number: ${{ github.run_number }}
+    secrets:
+      ANDROID_CREDENTIALS: ${{ secrets.ANDROID_CREDENTIALS }}
+      ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+      ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+
+  build-web:
+    name: Build Web
+    needs: [versions, validate]
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: ubuntu-latest
+      platform: web
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ needs.versions.outputs.version-name }}
+      build-number: ${{ github.run_number }}
+
+  build-windows:
+    name: Build Windows
+    needs: [versions, validate]
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: windows-latest
+      platform: windows
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ needs.versions.outputs.version-name }}
+      build-number: ${{ github.run_number }}
+
+  build-macos:
+    name: Build macOS
+    needs: [versions, validate]
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: macos-latest
+      platform: macos
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ needs.versions.outputs.version-name }}
+      build-number: ${{ github.run_number }}
+    secrets:
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+      MACOS_CERTIFICATE_NAME: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+
+  build-ios:
+    name: Build iOS
+    needs: [versions, validate]
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: macos-latest
+      platform: ios
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ needs.versions.outputs.version-name }}
+      build-number: ${{ github.run_number }}
+      upload-ios: true
+    secrets:
+      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_CERTIFICATE_FILENAME: ${{ secrets.APPLE_CERTIFICATE_FILENAME }}
+      APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+      APPLE_PROVISIONING_FILENAME: ${{ secrets.APPLE_PROVISIONING_FILENAME }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+
+  # Linux desktop builds are best-effort: they commonly fail in GitHub CI
+  # due to missing GTK/system libraries, so a failure here is reported but
+  # does NOT block the GitHub Release.
+  build-linux-nonfatal:
+    name: Build Linux (best-effort)
+    needs: [versions, validate]
+    uses: ./.github/workflows/build.yml
+    with:
+      runner: ubuntu-latest
+      platform: linux
+      archive-name: ${{ env.ARCHIVE_NAME }}
+      version-name: ${{ needs.versions.outputs.version-name }}
+      build-number: ${{ github.run_number }}
+
+  release:
+    name: Create GitHub Release
+    needs:
+      - versions
+      - validate
+      - build-apk
+      - build-web
+      - build-windows
+      - build-macos
+      - build-ios
+      - build-linux-nonfatal
+    if: always() && needs.validate.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: false
+
+      - name: Print artifact summary
+        shell: bash
+        run: |
+          find release-artifacts -type f -printf '%p (%s bytes)\n'
+          echo "linux_build_success=${{ needs.build-linux-nonfatal.result }}" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: 'Dine Master ${{ github.ref_name }}'
+          files: release-artifacts/**/*
+          generate_release_notes: true
+          body: |
+            ## Dine Master ${{ github.ref_name }}
+
+            Automated production release built by GitHub Actions.
+
+            ### Included platforms
+            - **Android**: `nexodine-release.apk` (signed if Android secrets are configured)
+            - **Web**: `nexodine-web.tar.gz` (hostable static build)
+            - **Windows**: `nexodine-windows-x64.zip`
+            - **macOS**: `nexodine-macos.app.zip` (signed if macOS secrets are configured)
+            - **iOS**: `nexodine-ios.ipa` + App Store Connect (TestFlight) upload (if iOS secrets are configured)
+
+            ### Linux
+            - **Linux (best-effort)**: ${{ env.linux_build_success == 'success' && 'uploaded' || 'skipped (build failure non-fatal)' }}
+
+            Download the artifact for your platform and install it directly.
+
+            > **Note**: These builds use placeholder bundle identifiers
+            > (`com.nexodine` / `com.example.kos`). Update the iOS, Android and
+            > macOS bundle IDs before distributing via public app stores.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
