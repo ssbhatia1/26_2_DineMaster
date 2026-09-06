@@ -137,9 +137,9 @@ flutter test test/order_model_test.dart
 
 The repository ships three workflows under `.github/workflows/`:
 
-- **`pull_request.yml`** — Runs on every PR to `main`. Installs dependencies,
+- **`pull_request.yml`** — Runs on every PR to `master`. Installs dependencies,
   runs static analysis, and runs all tests. Fails the PR if any step fails.
-- **`ci.yml`** — Runs on every push to `main`. Runs the full quality gate, then
+- **`ci.yml`** — Runs on every push to `master`. Runs the full quality gate, then
   builds production packages and uploads them as GitHub Actions **artifacts**
   for Windows, Linux, macOS, iOS, Android, and Web.
 - **`release.yml`** — Runs when a `v*` tag is pushed (e.g. `v1.0.0`). Runs the
@@ -158,7 +158,7 @@ flowchart LR
     PR[Pull Request] --> PRJ[validate.yml]
     PRJ --> |fail| FAIL[PR blocked]
 
-    Push[Push to main] --> CI[ci.yml]
+    Push[Push to master] --> CI[ci.yml]
     CI --> V[validate.yml]
     V --> B1[Windows]
     V --> B2[Linux]
@@ -258,8 +258,8 @@ the `v` prefix: `v1.0.0`, `v1.1.0`, etc.
 
 ## Downloading Generated Builds
 
-- **From Actions (push to main):** open the **Actions** tab → select the latest
-  **CI - Push to Main** run → scroll to **Artifacts** → download the platform archive.
+- **From Actions (push to master):** open the **Actions** tab → select the latest
+  **CI - Push to Master** run → scroll to **Artifacts** → download the platform archive.
 - **From a GitHub Release:** open the **Releases** page → select the version → the
   platform build files are listed under **Assets**.
 
