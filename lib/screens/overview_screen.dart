@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 
 class OverviewScreen extends StatelessWidget {
   const OverviewScreen({super.key});
@@ -31,7 +32,7 @@ class OverviewScreen extends StatelessWidget {
                 ),
                 CircleAvatar(
                   radius: 24,
-                  backgroundColor: Colors.deepPurple,
+                  backgroundColor: AppColors.primary,
                   child: Icon(Icons.person, color: Colors.white),
                 ),
               ],
@@ -96,8 +97,8 @@ class OverviewScreen extends StatelessWidget {
                   ),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: Colors.deepPurple.shade50,
-                      child: const Icon(Icons.receipt_long, color: Colors.deepPurple),
+                      backgroundColor: AppColors.primaryLight,
+                      child: const Icon(Icons.receipt_long, color: AppColors.primary),
                     ),
                     title: Text(
                       'Order #100${5 - index}',

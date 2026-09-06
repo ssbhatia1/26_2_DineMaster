@@ -50,6 +50,11 @@ class DatabaseHelper {
   }
 
   Future<void> _ensureTablesExist(Database db) async {
+    // Cleanup deprecated water dummy data
+    try {
+      await db.delete('products', where: "name LIKE '%Water%' AND category = 'Beverages'");
+    } catch (_) {}
+
     // 1. Check/create ingredients
     await db.execute('''
       CREATE TABLE IF NOT EXISTS ingredients (
@@ -70,7 +75,7 @@ class DatabaseHelper {
         ingredient_id INTEGER,
         quantity_used REAL NOT NULL,
         FOREIGN KEY (product_id) REFERENCES products (id),
-        FOREIGN KEY (ingredient_id) REFERENCES ingredients (id)
+        FOREIGN KEY (ingredient_id) REFERENCES inventory (id)
       )
     ''');
 
@@ -117,6 +122,7 @@ class DatabaseHelper {
       'is_active': 'INTEGER DEFAULT 1',
       'is_reservable': 'INTEGER DEFAULT 1',
       'notes': 'TEXT',
+      'merged_with_id': 'INTEGER',
     };
     for (var entry in tableColumns.entries) {
       try {
@@ -136,6 +142,7 @@ class DatabaseHelper {
       'delivered_by_name': 'TEXT',
       'delivered_by_id': 'INTEGER',
       'delivery_timestamp': 'TEXT',
+      'guest_count': 'INTEGER',
     };
     for (var entry in orderColumns.entries) {
       try {
@@ -203,6 +210,23 @@ class DatabaseHelper {
         await db.execute('ALTER TABLE kot ADD COLUMN ${entry.key} ${entry.value}');
       } catch (_) {}
     }
+
+    // Create table_types and table_sections if missing
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS table_types (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        restaurant_id INTEGER
+      )
+    ''');
+    
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS table_sections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        restaurant_id INTEGER
+      )
+    ''');
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -296,7 +320,7 @@ class DatabaseHelper {
           ingredient_id INTEGER,
           quantity_used REAL NOT NULL,
           FOREIGN KEY (product_id) REFERENCES products (id),
-          FOREIGN KEY (ingredient_id) REFERENCES ingredients (id)
+          FOREIGN KEY (ingredient_id) REFERENCES inventory (id)
         )
       ''');
 
@@ -390,6 +414,7 @@ CREATE TABLE tables (
   is_active INTEGER DEFAULT 1,
   is_reservable INTEGER DEFAULT 1,
   notes TEXT,
+  merged_with_id INTEGER,
   waiter_id INTEGER,
   restaurant_id INTEGER,
   FOREIGN KEY (waiter_id) REFERENCES users (id),
@@ -428,6 +453,23 @@ CREATE TABLE categories (
 )
 ''');
 
+    await db.execute('''
+CREATE TABLE table_types (
+  id $idType,
+  name $textType UNIQUE,
+  restaurant_id INTEGER
+)
+''');
+
+    await db.execute('''
+CREATE TABLE table_sections (
+  id $idType,
+  name $textType UNIQUE,
+  restaurant_id INTEGER
+)
+''');
+
+
     // Orders Table
     await db.execute('''
 CREATE TABLE orders (
@@ -451,6 +493,7 @@ CREATE TABLE orders (
   delivered_by_name TEXT,
   delivered_by_id INTEGER,
   delivery_timestamp TEXT,
+  guest_count INTEGER,
   FOREIGN KEY (table_id) REFERENCES tables (id),
   FOREIGN KEY (customer_id) REFERENCES customers (id),
   FOREIGN KEY (waiter_id) REFERENCES users (id),
@@ -723,6 +766,18 @@ CREATE TABLE bookings (
       'is_veg': 1,
       'restaurant_id': restId
     });
+
+    // Insert Default Table Types
+    final defaultTypes = ['Standard Table', 'Booth', 'Round Table', 'Square Table', 'Rectangle Table', 'Counter', 'Bar Counter', 'Outdoor Table'];
+    for (var t in defaultTypes) {
+      await db.insert('table_types', {'name': t, 'restaurant_id': restId});
+    }
+
+    // Insert Default Table Sections
+    final defaultSections = ['Main Hall', 'AC Dining', 'Rooftop', 'Outdoor / Patio', 'VIP Lounge', 'Bar Counter'];
+    for (var s in defaultSections) {
+      await db.insert('table_sections', {'name': s, 'restaurant_id': restId});
+    }
   }
 
   static String hashPassword(String password) {

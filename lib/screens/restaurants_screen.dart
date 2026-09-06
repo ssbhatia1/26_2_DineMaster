@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import '../core/database/database_helper.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 
 class RestaurantsScreen extends StatefulWidget {
   const RestaurantsScreen({super.key});
@@ -175,8 +176,8 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.deepPurple.shade50,
-                          child: const Icon(Icons.restaurant, color: Colors.deepPurple),
+                          backgroundColor: AppColors.primaryLight,
+                          child: const Icon(Icons.restaurant, color: AppColors.primary),
                         ),
                         title: Text(
                           restaurant['name'],
@@ -224,7 +225,7 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
                 ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddRestaurantDialog,
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );

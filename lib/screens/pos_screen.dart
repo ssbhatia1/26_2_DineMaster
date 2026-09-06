@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
@@ -40,7 +41,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
   bool _isLoading = true;
   String _selectedOrderType = 'Walk-in Customer';
   int? _selectedTableId;
-  final List<String> _orderTypes = ['Walk-in Customer', 'Online Order', 'Table Order', 'Dine-In', 'Takeaway', 'Delivery'];
+  final List<String> _orderTypes = ['Dine-In', 'Table Order', 'Delivery', 'Takeaway', 'Online Order', 'Walk-in Customer'];
   String _selectedPaymentType = 'Cash';
   double _discountAmount = 0.0;
   String _discountType = 'Flat'; // Flat or Percentage
@@ -48,7 +49,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
   StreamSubscription? _syncSubscription;
   late TabController _posTabController;
   List<Map<String, dynamic>> _activeOrders = [];
-  final TextEditingController _customerNameController = TextEditingController();
+  final TextEditingController _customerNameController = TextEditingController(text: 'Walking Customer');
   final TextEditingController _customerPhoneController = TextEditingController();
 
   @override
@@ -158,7 +159,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       
       _posTabController.animateTo(0);
       
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Order #$orderId loaded into cart.')),
       );
     } catch (e) {
@@ -271,7 +272,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              const Icon(Icons.tune, color: Colors.deepPurple),
+              const Icon(Icons.tune, color: AppColors.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -373,7 +374,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
+                backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
               ),
               onPressed: () {
@@ -444,7 +445,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Future<void> _processBilling() async {
     if (_cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cart is empty')),
       );
       return;
@@ -599,13 +600,24 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       }
 
       // Clear Table Status if Dine-in
-      if (_selectedOrderType == 'Table Order' && _selectedTableId != null) {
-        await db.update(
-          'tables',
-          {'status': isSplit ? 'Billing Pending' : 'Available'},
-          where: 'id = ?',
-          whereArgs: [_selectedTableId],
-        );
+      // Clear Table Status if Dine-in or Table Order
+      if ((_selectedOrderType == 'Table Order' || _selectedOrderType == 'Dine-In') && _selectedTableId != null) {
+        if (!isSplit) {
+          // Unmerge and release all associated tables
+          await db.update(
+            'tables',
+            {'status': 'Available', 'merged_with_id': null},
+            where: 'id = ? OR merged_with_id = ?',
+            whereArgs: [_selectedTableId, _selectedTableId],
+          );
+        } else {
+          await db.update(
+            'tables',
+            {'status': 'Billing Pending'},
+            where: 'id = ?',
+            whereArgs: [_selectedTableId],
+          );
+        }
       }
 
       // Clear Cart
@@ -613,7 +625,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         _cartItems.clear();
         _editingOrderId = null;
         _selectedTableId = null;
-        _customerNameController.clear();
+        _customerNameController.text = 'Walking Customer';
         _customerPhoneController.clear();
       });
 
@@ -623,7 +635,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       if (isSplit) {
         _showSplitPaymentCheckoutDialog(orderId, total);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        if(false) ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Order #$orderId processed and paid successfully!')),
         );
       }
@@ -631,7 +643,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       _loadTables();
       _loadActiveOrders();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error processing billing: $e')),
       );
     }
@@ -639,7 +651,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Future<void> _showHoldPrompt() async {
     if (_cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cart is empty')),
       );
       return;
@@ -697,7 +709,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Future<void> _holdOrder(String customerName, String customerPhone) async {
     if (_cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cart is empty')),
       );
       return;
@@ -826,16 +838,16 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         _cartItems.clear();
         _editingOrderId = null;
         _selectedTableId = null;
-        _customerNameController.clear();
+        _customerNameController.text = 'Walking Customer';
         _customerPhoneController.clear();
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Order #$orderId held and KOT generated!')),
       );
       _loadTables();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error holding order: $e')),
       );
     }
@@ -956,7 +968,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   children: [
                     Text('Order #$orderId - Live History', style: const TextStyle(fontWeight: FontWeight.bold)),
                     IconButton(
-                      icon: const Icon(Icons.refresh, color: Colors.deepPurple),
+                      icon: const Icon(Icons.refresh, color: AppColors.primary),
                       onPressed: () => reloadData(),
                     ),
                   ],
@@ -971,9 +983,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                           child: Column(
                             children: [
                               const TabBar(
-                                labelColor: Colors.deepPurple,
+                                labelColor: AppColors.primary,
                                 unselectedLabelColor: Colors.grey,
-                                indicatorColor: Colors.deepPurple,
+                                indicatorColor: AppColors.primary,
                                 tabs: [
                                   Tab(icon: Icon(Icons.restaurant_menu), text: 'KOT History'),
                                   Tab(icon: Icon(Icons.history_toggle_off), text: 'Status Timeline'),
@@ -1074,7 +1086,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                                                   children: [
                                                     const Padding(
                                                       padding: EdgeInsets.only(top: 4.0),
-                                                      child: Icon(Icons.circle, size: 12, color: Colors.deepPurple),
+                                                      child: Icon(Icons.circle, size: 12, color: AppColors.primary),
                                                     ),
                                                     const SizedBox(width: 12),
                                                     Expanded(
@@ -1212,8 +1224,8 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         IconButton(
-                                          icon: const Icon(Icons.track_changes, color: Colors.deepPurple),
-                                          tooltip: 'Track KOT & Status History',
+                                          icon: const Icon(Icons.track_changes, color: AppColors.primary),
+                                          // tooltip disabled,
                                           onPressed: () {
                                             Navigator.pop(context);
                                             _showOrderHistoryAndKotDialog(order['id']);
@@ -1370,7 +1382,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 title: Row(
                   children: [
-                    const Icon(Icons.call_split, color: Colors.deepPurple, size: 28),
+                    const Icon(Icons.call_split, color: AppColors.primary, size: 28),
                     const SizedBox(width: 8),
                     Text('Split / Partial Checkout (#$orderId)'),
                   ],
@@ -1382,7 +1394,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Card(
-                          color: Colors.deepPurple.shade50,
+                          color: AppColors.primaryLight,
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           child: Padding(
@@ -1411,7 +1423,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     const Text('Remaining Balance:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                                    Text('₹${remainingBalance.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                                    Text('₹${remainingBalance.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary)),
                                   ],
                                 ),
                               ],
@@ -1534,12 +1546,21 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                             }
 
                             if (tableId != null) {
-                              await db.update(
-                                'tables',
-                                {'status': fullyPaid ? 'Available' : 'Billing Pending'},
-                                where: 'id = ?',
-                                whereArgs: [tableId],
-                              );
+                              if (fullyPaid) {
+                                await db.update(
+                                  'tables',
+                                  {'status': 'Available', 'merged_with_id': null},
+                                  where: 'id = ? OR merged_with_id = ?',
+                                  whereArgs: [tableId, tableId],
+                                );
+                              } else {
+                                await db.update(
+                                  'tables',
+                                  {'status': 'Billing Pending'},
+                                  where: 'id = ?',
+                                  whereArgs: [tableId],
+                                );
+                              }
                             }
 
                             // Log status history
@@ -1554,7 +1575,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                             // Broadcast the change instantly via WebSocket
                             SyncService.instance.broadcastEvent('database_update', {});
 
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            if(false) ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
                                   fullyPaid 
@@ -1569,7 +1590,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                             _loadActiveOrders();
                           },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
+                      backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                     ),
                     child: Text(diff < 0 ? 'Pay Partial' : 'Settle Bill'),
@@ -1742,14 +1763,14 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                           children: [
                             IconButton(
                               icon: const Icon(Icons.track_changes, size: 20),
-                              color: Colors.deepPurple,
-                              tooltip: 'Track KOT',
+                              color: AppColors.primary,
+                              // tooltip disabled,
                               onPressed: () => _showOrderHistoryAndKotDialog(orderId),
                             ),
                             IconButton(
                               icon: const Icon(Icons.payment, size: 20),
                               color: Colors.green,
-                              tooltip: 'Quick Settle',
+                              // tooltip disabled,
                               onPressed: () {
                                 _showSplitPaymentCheckoutDialog(orderId, total);
                               },
@@ -1762,7 +1783,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 minimumSize: Size.zero,
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                backgroundColor: Colors.deepPurple,
+                                backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
                               ),
                               child: const Text('Checkout', style: TextStyle(fontSize: 11)),
@@ -1810,9 +1831,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                     color: isDark ? const Color(0xFF1E1E24) : Colors.white,
                     child: TabBar(
                       controller: _posTabController,
-                      labelColor: Colors.deepPurple,
+                      labelColor: AppColors.primary,
                       unselectedLabelColor: Colors.grey,
-                      indicatorColor: Colors.deepPurple,
+                      indicatorColor: AppColors.primary,
                       indicatorSize: TabBarIndicatorSize.tab,
                       tabs: const [
                         Tab(
@@ -1876,9 +1897,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
           backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
           foregroundColor: isDark ? Colors.white : Colors.black87,
           bottom: TabBar(
-            labelColor: Colors.deepPurple,
+            labelColor: AppColors.primary,
             unselectedLabelColor: Colors.grey,
-            indicatorColor: Colors.deepPurple,
+            indicatorColor: AppColors.primary,
             tabs: [
               const Tab(icon: Icon(Icons.restaurant_menu, size: 20), text: 'Menu'),
               const Tab(icon: Icon(Icons.table_restaurant, size: 20), text: 'Floor'),
@@ -1964,7 +1985,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                         _filterProducts();
                       });
                     },
-                    selectedColor: Colors.deepPurple,
+                    selectedColor: AppColors.primary,
                     labelStyle: TextStyle(
                       color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -2018,7 +2039,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             children: [
               Row(
                 children: [
-                  Icon(Icons.shopping_cart_outlined, color: Colors.deepPurple.shade400),
+                  Icon(Icons.shopping_cart_outlined, color: AppColors.primaryMaterialColor[400]!),
                   const SizedBox(width: 8),
                   Text(
                     _editingOrderId != null ? 'Edit Order #${_editingOrderId}' : 'New Check-out',
@@ -2030,27 +2051,27 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 children: [
                   if (_editingOrderId != null)
                     IconButton(
-                      icon: const Icon(Icons.track_changes, color: Colors.deepPurple, size: 20),
-                      tooltip: 'Track KOT & Status History',
+                      icon: const Icon(Icons.track_changes, color: AppColors.primary, size: 20),
+                      // tooltip disabled,
                       onPressed: () => _showOrderHistoryAndKotDialog(_editingOrderId!),
                       constraints: const BoxConstraints(),
                       padding: const EdgeInsets.all(4),
                     ),
                   IconButton(
                     icon: const Icon(Icons.restore, color: Colors.blue, size: 20),
-                    tooltip: 'Resume Held Order',
+                    // tooltip disabled,
                     onPressed: _showResumeDialog,
                     constraints: const BoxConstraints(),
                     padding: const EdgeInsets.all(4),
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_sweep_outlined, color: Colors.red, size: 20),
-                    tooltip: 'Clear Cart',
+                    // tooltip disabled,
                     onPressed: () {
                       setState(() {
                         _cartItems.clear();
                         _editingOrderId = null;
-                        _customerNameController.clear();
+                        _customerNameController.text = 'Walking Customer';
                         _customerPhoneController.clear();
                       });
                     },
@@ -2136,13 +2157,22 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
               children: [
                 Expanded(
                   child: SearchableDropdown<TableModel>(
-                    items: _tables,
+                    // Only show merged group anchors so a merged group is selected
+                    // as a single entity (members are hidden).
+                    items: _tables.where((t) => t.mergedWithId == null).toList(),
                     value: _selectedTableId != null && _tables.any((t) => t.id == _selectedTableId)
                         ? _tables.firstWhere((t) => t.id == _selectedTableId)
                         : null,
                     labelText: 'Select Table',
                     hintText: 'Search table...',
-                    itemToString: (t) => 'Table ${t.tableNumber} (Cap: ${t.capacity})',
+                    itemToString: (t) {
+                      final members = _tables.where((m) => m.mergedWithId == t.id).toList();
+                      final cap = t.capacity + members.fold<int>(0, (sum, m) => sum + m.capacity);
+                      final label = members.isEmpty
+                          ? 'Table ${t.tableNumber}'
+                          : '${[t, ...members].map((m) => m.tableNumber).join(' + ')} (Merged)';
+                      return '$label (Cap: $cap)';
+                    },
                     filterFn: (t, query) => t.tableNumber.toLowerCase().contains(query.toLowerCase()),
                     onChanged: (val) async {
                       setState(() {
@@ -2173,9 +2203,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 ),
                 const SizedBox(width: 6),
                 IconButton(
-                  icon: const Icon(Icons.bookmark_add_outlined, color: Colors.deepPurple),
+                  icon: const Icon(Icons.bookmark_add_outlined, color: AppColors.primary),
                   onPressed: _showAdvancedBookingDialog,
-                  tooltip: 'Advanced Table Booking',
+                  // tooltip disabled,
                   constraints: const BoxConstraints(),
                   padding: const EdgeInsets.all(8),
                 ),
@@ -2244,15 +2274,15 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                                       decoration: BoxDecoration(
-                                        color: Colors.deepPurple.shade50,
+                                        color: AppColors.primaryLight,
                                         borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: Colors.deepPurple.shade200, width: 0.6),
+                                        border: Border.all(color: AppColors.primaryMaterialColor[200]!, width: 0.6),
                                       ),
                                       child: Text(
                                         '📝 ${item['notes']}',
                                         style: TextStyle(
                                           fontSize: 10,
-                                          color: Colors.deepPurple.shade700,
+                                          color: AppColors.primaryMaterialColor[700]!,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -2386,7 +2416,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                       label: const Text('PAY & SETTLE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                       onPressed: _processBilling,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
+                        backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -2466,7 +2496,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
           children: [
             Text('Category: ${product.category}', style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text('Price: ₹${product.price}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+            Text('Price: ₹${product.price}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -2513,10 +2543,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 children: product.ingredients!.split(',').where((s) => s.trim().isNotEmpty).map((ing) => Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.deepPurple.shade50,
+                    color: AppColors.primaryLight,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(ing.trim(), style: const TextStyle(fontSize: 12, color: Colors.deepPurple)),
+                  child: Text(ing.trim(), style: const TextStyle(fontSize: 12, color: AppColors.primary)),
                 )).toList(),
               ),
             ],
@@ -2529,7 +2559,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('• ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                    const Text('• ', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
                     Expanded(child: Text(step)),
                   ],
                 ),
@@ -2595,7 +2625,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.deepPurple),
+          Icon(icon, size: 14, color: AppColors.primary),
           const SizedBox(width: 4),
           Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
         ],
@@ -2606,7 +2636,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
   void _showVideoTutorialDialog(String path, String productName) {
     final file = File(path);
     if (!file.existsSync()) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Video file not found on disk.')),
       );
       return;
@@ -2783,11 +2813,11 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   );
 
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Table booked successfully!')),
                   );
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Please enter name and select a table')),
                   );
                 }
@@ -2802,7 +2832,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Future<pw.Document?> _createCartPdfDocument() async {
     if (_cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cart is empty')),
       );
       return null;
@@ -2900,7 +2930,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
     try {
       await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to generate/print invoice: $e')),
       );
     }
@@ -2987,13 +3017,13 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: isDark ? Colors.grey.shade800.withOpacity(0.5) : Colors.deepPurple.shade50.withOpacity(0.5),
+                          color: isDark ? Colors.grey.shade800.withOpacity(0.5) : AppColors.primaryLight.withOpacity(0.5),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           product.isVeg == 1 ? Icons.local_pizza : Icons.lunch_dining,
                           size: 36,
-                          color: Colors.deepPurple.shade300,
+                          color: AppColors.primaryMaterialColor[300]!,
                         ),
                       ),
                     ),
@@ -3022,7 +3052,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                             Text(
                               '₹${product.price}',
                               style: const TextStyle(
-                                color: Colors.deepPurple,
+                                color: AppColors.primary,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
                               ),
@@ -3030,12 +3060,12 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.deepPurple.withOpacity(0.1),
+                                color: AppColors.primary.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 product.category,
-                                style: const TextStyle(color: Colors.deepPurple, fontSize: 8, fontWeight: FontWeight.bold),
+                                style: const TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ],
@@ -3087,7 +3117,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             style: TextStyle(
               fontSize: isTotal ? 18 : 14,
               fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-              color: isTotal ? Colors.deepPurple : Colors.black,
+              color: isTotal ? AppColors.primary : Colors.black,
             ),
           ),
         ],

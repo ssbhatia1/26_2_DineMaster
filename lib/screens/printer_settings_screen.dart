@@ -36,7 +36,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
     await prefs.setString('printer_port', _portController.text.trim());
     await prefs.setString('printer_name', _nameController.text.trim());
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    if(false) ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Printer settings saved successfully')),
     );
   }
@@ -100,7 +100,7 @@ class _PrinterSettingsScreenState extends State<PrinterSettingsScreen> {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        if(false) ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Test print sent...')),
                         );
                       },

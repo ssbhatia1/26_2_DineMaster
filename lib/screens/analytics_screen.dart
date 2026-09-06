@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'dart:math';
 import '../core/database/database_helper.dart';
 
@@ -140,7 +141,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: Colors.deepPurple)),
+        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
       );
     }
 
@@ -150,7 +151,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Reload Stats',
+            // tooltip disabled,
             onPressed: _loadAnalyticsData,
           ),
           const SizedBox(width: 8),
@@ -159,7 +160,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
             icon: const Icon(Icons.download),
             label: const Text('Export Report'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple,
+              backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
@@ -168,9 +169,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
         ],
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Colors.deepPurple,
+          labelColor: AppColors.primary,
           unselectedLabelColor: Colors.grey,
-          indicatorColor: Colors.deepPurple,
+          indicatorColor: AppColors.primary,
           tabs: const [
             Tab(icon: Icon(Icons.dashboard_outlined), text: 'Overview'),
             Tab(icon: Icon(Icons.restaurant_menu), text: 'Product Sales'),
@@ -220,7 +221,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                     title: 'Orders Processed',
                     value: _totalOrdersCount.toString(),
                     icon: Icons.shopping_bag_outlined,
-                    color: Colors.deepPurple,
+                    color: AppColors.primary,
                     width: cardWidth,
                   ),
                   _buildStatCard(
@@ -369,7 +370,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                                 width: 32,
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [Colors.deepPurple.shade300, Colors.deepPurple.shade600],
+                                    colors: [AppColors.primaryMaterialColor[300]!, AppColors.primaryMaterialColor[600]!],
                                     begin: Alignment.bottomCenter,
                                     end: Alignment.topCenter,
                                   ),
@@ -533,8 +534,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
 
                       return ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.deepPurple.shade50,
-                          child: Text('${index + 1}', style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
+                          backgroundColor: AppColors.primaryLight,
+                          child: Text('${index + 1}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                         ),
                         title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text('Category: $category | Qty Sold: $qty'),
@@ -542,7 +543,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text('₹${rev.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                            Text('₹${rev.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
                             Text('${percent.toStringAsFixed(1)}% share', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                           ],
                         ),
@@ -600,7 +601,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                                 child: LinearProgressIndicator(
                                   value: percent / 100,
                                   minHeight: 12,
-                                  color: Colors.deepPurple.shade400,
+                                  color: AppColors.primaryMaterialColor[400]!,
                                   backgroundColor: Colors.grey.shade100,
                                 ),
                               ),
@@ -662,17 +663,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
 
                     return Card(
                       elevation: 0,
-                      color: Colors.deepPurple.shade50.withOpacity(0.3),
+                      color: AppColors.primaryLight.withOpacity(0.3),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(color: Colors.deepPurple.shade100),
+                        side: BorderSide(color: AppColors.navyBlue100),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Row(
                           children: [
                             CircleAvatar(
-                              backgroundColor: Colors.deepPurple,
+                              backgroundColor: AppColors.primary,
                               radius: 24,
                               child: Text(
                                 name.substring(0, min(name.length, 2)).toUpperCase(),
@@ -809,7 +810,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
+              if(false) ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('GST tax report successfully compiled and saved to Documents.')),
               );
             },
@@ -819,11 +820,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
+              if(false) ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Daily sales report exported to PDF.')),
               );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
             child: const Text('Sales Statement (PDF)'),
           ),
         ],

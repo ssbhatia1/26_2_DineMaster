@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/database_helper.dart';
@@ -82,15 +83,15 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
     final db = await DatabaseHelper.instance.database;
 
     // Load raw ingredients for recipe management
-    final ingredients = await db.query('ingredients', orderBy: 'name ASC');
+    List<Map<String, dynamic>> ingredients = await db.query('inventory', orderBy: 'item_name ASC');
 
     // Load recipe items if editing
     List<Map<String, dynamic>> localRecipe = [];
     if (isEditing && existingProduct.id != null) {
       final recipeItems = await db.rawQuery('''
-        SELECT recipes.*, ingredients.name as ingredient_name, ingredients.unit 
+        SELECT recipes.*, inventory.item_name as ingredient_name, inventory.unit 
         FROM recipes 
-        JOIN ingredients ON recipes.ingredient_id = ingredients.id 
+        JOIN inventory ON recipes.ingredient_id = inventory.id 
         WHERE recipes.product_id = ?
       ''', [existingProduct.id]);
       localRecipe = recipeItems.map((item) => {
@@ -162,10 +163,10 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                     children: [
                       CircleAvatar(
                         radius: 20,
-                        backgroundColor: Colors.deepPurple.shade50,
+                        backgroundColor: AppColors.primaryLight,
                         child: Icon(
                           isEditing ? Icons.edit_note : Icons.add_business_outlined,
-                          color: Colors.deepPurple,
+                          color: AppColors.primary,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -200,9 +201,9 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                     ),
                     child: const TabBar(
                       isScrollable: true,
-                      labelColor: Colors.deepPurple,
+                      labelColor: AppColors.primary,
                       unselectedLabelColor: Colors.black54,
-                      indicatorColor: Colors.deepPurple,
+                      indicatorColor: AppColors.primary,
                       indicatorWeight: 3,
                       tabs: [
                         Tab(icon: Icon(Icons.info_outline, size: 18), text: 'Basic Info'),
@@ -358,7 +359,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                 subtitle: Text(isAvailable ? 'In stock and active on POS & Menu' : 'Marked Out of Stock'),
                                 value: isAvailable,
                                 onChanged: (val) => setDlgState(() => isAvailable = val),
-                                activeColor: Colors.deepPurple,
+                                activeColor: AppColors.primary,
                                 contentPadding: EdgeInsets.zero,
                               ),
                             ],
@@ -522,7 +523,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                   _buildAttributeFilterChip(
                                     label: "Recommended",
                                     icon: Icons.thumb_up_alt_outlined,
-                                    color: Colors.deepPurple,
+                                    color: AppColors.primary,
                                     isSelected: attributes.contains("Recommended"),
                                     onChanged: (sel) => setDlgState(() => sel ? attributes.add("Recommended") : attributes.remove("Recommended")),
                                   ),
@@ -605,9 +606,13 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                   TextButton.icon(
                                     icon: const Icon(Icons.settings, size: 16),
                                     label: const Text('Manage Stock Ingredients', style: TextStyle(fontSize: 12)),
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      _showIngredientsManager();
+                                    onPressed: () async {
+                                      await _showIngredientsManager();
+                                      final db = await DatabaseHelper.instance.database;
+                                      final newIngs = await db.query('inventory', orderBy: 'item_name ASC');
+                                      setDlgState(() {
+                                        ingredients = newIngs;
+                                      });
                                     },
                                   ),
                                 ],
@@ -625,7 +630,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                       items: ingredients.map((ing) {
                                         return DropdownMenuItem<int>(
                                           value: ing['id'] as int,
-                                          child: Text('${ing['name']} (${ing['unit']})'),
+                                          child: Text('${ing['item_name']} (${ing['unit']})'),
                                         );
                                       }).toList(),
                                       onChanged: (val) => setDlgState(() => selectedIngredientId = val),
@@ -651,7 +656,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   IconButton(
-                                    icon: const Icon(Icons.add_circle, color: Colors.deepPurple, size: 32),
+                                    icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 32),
                                     onPressed: () {
                                       final qty = double.tryParse(recipeQtyController.text.trim()) ?? 0.0;
                                       if (selectedIngredientId != null && qty > 0) {
@@ -705,7 +710,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                   ),
                                   const SizedBox(width: 8),
                                   IconButton(
-                                    icon: const Icon(Icons.add_circle, color: Colors.deepPurple, size: 32),
+                                    icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 32),
                                     onPressed: () {
                                       final val = stepController.text.trim();
                                       if (val.isNotEmpty) {
@@ -727,8 +732,8 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                     dense: true,
                                     leading: CircleAvatar(
                                       radius: 10,
-                                      backgroundColor: Colors.deepPurple.shade50,
-                                      child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 10, color: Colors.deepPurple)),
+                                      backgroundColor: AppColors.primaryLight,
+                                      child: Text('${entry.key + 1}', style: const TextStyle(fontSize: 10, color: AppColors.primary)),
                                     ),
                                     title: Text(entry.value),
                                     trailing: IconButton(
@@ -756,7 +761,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                       const SizedBox(width: 8),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepPurple,
+                          backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -769,7 +774,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                           final desc = descController.text.trim();
 
                           if (name.isEmpty || price <= 0) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            if(false) ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Please enter valid dish name and price')),
                             );
                             return;
@@ -819,7 +824,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
 
                           Navigator.pop(context);
                           _loadProducts();
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          if(false) ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Product "$name" saved successfully!'),
                               backgroundColor: Colors.green,
@@ -898,18 +903,18 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
     );
   }
 
-  void _showIngredientsManager() {
+  Future<void> _showIngredientsManager() async {
     final nameController = TextEditingController();
     final unitController = TextEditingController();
     List<Map<String, dynamic>> ingredients = [];
 
-    showDialog(
+    await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setIngState) {
           void loadIngs() async {
             final db = await DatabaseHelper.instance.database;
-            final res = await db.query('ingredients', orderBy: 'name ASC');
+            final res = await db.query('inventory', orderBy: 'item_name ASC');
             setIngState(() => ingredients = res);
           }
 
@@ -940,13 +945,13 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.add_circle, color: Colors.deepPurple),
+                        icon: const Icon(Icons.add_circle, color: AppColors.primary),
                         onPressed: () async {
                           final name = nameController.text.trim();
                           if (name.isNotEmpty) {
                             final db = await DatabaseHelper.instance.database;
-                            await db.insert('ingredients', {
-                              'name': name,
+                            await db.insert('inventory', {
+                              'item_name': name,
                               'unit': unitController.text.trim(),
                               'stock_quantity': 0.0,
                               'restaurant_id': DatabaseHelper.currentRestaurantId,
@@ -966,13 +971,13 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                       itemBuilder: (context, index) {
                         final ing = ingredients[index];
                         return ListTile(
-                          title: Text(ing['name'] as String),
+                          title: Text(ing['item_name'] as String),
                           subtitle: Text('Unit: ${ing['unit']}'),
                           trailing: IconButton(
                             icon: const Icon(Icons.delete_outline, color: Colors.red),
                             onPressed: () async {
                               final db = await DatabaseHelper.instance.database;
-                              await db.delete('ingredients', where: 'id = ?', whereArgs: [ing['id']]);
+                              await db.delete('inventory', where: 'id = ?', whereArgs: [ing['id']]);
                               loadIngs();
                             },
                           ),
@@ -1016,7 +1021,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.add_circle, color: Colors.deepPurple),
+                      icon: const Icon(Icons.add_circle, color: AppColors.primary),
                       onPressed: () async {
                         final name = catController.text.trim();
                         if (name.isNotEmpty) {
@@ -1030,7 +1035,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                             _loadCategories();
                             Navigator.pop(context);
                           } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            if(false) ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Category already exists')),
                             );
                           }
@@ -1104,12 +1109,14 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
           IconButton(
             icon: const Icon(Icons.category_outlined),
             onPressed: _showCategoryManager,
-            tooltip: 'Manage Categories',
+            // tooltip disabled,
           ),
           IconButton(
-            icon: const Icon(Icons.inventory_2_outlined),
-            onPressed: _showIngredientsManager,
-            tooltip: 'Manage Stock Ingredients',
+            onPressed: () async {
+              await _showIngredientsManager();
+            },
+            // tooltip disabled,
+            icon: const Icon(Icons.inventory),
           ),
           const SizedBox(width: 8),
         ],
@@ -1231,7 +1238,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                                   style: const TextStyle(
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 16,
-                                                    color: Colors.deepPurple,
+                                                    color: AppColors.primary,
                                                   ),
                                                 ),
                                               ],
@@ -1271,17 +1278,17 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                               );
                                               if (result == true) _loadProducts();
                                             },
-                                            tooltip: 'Manage Recipe',
+                                            // tooltip disabled,
                                           ),
                                           IconButton(
                                             icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
                                             onPressed: () => _showProductDialog(product),
-                                            tooltip: 'Edit Food Item & Preferences',
+                                            // tooltip disabled,
                                           ),
                                           IconButton(
                                             icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
                                             onPressed: () => _confirmDelete(product.id, product.name),
-                                            tooltip: 'Delete Product',
+                                            // tooltip disabled,
                                           ),
                                         ],
                                       ),
@@ -1308,7 +1315,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
         onPressed: () => _showProductDialog(),
         icon: const Icon(Icons.add),
         label: const Text('Add Food Item'),
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
     );

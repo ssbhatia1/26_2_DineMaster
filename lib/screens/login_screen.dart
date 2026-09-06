@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
@@ -28,9 +29,9 @@ class _LoginScreenState extends State<LoginScreen> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Colors.deepPurple.shade900,
-                  Colors.blue.shade900,
-                  Colors.indigo.shade900,
+                  AppColors.primary,
+                  AppColors.navyBlue100.withAlpha(50),
+                  AppColors.primary,
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -67,10 +68,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 400,
                     padding: const EdgeInsets.all(32),
                     decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(25),
+                      color: const Color(0xE6040E21),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                        color: Colors.white.withAlpha(30),
+                        color: Colors.white.withAlpha(45),
                         width: 1.5,
                       ),
                     ),
@@ -79,10 +80,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         // Logo or App Name
-                        const Icon(
-                          Icons.restaurant_menu,
-                          size: 64,
-                          color: Colors.white,
+                        Image.asset(
+                          'assets/images/logo.jpg',
+                          height: 120,
                         ).animate().scale(delay: 200.ms, duration: 500.ms, curve: Curves.easeOutBack),
                         const SizedBox(height: 16),
                         const Text(
@@ -114,10 +114,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             labelStyle: const TextStyle(color: Colors.white70),
                             prefixIcon: const Icon(Icons.person, color: Colors.white70),
                             filled: true,
-                            fillColor: Colors.white.withAlpha(25),
+                            fillColor: Colors.white.withAlpha(40),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
+                              borderSide: BorderSide(color: Colors.white.withAlpha(70)),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -148,10 +148,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               },
                             ),
                             filled: true,
-                            fillColor: Colors.white.withAlpha(25),
+                            fillColor: Colors.white.withAlpha(40),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
+                              borderSide: BorderSide(color: Colors.white.withAlpha(70)),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -162,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 20),
                         DropdownButtonFormField<String>(
                           value: _selectedRole,
-                          dropdownColor: Colors.deepPurple.shade800,
+                          dropdownColor: AppColors.primaryMaterialColor[800]!,
                           style: const TextStyle(color: Colors.white),
                           items: ['Owner', 'Manager', 'Cashier', 'Waiter', 'Chef']
                               .map((r) => DropdownMenuItem(value: r, child: Text(r, style: const TextStyle(color: Colors.white))))
@@ -173,10 +173,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             labelStyle: const TextStyle(color: Colors.white70),
                             prefixIcon: const Icon(Icons.badge, color: Colors.white70),
                             filled: true,
-                            fillColor: Colors.white.withAlpha(25),
+                            fillColor: Colors.white.withAlpha(40),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
+                              borderSide: BorderSide(color: Colors.white.withAlpha(70)),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -206,7 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             final password = _passwordController.text.trim();
 
                             if (username.isEmpty || password.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              if(false) ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Please fill all fields')),
                               );
                               return;
@@ -226,14 +226,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               await prefs.setString('role', _selectedRole);
                               context.go('/branch_selection');
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              if(false) ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Invalid credentials or role')),
                               );
                             }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
-                            foregroundColor: Colors.deepPurple.shade900,
+                            foregroundColor: AppColors.primaryMaterialColor[900]!,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -274,7 +274,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             SizedBox(width: 4),
                             Text(
                               'Default: owner/owner123',
-                              style: TextStyle(color: Colors.white60, fontSize: 12),
+                              style: TextStyle(color: Colors.white70, fontSize: 12),
                             ),
                           ],
                         ).animate().fadeIn(delay: 1600.ms),
@@ -342,7 +342,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 final password = passwordController.text.trim();
 
                 if (name.isEmpty || username.isEmpty || password.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Please fill all fields')),
                   );
                   return;
@@ -359,11 +359,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     'created_at': DateTime.now().toIso8601String(),
                   });
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Account created successfully!')),
                   );
                 } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Error creating account: $e')),
                   );
                 }

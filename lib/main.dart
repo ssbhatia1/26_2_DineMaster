@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:go_router/go_router.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
@@ -154,14 +155,14 @@ class MyApp extends StatelessWidget {
           themeMode: currentThemeMode,
           theme: ThemeData(
             useMaterial3: true,
-            primarySwatch: Colors.deepPurple,
+            primarySwatch: AppColors.primaryMaterialColor,
             colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.deepPurple,
-              primary: Colors.deepPurple,
-              secondary: Colors.orange,
+              seedColor: AppColors.primary,
+              primary: AppColors.primary,
+              secondary: AppColors.secondary,
               brightness: Brightness.light,
             ),
-            scaffoldBackgroundColor: Colors.grey.shade50,
+            scaffoldBackgroundColor: AppColors.background,
             appBarTheme: const AppBarTheme(
               elevation: 0,
               backgroundColor: Colors.white,
@@ -178,14 +179,14 @@ class MyApp extends StatelessWidget {
           darkTheme: ThemeData(
             useMaterial3: true,
             brightness: Brightness.dark,
-            primarySwatch: Colors.deepPurple,
+            primarySwatch: AppColors.primaryMaterialColor,
             colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.deepPurple,
-              primary: Colors.deepPurple,
-              secondary: Colors.orange,
+              seedColor: AppColors.primary,
+              primary: AppColors.primary,
+              secondary: AppColors.secondary,
               brightness: Brightness.dark,
             ),
-            scaffoldBackgroundColor: const Color(0xFF121212),
+            scaffoldBackgroundColor: AppColors.background,
             appBarTheme: AppBarTheme(
               elevation: 0,
               backgroundColor: Colors.grey.shade900,

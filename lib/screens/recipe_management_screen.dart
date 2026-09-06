@@ -1,5 +1,6 @@
 ﻿import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:file_picker/file_picker.dart' as fp;
 import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -49,7 +50,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
     final productId = widget.product['id'];
 
     // 1. Fetch raw ingredients list for dropdown
-    _allIngredients = await db.query('ingredients', orderBy: 'name ASC');
+    _allIngredients = await db.query('inventory', orderBy: 'item_name ASC');
 
     // 2. Fetch existing product record to get prep details and video path
     final productList = await db.query('products', where: 'id = ?', whereArgs: [productId]);
@@ -67,9 +68,9 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
 
     // 3. Fetch linked ingredients from recipes table
     final recipeItems = await db.rawQuery('''
-      SELECT recipes.*, ingredients.name as ingredient_name, ingredients.unit 
+      SELECT recipes.*, inventory.item_name as ingredient_name, inventory.unit 
       FROM recipes 
-      JOIN ingredients ON recipes.ingredient_id = ingredients.id 
+      JOIN inventory ON recipes.ingredient_id = inventory.id 
       WHERE recipes.product_id = ?
     ''', [productId]);
 
@@ -116,7 +117,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
         _initializeVideoPlayer();
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error picking video: $e')),
       );
     }
@@ -137,7 +138,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        if(false) ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not launch system media player.')),
         );
       }
@@ -189,7 +190,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
     }
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Recipe updated successfully!')),
       );
       Navigator.pop(context, true);
@@ -217,7 +218,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
-            tooltip: 'Save Recipe',
+            // tooltip disabled,
             onPressed: _saveRecipe,
           ),
         ],
@@ -286,7 +287,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
             child: ElevatedButton.icon(
               icon: const Icon(Icons.save, color: Colors.white),
               label: const Text('Save Recipe', style: TextStyle(fontSize: 16, color: Colors.white)),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
               onPressed: _saveRecipe,
             ),
           ),
@@ -309,7 +310,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
           children: [
             const Text(
               'Preparation Details',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
             ),
             const SizedBox(height: 16),
             Row(
@@ -398,7 +399,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
               children: [
                 const Text(
                   'Recipe Tutorial Video',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
                 ),
                 if (_videoPath != null)
                   TextButton.icon(
@@ -427,7 +428,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                     ElevatedButton.icon(
                       icon: const Icon(Icons.upload_file, color: Colors.white),
                       label: const Text('Select Video File', style: TextStyle(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
+                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
                       onPressed: _pickVideo,
                     ),
                   ],
@@ -513,7 +514,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
           children: [
             const Text(
               'Recipe Ingredients',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
             ),
             const SizedBox(height: 16),
             Row(
@@ -530,7 +531,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                     ),
                     items: availableIngs.map((ing) => DropdownMenuItem<int>(
                       value: ing['id'] as int,
-                      child: Text('${ing['name']} (${ing['unit']})'),
+                      child: Text('${ing['item_name']} (${ing['unit']})'),
                     )).toList(),
                     onChanged: (val) {
                       setState(() {
@@ -554,7 +555,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: const Icon(Icons.add_circle, color: Colors.deepPurple, size: 36),
+                  icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 36),
                   onPressed: () {
                     if (_selectedIngredientId != null && _recipeQtyController.text.isNotEmpty) {
                       final qty = double.tryParse(_recipeQtyController.text);
@@ -630,7 +631,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
           children: [
             const Text(
               'Cooking Steps & Instructions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
             ),
             const SizedBox(height: 16),
             Row(
@@ -647,7 +648,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: const Icon(Icons.add_circle, color: Colors.deepPurple, size: 36),
+                  icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 36),
                   onPressed: () {
                     final val = _stepController.text.trim();
                     if (val.isNotEmpty) {
@@ -689,10 +690,10 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                         contentPadding: EdgeInsets.zero,
                         leading: CircleAvatar(
                           radius: 12,
-                          backgroundColor: Colors.deepPurple.shade50,
+                          backgroundColor: AppColors.primaryLight,
                           child: Text(
                             '${index + 1}',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
                           ),
                         ),
                         title: Text(_steps[index]),

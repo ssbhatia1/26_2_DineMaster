@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 
 class SearchableDropdown<T> extends StatefulWidget {
   final List<T> items;
@@ -42,6 +43,8 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
         ),
         child: Text(
           selectedText.isEmpty ? 'Select ${widget.labelText}' : selectedText,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: selectedText.isEmpty ? Colors.grey.shade600 : Colors.black,
             fontSize: 15,
@@ -111,8 +114,8 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
                               return ListTile(
                                 title: Text(widget.itemToString(item)),
                                 selected: isSelected,
-                                selectedColor: Colors.deepPurple,
-                                trailing: isSelected ? const Icon(Icons.check, color: Colors.deepPurple) : null,
+                                selectedColor: AppColors.primary,
+                                trailing: isSelected ? const Icon(Icons.check, color: AppColors.primary) : null,
                                 onTap: () {
                                   widget.onChanged(item);
                                   Navigator.pop(context);

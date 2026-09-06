@@ -1,5 +1,6 @@
 ﻿import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../core/database/database_helper.dart';
@@ -41,7 +42,7 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen> {
               gradient: LinearGradient(
                 colors: [
                   Colors.indigo.shade900,
-                  Colors.deepPurple.shade900,
+                  AppColors.primaryMaterialColor[900]!,
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,

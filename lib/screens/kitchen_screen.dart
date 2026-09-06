@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import '../core/database/database_helper.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 
@@ -25,6 +26,11 @@ class _KitchenScreenState extends State<KitchenScreen> {
   String _selectedSection = 'All'; // All, Chinese, Tandoor, Fast Food, Main Course, Dessert, Beverages
   String _sortBy = 'Oldest First'; // Oldest First, Priority, Fastest Prep, Table
   String _searchQuery = '';
+
+  // Auto delay prompt tracking
+  final Set<int> _delayPromptedKotIds = {};
+  final List<int> _delayPromptQueue = [];
+  bool _delayDialogShowing = false;
 
   @override
   void initState() {
@@ -139,6 +145,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
           _kots = kots;
           _isLoading = false;
         });
+        _checkForAutoDelays(kots);
       }
     } catch (e) {
       print('Error loading KOTs in Kitchen Screen: $e');
@@ -231,16 +238,58 @@ class _KitchenScreenState extends State<KitchenScreen> {
       _loadKOTs(silent: true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        if(false) ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error updating KOT status: $e')),
         );
       }
     }
   }
 
-  void _showDelayDialog(int kotId, int orderId) {
+  // Auto prompt a popup when a KOT has crossed its estimated time so the
+  // kitchen can record the reason for the delay instead of it going unnoticed.
+  void _checkForAutoDelays(List<Map<String, dynamic>> kots) {
+    final now = DateTime.now();
+    for (final kot in kots) {
+      final status = kot['status'] as String? ?? 'Pending';
+      if (status == 'Served' || status == 'Ready' || status == 'Delayed') continue;
+      final delayReason = kot['delay_reason'] as String?;
+      if (delayReason != null && delayReason.isNotEmpty) continue;
+      final kotId = kot['id'] as int;
+      if (_delayPromptedKotIds.contains(kotId)) continue;
+
+      final created = DateTime.tryParse(kot['time'] as String) ?? now;
+      final est = kot['estimated_time'] as int? ?? 15;
+      if (now.difference(created).inMinutes >= est) {
+        _delayPromptedKotIds.add(kotId);
+        _delayPromptQueue.add(kotId);
+      }
+    }
+    if (_delayPromptQueue.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _processDelayPromptQueue());
+    }
+  }
+
+  Future<void> _processDelayPromptQueue() async {
+    if (_delayDialogShowing) return;
+    _delayDialogShowing = true;
+    try {
+      while (_delayPromptQueue.isNotEmpty && mounted) {
+        final kotId = _delayPromptQueue.removeAt(0);
+        final kotIndex = _kots.indexWhere((k) => k['id'] == kotId);
+        if (kotIndex == -1) continue;
+        final kot = _kots[kotIndex];
+        await _showDelayDialog(kotId, kot['order_id'] as int);
+        if (!mounted) return;
+        await _loadKOTs(silent: true);
+      }
+    } finally {
+      _delayDialogShowing = false;
+    }
+  }
+
+  Future<void> _showDelayDialog(int kotId, int orderId) async {
     final controller = TextEditingController();
-    showDialog(
+    await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Add Delay Reason'),
@@ -295,7 +344,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: const Row(
                 children: [
-                  Icon(Icons.assignment_ind_outlined, color: Colors.deepPurple),
+                  Icon(Icons.assignment_ind_outlined, color: AppColors.primary),
                   SizedBox(width: 8),
                   Text('Assign Chef'),
                 ],
@@ -339,12 +388,12 @@ class _KitchenScreenState extends State<KitchenScreen> {
                                 final isSelected = chef == selectedChef;
                                 return ListTile(
                                   leading: CircleAvatar(
-                                    backgroundColor: isSelected ? Colors.deepPurple : Colors.grey.shade200,
+                                    backgroundColor: isSelected ? AppColors.primary : Colors.grey.shade200,
                                     foregroundColor: isSelected ? Colors.white : Colors.black,
                                     child: Text(chef.substring(0, 1).toUpperCase()),
                                   ),
                                   title: Text(chef, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                                  trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
+                                  trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primary) : null,
                                   onTap: () {
                                     setStateDialog(() {
                                       selectedChef = chef;
@@ -367,7 +416,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
                     Navigator.pop(context);
                     _updateKOTStatus(kotId, orderId, 'Cooking', chefName: selectedChef.isEmpty ? 'Kitchen' : selectedChef);
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
                   child: const Text('Assign & Prepare'),
                 ),
               ],
@@ -516,7 +565,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurple.shade50,
+                  color: AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -525,7 +574,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
                     const SizedBox(width: 6),
                     Text(
                       'Live Workload: $activeCount Active',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
                     ),
                   ],
                 ),
@@ -706,7 +755,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
         final sectionDropdown = DropdownButton<String>(
           value: _selectedSection,
           underline: const SizedBox(),
-          icon: const Icon(Icons.flatware, size: 20, color: Colors.deepPurple),
+          icon: const Icon(Icons.flatware, size: 20, color: AppColors.primary),
           items: ['All', 'Chinese', 'Tandoor', 'Fast Food', 'Main Course', 'Dessert', 'Beverages']
               .map((val) => DropdownMenuItem(value: val, child: Text(val == 'All' ? 'All Sections' : '$val Section', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))))
               .toList(),
@@ -727,7 +776,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
                       child: ChoiceChip(
                         label: Text(tab == 'Cooking' ? 'Preparing' : tab),
                         selected: isSelected,
-                        selectedColor: Colors.deepPurple,
+                        selectedColor: AppColors.primary,
                         backgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade800 : Colors.grey.shade100,
                         labelStyle: TextStyle(
                           color: isSelected ? Colors.white : (Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black87),
@@ -889,9 +938,9 @@ class _KitchenScreenState extends State<KitchenScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
               child: Row(
                 children: [
-                  const Icon(Icons.person, size: 14, color: Colors.deepPurple),
+                  const Icon(Icons.person, size: 14, color: AppColors.primary),
                   const SizedBox(width: 4),
-                  Text('Chef: $chefName', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                  Text('Chef: $chefName', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ],
               ),
             ),
@@ -937,12 +986,12 @@ class _KitchenScreenState extends State<KitchenScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: Colors.deepPurple.shade50,
+                          color: AppColors.primaryLight,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           '${it['quantity']}x',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple, fontSize: 12),
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 12),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -998,7 +1047,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
                 if (status != 'Served' && status != 'Ready')
                   IconButton(
                     icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
-                    tooltip: 'Report Delay',
+                    // tooltip disabled,
                     onPressed: () => _showDelayDialog(kotId, orderId),
                   ),
 
@@ -1006,7 +1055,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
                 if (status == 'Pending')
                   IconButton(
                     icon: const Icon(Icons.assignment_ind_outlined, color: Colors.blue),
-                    tooltip: 'Assign Chef',
+                    // tooltip disabled,
                     onPressed: () => _showAssignChefDialog(kotId, orderId, chefName ?? ''),
                   ),
 

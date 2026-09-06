@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'dart:io';
 import 'package:path/path.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/database_helper.dart';
 import '../main.dart';
 import '../services/sync_service.dart';
+import 'admin/components/table_configuration_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -30,13 +32,13 @@ class SettingsScreen extends StatelessWidget {
                 final role = snapshot.data!.getString('role') ?? 'Role';
                 return Card(
                   elevation: 0,
-                  color: Colors.deepPurple.shade50,
+                  color: AppColors.primaryLight,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: Colors.deepPurple,
+                      backgroundColor: AppColors.primary,
                       child: Text(
                         username.isNotEmpty ? username[0].toUpperCase() : 'U',
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -72,6 +74,18 @@ class SettingsScreen extends StatelessWidget {
             'User Management',
             'Manage employees and permissions',
             () => context.go('/dashboard/user_management'),
+          ),
+          _buildSettingsTile(
+            context,
+            Icons.table_restaurant,
+            'Table Configuration',
+            'Manage table types and sections/rooms',
+            () {
+              showDialog(
+                context: context,
+                builder: (context) => const TableConfigurationDialog(),
+              );
+            },
           ),
           _buildSettingsTile(
             context,
@@ -115,7 +129,62 @@ class SettingsScreen extends StatelessWidget {
             'Version 1.0.0',
             () => _showAboutDialog(context),
           ),
+          _buildSettingsTile(
+            context,
+            Icons.receipt_long,
+            'Order Management',
+            'Configure waiter and chef assignments',
+            () => _showOrderSettingsDialog(context),
+          ),
         ],
+      ),
+    );
+  }
+
+  void _showOrderSettingsDialog(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    bool showWaiter = prefs.getBool('show_waiter_assignment') ?? true;
+    bool showChef = prefs.getBool('show_chef_assignment') ?? true;
+
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Order Management Settings'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  title: const Text('Show Waiter Assignment'),
+                  subtitle: const Text('Display waiter selection during order creation'),
+                  value: showWaiter,
+                  onChanged: (val) async {
+                    await prefs.setBool('show_waiter_assignment', val);
+                    setDialogState(() => showWaiter = val);
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Show Chef Assignment'),
+                  subtitle: const Text('Display chef selection during order creation'),
+                  value: showChef,
+                  onChanged: (val) async {
+                    await prefs.setBool('show_chef_assignment', val);
+                    setDialogState(() => showChef = val);
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -132,8 +201,8 @@ class SettingsScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: Colors.deepPurple.withAlpha(25),
-          child: Icon(icon, color: Colors.deepPurple),
+          backgroundColor: AppColors.primary.withAlpha(25),
+          child: Icon(icon, color: AppColors.primary),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(subtitle),
@@ -228,7 +297,7 @@ class SettingsScreen extends StatelessWidget {
             return AlertDialog(
               title: const Row(
                 children: [
-                  Icon(Icons.percent, color: Colors.deepPurple),
+                  Icon(Icons.percent, color: AppColors.primary),
                   SizedBox(width: 8),
                   Text('Edit GST Slabs Scale'),
                 ],
@@ -271,13 +340,13 @@ class SettingsScreen extends StatelessWidget {
                               }
                               rateController.clear();
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              if(false) ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Please enter a valid rate between 0 and 100')),
                               );
                             }
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepPurple,
+                            backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                           ),
@@ -316,7 +385,7 @@ class SettingsScreen extends StatelessWidget {
                 ElevatedButton(
                   onPressed: () async {
                     if (scale.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      if(false) ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('GST scale cannot be empty. Add at least one slab.')),
                       );
                       return;
@@ -327,12 +396,12 @@ class SettingsScreen extends StatelessWidget {
                     
                     if (context.mounted) {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      if(false) ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('GST Scale saved successfully!')),
                       );
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
                   child: const Text('Save Slabs'),
                 ),
               ],
@@ -412,7 +481,7 @@ class SettingsScreen extends StatelessWidget {
             return AlertDialog(
               title: const Row(
                 children: [
-                  Icon(Icons.backup, color: Colors.deepPurple),
+                  Icon(Icons.backup, color: AppColors.primary),
                   SizedBox(width: 8),
                   Text('Database Backup & Restore'),
                 ],
@@ -443,13 +512,13 @@ class SettingsScreen extends StatelessWidget {
                             backups = updatedBackups;
                           });
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            if(false) ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('Backup created successfully: $path')),
                             );
                           }
                         } catch (e) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            if(false) ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('Error creating backup: $e')),
                             );
                           }
@@ -458,7 +527,7 @@ class SettingsScreen extends StatelessWidget {
                       icon: const Icon(Icons.cloud_upload),
                       label: const Text('Create New Backup Now'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
+                        backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
@@ -545,13 +614,13 @@ class SettingsScreen extends StatelessWidget {
               try {
                 await DatabaseHelper.instance.restoreDatabase(path);
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Database successfully restored! Restarting app/DB context.')),
                   );
                 }
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Error restoring: $e')),
                   );
                 }
@@ -596,7 +665,7 @@ class SettingsScreen extends StatelessWidget {
             return AlertDialog(
               title: const Row(
                 children: [
-                  Icon(Icons.sync, color: Colors.deepPurple),
+                  Icon(Icons.sync, color: AppColors.primary),
                   SizedBox(width: 8),
                   Text('Network & Sync Settings'),
                 ],
@@ -609,7 +678,7 @@ class SettingsScreen extends StatelessWidget {
                     title: const Text('Run as Server / Host', style: TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: const Text('Only ONE machine (usually cashier PC) should run as Server.'),
                     value: isServer,
-                    activeColor: Colors.deepPurple,
+                    activeColor: AppColors.primary,
                     onChanged: (val) {
                       setStateDialog(() {
                         isServer = val;
@@ -619,18 +688,18 @@ class SettingsScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   if (isServer) ...[
                     Card(
-                      color: Colors.deepPurple.shade50,
+                      color: AppColors.primaryLight,
                       elevation: 0,
                       child: Padding(
                         padding: const EdgeInsets.all(12.0),
                         child: Row(
                           children: [
-                            const Icon(Icons.info_outline, color: Colors.deepPurple),
+                            const Icon(Icons.info_outline, color: AppColors.primary),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 'This device is the master host. Other devices (waiter/chef) can connect using IP: $localIp',
-                                style: const TextStyle(color: Colors.deepPurple, fontSize: 13, fontWeight: FontWeight.bold),
+                                style: const TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ],
@@ -652,13 +721,13 @@ class SettingsScreen extends StatelessWidget {
                       onPressed: () async {
                         final ip = ipController.text.trim();
                         if (ip.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          if(false) ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Please enter an IP address')),
                           );
                           return;
                         }
                         
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        if(false) ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Testing connection...')),
                         );
                         
@@ -669,20 +738,20 @@ class SettingsScreen extends StatelessWidget {
                           final response = await request.close();
                           if (response.statusCode == 200) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              if(false) ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Connection SUCCESSFUL! Port 8082 is reachable.')),
                               );
                             }
                           } else {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
+                              if(false) ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text('Connection failed. Server returned status ${response.statusCode}')),
                               );
                             }
                           }
                         } catch (e) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            if(false) ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text('Connection failed: $e')),
                             );
                           }
@@ -717,12 +786,12 @@ class SettingsScreen extends StatelessWidget {
                     
                     if (context.mounted) {
                       Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      if(false) ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Network settings saved successfully!')),
                       );
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
                   child: const Text('Save & Apply'),
                 ),
               ],

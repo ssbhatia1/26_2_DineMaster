@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 import '../core/database/database_helper.dart';
 
 class AccountsScreen extends StatefulWidget {
@@ -118,12 +119,12 @@ class _AccountsScreenState extends State<AccountsScreen> with SingleTickerProvid
         'restaurant_id': restId,
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Expense added successfully!')),
       );
       _loadAccountsData();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error adding expense: $e')),
       );
     }
@@ -133,12 +134,12 @@ class _AccountsScreenState extends State<AccountsScreen> with SingleTickerProvid
     try {
       final db = await _dbHelper.database;
       await db.delete('expenses', where: 'id = ?', whereArgs: [id]);
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Expense deleted successfully!')),
       );
       _loadAccountsData();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error deleting expense: $e')),
       );
     }
@@ -309,7 +310,7 @@ class _AccountsScreenState extends State<AccountsScreen> with SingleTickerProvid
                           _buildSummaryCard('Total Sales', _totalSales, Icons.trending_up, Colors.green, cardWidth),
                           _buildSummaryCard('Expenses', _totalExpenses, Icons.trending_down, Colors.red, cardWidth),
                           _buildSummaryCard('Tax Collected', _totalTaxes, Icons.gavel, Colors.orange, cardWidth),
-                          _buildSummaryCard('Net Profit', netProfit, Icons.account_balance_wallet, Colors.deepPurple, cardWidth),
+                          _buildSummaryCard('Net Profit', netProfit, Icons.account_balance_wallet, AppColors.primary, cardWidth),
                         ],
                       );
                     },
@@ -366,15 +367,15 @@ class _AccountsScreenState extends State<AccountsScreen> with SingleTickerProvid
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.deepPurple),
+                            border: Border.all(color: AppColors.primary),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: const [
-                              Icon(Icons.download, color: Colors.deepPurple, size: 18),
+                              Icon(Icons.download, color: AppColors.primary, size: 18),
                               SizedBox(width: 8),
-                              Text('Export Reports', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
+                              Text('Export Reports', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ),
@@ -428,7 +429,7 @@ class _AccountsScreenState extends State<AccountsScreen> with SingleTickerProvid
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddExpenseDialog,
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: AppColors.primary,
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );

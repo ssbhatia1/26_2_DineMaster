@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -30,25 +31,8 @@ class _TablesScreenState extends State<TablesScreen> {
   String _sortBy = 'Table Number';
   DateTime _selectedGridDate = DateTime.now();
 
-  static const List<String> _sections = [
-    'All',
-    'Main Hall',
-    'AC Dining',
-    'Rooftop',
-    'Outdoor / Patio',
-    'VIP Lounge',
-    'Bar Counter',
-  ];
-
-  static const List<String> _tableTypes = [
-    'Standard Table',
-    'Round Table',
-    'Square Table',
-    'Rectangle Table',
-    'Booth',
-    'Counter',
-    'Outdoor Table',
-  ];
+  List<String> _sections = ['All'];
+  List<String> _tableTypes = ['Standard Table'];
 
   static const List<String> _allStatuses = [
     'All',
@@ -92,6 +76,18 @@ class _TablesScreenState extends State<TablesScreen> {
     try {
       final db = await DatabaseHelper.instance.database;
       final restaurantId = DatabaseHelper.currentRestaurantId;
+
+      // Load dynamic sections and table types
+      final sectionMaps = await db.query('table_sections', where: 'restaurant_id = ?', whereArgs: [restaurantId]);
+      final typeMaps = await db.query('table_types', where: 'restaurant_id = ?', whereArgs: [restaurantId]);
+
+      List<String> loadedSections = ['All'];
+      loadedSections.addAll(sectionMaps.map((m) => m['name'] as String));
+      if (loadedSections.length == 1) loadedSections.add('Main Hall'); // Fallback
+
+      List<String> loadedTypes = [];
+      loadedTypes.addAll(typeMaps.map((m) => m['name'] as String));
+      if (loadedTypes.isEmpty) loadedTypes.add('Standard Table'); // Fallback
 
       // Load all tables for current restaurant
       final List<Map<String, dynamic>> tableMaps = await db.query(
@@ -174,6 +170,8 @@ class _TablesScreenState extends State<TablesScreen> {
 
       if (!mounted) return;
       setState(() {
+        _sections = loadedSections;
+        _tableTypes = loadedTypes;
         _enrichedTables = enrichedTables;
         _bookingsList = allBookings;
         _heldOrdersList = allHeldOrders;
@@ -406,10 +404,10 @@ class _TablesScreenState extends State<TablesScreen> {
             title: Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: Colors.deepPurple.shade50,
+                  backgroundColor: AppColors.primaryLight,
                   child: Icon(
                     isEditing ? Icons.edit_note : Icons.add_business_outlined,
-                    color: Colors.deepPurple,
+                    color: AppColors.primary,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -463,10 +461,11 @@ class _TablesScreenState extends State<TablesScreen> {
                           child: TextField(
                             controller: capacityCtrl,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Seating Capacity *',
-                              prefixIcon: Icon(Icons.chair_alt),
-                              border: OutlineInputBorder(),
+                            enabled: !isEditing || (existingTable?.status == 'Available'),
+                            decoration: InputDecoration(
+                              labelText: (!isEditing || (existingTable?.status == 'Available')) ? 'Seating Capacity *' : 'Capacity Locked (Active Order)',
+                              prefixIcon: const Icon(Icons.chair_alt),
+                              border: const OutlineInputBorder(),
                             ),
                           ),
                         ),
@@ -548,7 +547,7 @@ class _TablesScreenState extends State<TablesScreen> {
                             subtitle: const Text('Visible on POS layout', style: TextStyle(fontSize: 11)),
                             value: isActive,
                             onChanged: (val) => setDlgState(() => isActive = val),
-                            activeColor: Colors.deepPurple,
+                            activeColor: AppColors.primary,
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
@@ -558,7 +557,7 @@ class _TablesScreenState extends State<TablesScreen> {
                             subtitle: const Text('Available for booking', style: TextStyle(fontSize: 11)),
                             value: isReservable,
                             onChanged: (val) => setDlgState(() => isReservable = val),
-                            activeColor: Colors.deepPurple,
+                            activeColor: AppColors.primary,
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
@@ -585,7 +584,7 @@ class _TablesScreenState extends State<TablesScreen> {
               ),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -597,7 +596,7 @@ class _TablesScreenState extends State<TablesScreen> {
                   final cap = int.tryParse(capacityCtrl.text.trim()) ?? 0;
 
                   if (num.isEmpty || cap <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    if(false) ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Please enter valid table number and seating capacity')),
                     );
                     return;
@@ -627,7 +626,7 @@ class _TablesScreenState extends State<TablesScreen> {
                     if (mounted) {
                       Navigator.pop(context);
                       _loadTables();
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      if(false) ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Table $num saved successfully!'),
                           backgroundColor: Colors.green,
@@ -636,7 +635,7 @@ class _TablesScreenState extends State<TablesScreen> {
                     }
                   } catch (e) {
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      if(false) ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Error saving table: $e'),
                           backgroundColor: Colors.red,
@@ -735,7 +734,7 @@ class _TablesScreenState extends State<TablesScreen> {
                               if (notes != null && notes.isNotEmpty)
                                 Text(
                                   '📝 $notes',
-                                  style: TextStyle(fontSize: 11, color: Colors.deepPurple.shade700, fontStyle: FontStyle.italic),
+                                  style: TextStyle(fontSize: 11, color: AppColors.primaryMaterialColor[700]!, fontStyle: FontStyle.italic),
                                 ),
                             ],
                           ),
@@ -761,7 +760,7 @@ class _TablesScreenState extends State<TablesScreen> {
                   const Text('Total Bill Amount', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   Text(
                     '₹${total.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
                   ),
                 ],
               ),
@@ -782,7 +781,7 @@ class _TablesScreenState extends State<TablesScreen> {
                   Expanded(
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
+                        backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                       ),
                       icon: const Icon(Icons.point_of_sale),
@@ -818,7 +817,7 @@ class _TablesScreenState extends State<TablesScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              const Icon(Icons.swap_horiz, color: Colors.deepPurple),
+              const Icon(Icons.swap_horiz, color: AppColors.primary),
               const SizedBox(width: 8),
               Text('Transfer Table ${sourceTable.tableNumber}'),
             ],
@@ -851,7 +850,7 @@ class _TablesScreenState extends State<TablesScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
               onPressed: destinationTable == null
                   ? null
                   : () async {
@@ -874,7 +873,7 @@ class _TablesScreenState extends State<TablesScreen> {
                       if (mounted) {
                         Navigator.pop(context);
                         _loadTables();
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        if(false) ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('Order transferred to ${destinationTable!.tableNumber}! Table ${sourceTable.tableNumber} set to Cleaning.'),
                             backgroundColor: Colors.green,
@@ -891,13 +890,13 @@ class _TablesScreenState extends State<TablesScreen> {
   }
 
   // Reservation Dialog
-  void _showReservationDialog(TableModel table) {
+  void _showReservationDialog(TableModel table, [DateTime? initialDate]) {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final guestsCtrl = TextEditingController(text: '${table.capacity}');
     final notesCtrl = TextEditingController();
-    DateTime date = DateTime.now();
-    TimeOfDay time = TimeOfDay.now();
+    DateTime date = initialDate ?? DateTime.now();
+    TimeOfDay time = initialDate != null ? TimeOfDay.fromDateTime(initialDate) : TimeOfDay.now();
 
     showDialog(
       context: context,
@@ -906,7 +905,7 @@ class _TablesScreenState extends State<TablesScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              const Icon(Icons.bookmark_added_outlined, color: Colors.deepPurple),
+              const Icon(Icons.bookmark_added_outlined, color: AppColors.primary),
               const SizedBox(width: 8),
               Text('Reserve ${table.displayName}'),
             ],
@@ -973,10 +972,10 @@ class _TablesScreenState extends State<TablesScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
               onPressed: () async {
                 if (nameCtrl.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter customer name')));
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter customer name')));
                   return;
                 }
 
@@ -1006,7 +1005,7 @@ class _TablesScreenState extends State<TablesScreen> {
                 if (mounted) {
                   Navigator.pop(context);
                   _loadTables();
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('${table.displayName} reserved for ${nameCtrl.text.trim()}!'), backgroundColor: Colors.green),
                   );
                 }
@@ -1034,7 +1033,7 @@ class _TablesScreenState extends State<TablesScreen> {
               if (mounted) {
                 Navigator.pop(context);
                 _loadTables();
-                ScaffoldMessenger.of(context).showSnackBar(
+                if(false) ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Table "$number" deleted')),
                 );
               }
@@ -1062,20 +1061,20 @@ class _TablesScreenState extends State<TablesScreen> {
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh),
-              tooltip: 'Refresh Tables',
+              // tooltip disabled,
               onPressed: _loadTables,
             ),
             IconButton(
               icon: const Icon(Icons.add_business),
-              tooltip: 'Add Table',
+              // tooltip disabled,
               onPressed: () => _showTableConfigDialog(),
             ),
             const SizedBox(width: 8),
           ],
           bottom: const TabBar(
             isScrollable: true,
-            labelColor: Colors.deepPurple,
-            indicatorColor: Colors.deepPurple,
+            labelColor: AppColors.primary,
+            indicatorColor: AppColors.primary,
             tabs: [
               Tab(icon: Icon(Icons.grid_view), text: 'Table Layout Grid'),
               Tab(icon: Icon(Icons.calendar_view_day), text: 'Booking Time Grid'),
@@ -1097,7 +1096,7 @@ class _TablesScreenState extends State<TablesScreen> {
         floatingActionButton: FloatingActionButton.extended(
           heroTag: 'fab_add_table',
           onPressed: () => _showTableConfigDialog(),
-          backgroundColor: Colors.deepPurple,
+          backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           icon: const Icon(Icons.add),
           label: const Text('Add Table'),
@@ -1303,6 +1302,22 @@ class _TablesScreenState extends State<TablesScreen> {
     final activeBooking = item['active_booking'] as Map<String, dynamic>?;
     final orderItemsCount = item['order_items_count'] as int? ?? 0;
 
+    // Merged group info: tables merged into this table, and table this is merged into.
+    final mergedMembers = _enrichedTables
+        .where((e) => (e['table'] as TableModel).mergedWithId == table.id)
+        .map((e) => e['table'] as TableModel)
+        .toList();
+    String? mergedIntoNumber;
+    if (table.mergedWithId != null) {
+      for (final e in _enrichedTables) {
+        if ((e['table'] as TableModel).id == table.mergedWithId) {
+          mergedIntoNumber = (e['table'] as TableModel).tableNumber;
+          break;
+        }
+      }
+    }
+    final isMergedMember = table.mergedWithId != null && mergedMembers.isEmpty;
+
     final isHeld = activeOrder != null && activeOrder['status'] == 'Held';
     final hasActiveOrder = activeOrder != null && !isHeld;
 
@@ -1378,6 +1393,29 @@ class _TablesScreenState extends State<TablesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Merged Group Indicator
+                  if (mergedMembers.isNotEmpty || isMergedMember) ...[
+                    Row(
+                      children: [
+                        Icon(
+                          mergedMembers.isNotEmpty ? Icons.merge_type : Icons.call_split,
+                          size: 14,
+                          color: Colors.blue,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            mergedMembers.isNotEmpty
+                                ? 'Merged: ${[table, ...mergedMembers].map((t) => t.tableNumber).join(' + ')} • Capacity: ${table.capacity + mergedMembers.fold<int>(0, (s, t) => s + t.capacity)}'
+                                : 'Part of merged group: Table ${mergedIntoNumber ?? ''}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blue),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   // Badges: Section & Capacity & Type
                   Row(
                     children: [
@@ -1410,7 +1448,7 @@ class _TablesScreenState extends State<TablesScreen> {
                         ),
                         Text(
                           '₹${(activeOrder['total_amount'] as num?)?.toStringAsFixed(2) ?? "0.00"}',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primary),
                         ),
                       ],
                     ),
@@ -1476,12 +1514,20 @@ class _TablesScreenState extends State<TablesScreen> {
                 // Configure / Menu
                 IconButton(
                   icon: const Icon(Icons.settings_outlined, size: 18, color: Colors.grey),
-                  tooltip: 'Configure Table',
+                  // tooltip disabled,
                   onPressed: () => _showTableConfigDialog(table),
                 ),
 
                 // Context Actions
-                if (table.status == 'Available' && !hasActiveOrder && !isHeld) ...[
+                if (isMergedMember)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    child: Text(
+                      'Order taken on merged Table $mergedIntoNumber',
+                      style: const TextStyle(fontSize: 11, color: Colors.blueGrey, fontWeight: FontWeight.w500),
+                    ),
+                  )
+                else if (table.status == 'Available' && !hasActiveOrder && !isHeld) ...[
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1500,7 +1546,7 @@ class _TablesScreenState extends State<TablesScreen> {
                     icon: const Icon(Icons.add, size: 16),
                     label: const Text('New Order', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     onPressed: () {
-                      context.go('/dashboard/pos?tableId=${table.id}');
+                      context.go('/dashboard/waiter_order?tableId=${table.id}');
                     },
                   ),
                 ] else if (hasActiveOrder) ...[
@@ -1514,14 +1560,14 @@ class _TablesScreenState extends State<TablesScreen> {
                   const SizedBox(width: 6),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
+                      backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     ),
                     icon: const Icon(Icons.point_of_sale, size: 14),
-                    label: const Text('Open POS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    label: const Text('Open Order', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     onPressed: () {
-                      context.go('/dashboard/pos?tableId=${table.id}&reopenOrderId=${activeOrder['id']}');
+                      context.go('/dashboard/waiter_order?tableId=${table.id}');
                     },
                   ),
                 ] else if (isHeld) ...[
@@ -1534,7 +1580,7 @@ class _TablesScreenState extends State<TablesScreen> {
                     icon: const Icon(Icons.play_arrow, size: 14),
                     label: const Text('Resume Order', style: TextStyle(fontSize: 12)),
                     onPressed: () {
-                      context.go('/dashboard/pos?tableId=${table.id}&reopenOrderId=${activeOrder['id']}');
+                      context.go('/dashboard/waiter_order?tableId=${table.id}');
                     },
                   ),
                 ] else if (table.status == 'Cleaning') ...[
@@ -1559,7 +1605,7 @@ class _TablesScreenState extends State<TablesScreen> {
                       backgroundColor: Colors.deepOrange,
                       foregroundColor: Colors.white,
                     ),
-                    onPressed: () => context.go('/dashboard/pos?tableId=${table.id}'),
+                    onPressed: () => context.go('/dashboard/waiter_order?tableId=${table.id}'),
                     child: const Text('Start Order', style: TextStyle(fontSize: 12)),
                   ),
                 ] else ...[
@@ -1663,7 +1709,16 @@ class _TablesScreenState extends State<TablesScreen> {
                   const DataColumn(label: Text('Table #', style: TextStyle(fontWeight: FontWeight.bold))),
                   ...timeSlots.map((h) {
                     final display = h > 12 ? '${h - 12} PM' : (h == 12 ? '12 PM' : '$h AM');
-                    return DataColumn(label: Text(display, style: const TextStyle(fontWeight: FontWeight.bold)));
+                    final now = DateTime.now();
+                    final isCurrentHour = now.hour == h && _selectedGridDate.day == now.day && _selectedGridDate.month == now.month && _selectedGridDate.year == now.year;
+                    
+                    return DataColumn(
+                      label: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: isCurrentHour ? BoxDecoration(color: Colors.blue.shade100, borderRadius: BorderRadius.circular(4)) : null,
+                        child: Text(display, style: TextStyle(fontWeight: FontWeight.bold, color: isCurrentHour ? Colors.blue.shade900 : null)),
+                      )
+                    );
                   }),
                 ],
                 rows: _enrichedTables.map((item) {
@@ -1673,7 +1728,7 @@ class _TablesScreenState extends State<TablesScreen> {
                       DataCell(
                         Row(
                           children: [
-                            const Icon(Icons.table_bar, size: 16, color: Colors.deepPurple),
+                            const Icon(Icons.table_bar, size: 16, color: AppColors.primary),
                             const SizedBox(width: 4),
                             Text(table.displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
                           ],
@@ -1687,22 +1742,37 @@ class _TablesScreenState extends State<TablesScreen> {
                         }, orElse: () => {});
 
                         final isBooked = booking.isNotEmpty;
+                        final now = DateTime.now();
+                        final isCurrentHour = now.hour == h && _selectedGridDate.day == now.day && _selectedGridDate.month == now.month && _selectedGridDate.year == now.year;
 
                         return DataCell(
-                          isBooked
-                              ? Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber.shade100,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: Colors.amber.shade700),
+                          Container(
+                            color: isCurrentHour ? Colors.blue.withValues(alpha: 0.05) : null,
+                            child: isBooked
+                                ? Container(
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.shade200,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.amber.shade800, width: 2),
+                                    ),
+                                    child: Text(
+                                      booking['customer_name'] ?? 'Booked',
+                                      style: TextStyle(fontSize: 10, color: Colors.amber.shade900, fontWeight: FontWeight.bold),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  )
+                                : InkWell(
+                                    onTap: () {
+                                      final selectedDateTime = DateTime(_selectedGridDate.year, _selectedGridDate.month, _selectedGridDate.day, h, 0);
+                                      _showReservationDialog(table, selectedDateTime);
+                                    },
+                                    child: const Center(child: Text('-', style: TextStyle(color: Colors.grey))),
                                   ),
-                                  child: Text(
-                                    booking['customer_name'] ?? 'Booked',
-                                    style: TextStyle(fontSize: 10, color: Colors.amber.shade900, fontWeight: FontWeight.bold),
-                                  ),
-                                )
-                              : const Text('-', style: TextStyle(color: Colors.grey)),
+                          )
                         );
                       }),
                     ],
@@ -1756,15 +1826,15 @@ class _TablesScreenState extends State<TablesScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
                   onPressed: () {
-                    context.go('/dashboard/pos?tableId=${b['table_id']}');
+                    context.go('/dashboard/waiter_order?tableId=${b['table_id']}');
                   },
                   child: const Text('Start Order'),
                 ),
                 IconButton(
                   icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-                  tooltip: 'Cancel Booking',
+                  // tooltip disabled,
                   onPressed: () async {
                     final db = await DatabaseHelper.instance.database;
                     await db.update('bookings', {'status': 'Cancelled'}, where: 'id = ?', whereArgs: [b['id']]);

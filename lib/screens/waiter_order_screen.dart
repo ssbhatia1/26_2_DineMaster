@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,56 +9,17 @@ import '../models/table_model.dart';
 import '../repositories/product_repository.dart';
 import '../services/sync_service.dart';
 import '../widgets/searchable_dropdown.dart';
+import 'waiter/waiter_models.dart';
+import 'waiter/components/waiter_cart_panel.dart';
+import 'waiter/components/waiter_menu_view.dart';
+import 'waiter/components/waiter_floor_plan_view.dart';
+
 import '../widgets/food_attributes_badge.dart';
 
-/// Representation of a customized cart item for the waiter
-class _WaiterCartItem {
-  final ProductModel product;
-  int quantity;
-  String? dietaryPreference;
-  String? tastePreference;
-  String? notes;
-
-  _WaiterCartItem({
-    required this.product,
-    this.quantity = 1,
-    this.dietaryPreference,
-    this.tastePreference,
-    this.notes,
-  });
-
-  String get formattedNotes {
-    final List<String> parts = [];
-    if (dietaryPreference != null && dietaryPreference!.isNotEmpty) {
-      parts.add('[$dietaryPreference]');
-    }
-    if (tastePreference != null && tastePreference!.isNotEmpty) {
-      parts.add('[$tastePreference]');
-    }
-    if (notes != null && notes!.trim().isNotEmpty) {
-      parts.add(notes!.trim());
-    }
-    return parts.join(' ');
-  }
-
-  double get subtotal => product.price * quantity;
-}
-
-/// Enriched table container for waiter floor plan
-class _WaiterTableInfo {
-  final TableModel table;
-  final Map<String, dynamic>? activeOrder;
-  final int orderItemsCount;
-
-  _WaiterTableInfo({
-    required this.table,
-    this.activeOrder,
-    this.orderItemsCount = 0,
-  });
-}
 
 class WaiterOrderScreen extends StatefulWidget {
-  const WaiterOrderScreen({super.key});
+  final int? selectedTableId;
+  const WaiterOrderScreen({super.key, this.selectedTableId});
 
   @override
   State<WaiterOrderScreen> createState() => _WaiterOrderScreenState();
@@ -71,7 +33,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   bool _isTakingOrder = false;
 
   // Floor Plan States
-  List<_WaiterTableInfo> _tableInfoList = [];
+  List<WaiterTableInfo> _tableInfoList = [];
   String _selectedSectionFilter = 'All';
   String _selectedStatusFilter = 'All';
   List<String> _sectionsList = ['All'];
@@ -97,11 +59,15 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   int? _selectedTableId;
   String _selectedTableDisplayName = 'Select';
   String _orderType = 'Dine-In';
-  final TextEditingController _customerNameController = TextEditingController();
+  int? _currentOrderGuestCount;
+  final TextEditingController _customerNameController = TextEditingController(text: 'Walking Customer');
   final TextEditingController _customerPhoneController = TextEditingController();
 
+  bool _showWaiterAssignment = true;
+  bool _showChefAssignment = true;
+
   // Cart list
-  final List<_WaiterCartItem> _cartItems = [];
+  final List<WaiterCartItem> _cartItems = [];
 
   StreamSubscription? _syncSubscription;
 
@@ -109,6 +75,10 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    if (widget.selectedTableId != null) {
+      _selectedTableId = widget.selectedTableId;
+      _isTakingOrder = true;
+    }
     _loadDashboardAndProducts();
 
     _syncSubscription = SyncService.instance.syncEvents.listen((event) {
@@ -140,7 +110,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
         whereArgs: [restaurantId],
       );
 
-      final List<_WaiterTableInfo> enrichedTables = [];
+      final List<WaiterTableInfo> enrichedTables = [];
       final Set<String> sections = {'All'};
 
       for (var tMap in tablesResult) {
@@ -170,7 +140,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
           itemsCount = items.fold(0, (sum, it) => sum + (it['quantity'] as int? ?? 1));
         }
 
-        enrichedTables.add(_WaiterTableInfo(
+        enrichedTables.add(WaiterTableInfo(
           table: table,
           activeOrder: activeOrder,
           orderItemsCount: itemsCount,
@@ -179,6 +149,19 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
 
       _tableInfoList = enrichedTables;
       _sectionsList = sections.toList();
+
+      // Attach merged member tables so merged groups render as a single entity.
+      for (final ti in _tableInfoList) {
+        ti.mergedTables = tablesResult
+            .where((m) => m['merged_with_id'] == ti.table.id)
+            .map((m) => TableModel.fromMap(m))
+            .toList();
+      }
+
+      if (_selectedTableId != null) {
+        final tableInfo = _tableInfoList.firstWhere((t) => t.table.id == _selectedTableId, orElse: () => _tableInfoList.first);
+        _selectedTableDisplayName = tableInfo.displayNameForOrder;
+      }
 
       // 2. Fetch products
       final products = await _productRepository.getProducts();
@@ -198,11 +181,15 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
         SELECT o.*, t.table_number, t.name as table_name, t.section as table_section
         FROM orders o
         LEFT JOIN tables t ON o.table_id = t.id
-        WHERE o.status IN ('Received', 'Sent to Kitchen', 'Preparing', 'Ready', 'Served', 'Billing Pending')
+        WHERE o.status IN ('Received', 'Sent to Kitchen', 'Preparing', 'Ready', 'Served', 'Billing Pending', 'Confirmed', 'Held')
         AND o.restaurant_id = ?
         ORDER BY o.id DESC
       ''', [restaurantId]);
       _waiterOrdersList = List<Map<String, dynamic>>.from(ordersResult);
+
+      final prefs = await SharedPreferences.getInstance();
+      _showWaiterAssignment = prefs.getBool('show_waiter_assignment') ?? true;
+      _showChefAssignment = prefs.getBool('show_chef_assignment') ?? true;
 
       // 4. Fetch chefs and waiters list
       final List<Map<String, dynamic>> chefsResult = await db.query(
@@ -219,7 +206,6 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       );
       _waitersList = List<Map<String, dynamic>>.from(waitersResult);
 
-      final prefs = await SharedPreferences.getInstance();
       final username = prefs.getString('username');
       if (username != null && _selectedWaiterId == null) {
         final matchedWaiters = _waitersList.where((w) => w['username'] == username);
@@ -239,11 +225,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
 
   // --- CART MANAGEMENT ---
   void _handleProductTap(ProductModel product) {
-    if (product.hasPreferences) {
-      _showPreferenceCustomizationDialog(product);
-    } else {
-      _addToCart(product);
-    }
+    _addToCart(product, qty: 1);
   }
 
   void _addToCart(
@@ -265,7 +247,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       if (index >= 0) {
         _cartItems[index].quantity += qty;
       } else {
-        _cartItems.add(_WaiterCartItem(
+        _cartItems.add(WaiterCartItem(
           product: product,
           quantity: qty,
           dietaryPreference: dietaryPreference,
@@ -296,16 +278,23 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
     });
   }
 
+  void _editCartItem(int index) {
+    if (index >= 0 && index < _cartItems.length) {
+      final item = _cartItems[index];
+      _showPreferenceCustomizationDialog(item.product, existingItem: item, existingIndex: index);
+    }
+  }
+
   double _calculateSubtotal() {
     return _cartItems.fold(0.0, (sum, it) => sum + it.subtotal);
   }
 
   // --- ITEM CUSTOMIZATION DIALOG ---
-  void _showPreferenceCustomizationDialog(ProductModel product) {
-    String? selectedDietary;
-    String? selectedTaste;
-    int quantity = 1;
-    final notesCtrl = TextEditingController();
+  void _showPreferenceCustomizationDialog(ProductModel product, {WaiterCartItem? existingItem, int? existingIndex}) {
+    String? selectedDietary = existingItem?.dietaryPreference;
+    String? selectedTaste = existingItem?.tastePreference;
+    int quantity = existingItem?.quantity ?? 1;
+    final notesCtrl = TextEditingController(text: existingItem?.notes ?? '');
 
     showDialog(
       context: context,
@@ -314,7 +303,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              const Icon(Icons.tune, color: Colors.deepPurple),
+              const Icon(Icons.tune, color: AppColors.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -448,420 +437,47 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
+                backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
               ),
               onPressed: () {
                 Navigator.pop(context);
-                _addToCart(
-                  product,
-                  dietaryPreference: selectedDietary,
-                  tastePreference: selectedTaste,
-                  notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
-                  qty: quantity,
-                );
+                if (existingItem != null && existingIndex != null) {
+                  setState(() {
+                    _cartItems[existingIndex].dietaryPreference = selectedDietary;
+                    _cartItems[existingIndex].tastePreference = selectedTaste;
+                    _cartItems[existingIndex].notes = notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null;
+                    _cartItems[existingIndex].quantity = quantity;
+                  });
+                } else {
+                  _addToCart(
+                    product,
+                    dietaryPreference: selectedDietary,
+                    tastePreference: selectedTaste,
+                    notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
+                    qty: quantity,
+                  );
+                }
               },
-              child: const Text('Add to Order'),
+              child: Text(existingItem != null ? 'Update Order' : 'Add to Order'),
             ),
           ],
         ),
       ),
     );
-  }
-
-  // --- QUICK WATER & SERVICE REQUEST MODAL ---
-  Future<void> _showQuickWaterServiceDialog({TableModel? preselectedTable}) async {
-    TableModel? selectedTable = preselectedTable;
-    if (selectedTable == null && _tableInfoList.isNotEmpty) {
-      selectedTable = _tableInfoList.first.table;
-    }
-
-    String selectedWaterType = 'Chilled Drinking Water';
-    int glassesCount = 2;
-    bool requestCutlery = false;
-    bool requestTissues = false;
-    bool requestSaltPepper = false;
-    final specialInstructionsCtrl = TextEditingController();
-
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.water_drop, color: Colors.blue, size: 24),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Quick Water & Service Request', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    Text('Dispatch instant drinking water & essentials', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: 460,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Table Selector
-                  if (preselectedTable == null) ...[
-                    DropdownButtonFormField<int>(
-                      initialValue: selectedTable?.id,
-                      decoration: const InputDecoration(
-                        labelText: 'Select Destination Table',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.table_restaurant),
-                      ),
-                      items: _tableInfoList.map((ti) {
-                        return DropdownMenuItem<int>(
-                          value: ti.table.id,
-                          child: Text('${ti.table.displayName} • ${ti.table.section} (${ti.table.status})'),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        setModalState(() {
-                          selectedTable = _tableInfoList.firstWhere((ti) => ti.table.id == val).table;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                  ] else ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.deepPurple.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.table_restaurant, color: Colors.deepPurple, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Serving: ${preselectedTable.displayName} (${preselectedTable.section})',
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-
-                  // Water Type Selection
-                  const Text('Water Selection:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _buildWaterOptionChip('Chilled Drinking Water', Icons.ac_unit, Colors.blue, selectedWaterType, (val) {
-                        setModalState(() => selectedWaterType = val);
-                      }),
-                      _buildWaterOptionChip('Room Temp Filtered Water', Icons.water_drop_outlined, Colors.teal, selectedWaterType, (val) {
-                        setModalState(() => selectedWaterType = val);
-                      }),
-                      _buildWaterOptionChip('Warm / Hot Water', Icons.coffee, Colors.orange, selectedWaterType, (val) {
-                        setModalState(() => selectedWaterType = val);
-                      }),
-                      _buildWaterOptionChip('Packaged Mineral Water (1L - ₹20)', Icons.local_drink, Colors.purple, selectedWaterType, (val) {
-                        setModalState(() => selectedWaterType = val);
-                      }),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Glass Count
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Number of Glasses:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      Row(
-                        children: [1, 2, 4, 6, 8].map((count) {
-                          final isSelected = glassesCount == count;
-                          return Padding(
-                            padding: const EdgeInsets.only(left: 4.0),
-                            child: ChoiceChip(
-                              label: Text('$count'),
-                              selected: isSelected,
-                              selectedColor: Colors.blue.shade100,
-                              onSelected: (val) => setModalState(() => glassesCount = count),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Additional Table Essentials
-                  const Text('Table Essentials & Refills:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  const SizedBox(height: 4),
-                  CheckboxListTile(
-                    title: const Text('Extra Cutlery & Spoons', style: TextStyle(fontSize: 13)),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: requestCutlery,
-                    onChanged: (val) => setModalState(() => requestCutlery = val ?? false),
-                  ),
-                  CheckboxListTile(
-                    title: const Text('Napkins & Tissue Refill', style: TextStyle(fontSize: 13)),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: requestTissues,
-                    onChanged: (val) => setModalState(() => requestTissues = val ?? false),
-                  ),
-                  CheckboxListTile(
-                    title: const Text('Extra Salt & Pepper Dispenser', style: TextStyle(fontSize: 13)),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: requestSaltPepper,
-                    onChanged: (val) => setModalState(() => requestSaltPepper = val ?? false),
-                  ),
-                  const SizedBox(height: 8),
-
-                  TextField(
-                    controller: specialInstructionsCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Special Note (Optional)',
-                      hintText: 'e.g. Ice on the side, lemon slice...',
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              ),
-              icon: const Icon(Icons.send, size: 16),
-              label: const Text('Dispatch Water Request', style: TextStyle(fontWeight: FontWeight.bold)),
-              onPressed: selectedTable == null
-                  ? null
-                  : () async {
-                      Navigator.pop(context);
-                      await _dispatchWaterServiceRequest(
-                        table: selectedTable!,
-                        waterType: selectedWaterType,
-                        glasses: glassesCount,
-                        cutlery: requestCutlery,
-                        tissues: requestTissues,
-                        saltPepper: requestSaltPepper,
-                        notes: specialInstructionsCtrl.text.trim(),
-                      );
-                    },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWaterOptionChip(String title, IconData icon, Color color, String selectedValue, ValueChanged<String> onSelected) {
-    final isSelected = selectedValue == title;
-    return ChoiceChip(
-      avatar: Icon(icon, size: 16, color: isSelected ? color : Colors.grey),
-      label: Text(title, style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-      selected: isSelected,
-      selectedColor: color.withValues(alpha: 0.15),
-      onSelected: (val) {
-        if (val) onSelected(title);
-      },
-    );
-  }
-
-  Future<void> _dispatchWaterServiceRequest({
-    required TableModel table,
-    required String waterType,
-    required int glasses,
-    required bool cutlery,
-    required bool tissues,
-    required bool saltPepper,
-    required String notes,
-  }) async {
-    setState(() => _isLoading = true);
-    try {
-      final db = await DatabaseHelper.instance.database;
-      final restaurantId = DatabaseHelper.currentRestaurantId;
-      final String now = DateTime.now().toIso8601String();
-
-      // Check if table has an active order
-      final List<Map<String, dynamic>> existingOrders = await db.query(
-        'orders',
-        where: 'table_id = ? AND status IN (\'Received\', \'Sent to Kitchen\', \'Preparing\', \'Ready\', \'Served\') AND restaurant_id = ?',
-        whereArgs: [table.id, restaurantId],
-        orderBy: 'id DESC',
-        limit: 1,
-      );
-
-      final isPaidMineralWater = waterType.contains('Mineral Water');
-      final double waterPrice = isPaidMineralWater ? 20.0 : 0.0;
-
-      // Find or create a product item for tracking in order_items
-      int waterProductId;
-      final String prodName = isPaidMineralWater ? 'Packaged Mineral Water (1L)' : 'Table Drinking Water';
-      final existingProds = await db.query(
-        'products',
-        where: 'name = ? AND restaurant_id = ?',
-        whereArgs: [prodName, restaurantId],
-        limit: 1,
-      );
-
-      if (existingProds.isNotEmpty) {
-        waterProductId = existingProds.first['id'] as int;
-      } else {
-        waterProductId = await db.insert('products', {
-          'name': prodName,
-          'price': waterPrice,
-          'category': 'Beverages',
-          'is_veg': 1,
-          'is_available': 1,
-          'prep_time': 2,
-          'cook_time': 1,
-          'restaurant_id': restaurantId,
-        });
-      }
-
-      // Build service instructions summary
-      final List<String> serviceItems = ['$waterType ($glasses Glasses)'];
-      if (cutlery) serviceItems.add('Extra Cutlery');
-      if (tissues) serviceItems.add('Napkin Refill');
-      if (saltPepper) serviceItems.add('Salt/Pepper');
-      if (notes.isNotEmpty) serviceItems.add('Note: $notes');
-
-      final String fullServiceNote = '[WATER SERVICE] ${serviceItems.join(" • ")}';
-
-      int orderId;
-      if (existingOrders.isNotEmpty) {
-        // Append to existing active order
-        orderId = existingOrders.first['id'] as int;
-
-        await db.insert('order_items', {
-          'order_id': orderId,
-          'product_id': waterProductId,
-          'quantity': 1,
-          'price': waterPrice,
-          'status': 'Pending',
-          'notes': fullServiceNote,
-        });
-
-        if (isPaidMineralWater) {
-          final prevTotal = (existingOrders.first['total_amount'] as num).toDouble();
-          final newTotal = prevTotal + (waterPrice * 1.05); // 5% tax
-          await db.update('orders', {'total_amount': newTotal}, where: 'id = ?', whereArgs: [orderId]);
-        }
-      } else {
-        // Table does not have active order -> Create a new seated session
-        final prefs = await SharedPreferences.getInstance();
-        final username = prefs.getString('username') ?? 'Waiter';
-        final userList = await db.query('users', where: 'username = ?', whereArgs: [username]);
-        String orderTakerName = username;
-        int? orderTakerId;
-        if (userList.isNotEmpty) {
-          orderTakerName = userList.first['name'] as String? ?? username;
-          orderTakerId = userList.first['id'] as int?;
-        }
-
-        orderId = await db.insert('orders', {
-          'total_amount': isPaidMineralWater ? waterPrice * 1.05 : 0.0,
-          'status': 'Received',
-          'type': 'Dine-In',
-          'order_time': now,
-          'restaurant_id': restaurantId,
-          'table_id': table.id,
-          'customer_name': 'Guest (${table.tableNumber})',
-          'payment_status': 'Unpaid',
-          'discount_amount': 0.0,
-          'order_taker_name': _selectedWaiterName ?? orderTakerName,
-          'order_taker_id': _selectedWaiterId ?? orderTakerId,
-          'notes': fullServiceNote,
-        });
-
-        await db.insert('order_items', {
-          'order_id': orderId,
-          'product_id': waterProductId,
-          'quantity': 1,
-          'price': waterPrice,
-          'status': 'Pending',
-          'notes': fullServiceNote,
-        });
-
-        // Mark table as Occupied
-        await db.update(
-          'tables',
-          {'status': 'Occupied'},
-          where: 'id = ?',
-          whereArgs: [table.id],
-        );
-      }
-
-      // Generate KOT so service / beverage station is alerted
-      await DatabaseHelper.instance.generateKOTForOrder(orderId, _selectedChefName);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('Water & Service Request dispatched for ${table.displayName}! (Order #$orderId)'),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.blue.shade700,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-
-      _loadDashboardAndProducts();
-      SyncService.instance.broadcastEvent('database_update', {});
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to dispatch water request: $e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
   }
 
   // --- SUBMIT WAITER ORDER (KOT) ---
   Future<void> _submitWaiterOrder() async {
     if (_cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cannot place empty order.')),
       );
       return;
     }
 
     if (_orderType == 'Dine-In' && _selectedTableId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a table for Dine-In orders.')),
       );
       return;
@@ -939,6 +555,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
           'discount_amount': 0.0,
           'order_taker_name': _selectedWaiterName ?? orderTakerName,
           'order_taker_id': _selectedWaiterId ?? orderTakerId,
+          'guest_count': _currentOrderGuestCount,
         });
 
         for (var item in _cartItems) {
@@ -954,11 +571,16 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
         }
 
         if (_selectedTableId != null) {
+          // Mark the whole merged group (anchor + members) as Occupied.
+          final groupIds = <int>[_selectedTableId!];
+          groupIds.addAll(_tableInfoList
+              .where((t) => t.table.mergedWithId == _selectedTableId)
+              .map((t) => t.table.id!));
           await db.update(
             'tables',
             {'status': 'Occupied'},
-            where: 'id = ?',
-            whereArgs: [_selectedTableId],
+            where: 'id IN (${groupIds.map((_) => '?').join(', ')})',
+            whereArgs: groupIds,
           );
         }
       }
@@ -978,7 +600,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Order successfully sent to kitchen! (Bill #$orderId)')),
       );
 
@@ -986,7 +608,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       SyncService.instance.broadcastEvent('database_update', {});
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to submit order: $e')),
       );
     } finally {
@@ -1053,7 +675,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       await DatabaseHelper.instance.logOrderStatus(orderId, 'Served', notes: 'Food successfully served to customer by Waiter.');
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Order marked as served.')),
       );
       _loadDashboardAndProducts();
@@ -1091,7 +713,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       await DatabaseHelper.instance.logOrderStatus(orderId, 'Billing Pending', notes: 'Waiter requested checkout and billing.');
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Billing request sent to Cashier.')),
       );
       _loadDashboardAndProducts();
@@ -1151,7 +773,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                       Navigator.pop(context);
                       await _executeTableTransfer(orderId, currentTableId, targetTableId!);
                     },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
               child: const Text('Transfer Order'),
             ),
           ],
@@ -1189,14 +811,14 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Table transfer completed successfully.')),
       );
       _loadDashboardAndProducts();
       SyncService.instance.broadcastEvent('database_update', {});
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Transfer failed: $e')),
       );
     } finally {
@@ -1256,41 +878,28 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.deepPurple)));
+      return const Scaffold(body: Center(child: CircularProgressIndicator(color: AppColors.primary)));
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Waiter Order Management', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Take Order', style: TextStyle(fontWeight: FontWeight.bold)),
         bottom: _isTakingOrder
             ? null
             : TabBar(
                 controller: _tabController,
-                labelColor: Colors.deepPurple,
+                labelColor: AppColors.primary,
                 unselectedLabelColor: Colors.grey,
-                indicatorColor: Colors.deepPurple,
+                indicatorColor: AppColors.primary,
                 tabs: const [
                   Tab(icon: Icon(Icons.grid_view), text: 'Floor Plan (Live Tables)'),
                   Tab(icon: Icon(Icons.receipt_long), text: 'Kitchen Orders'),
                 ],
               ),
         actions: [
-          // Quick Water & Table Service Action
-          ElevatedButton.icon(
-            onPressed: () => _showQuickWaterServiceDialog(),
-            icon: const Icon(Icons.water_drop, color: Colors.blue, size: 18),
-            label: const Text('Quick Water / Service'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade50,
-              foregroundColor: Colors.blue.shade800,
-              elevation: 0,
-            ),
-          ),
-          const SizedBox(width: 8),
-
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Floor',
+            // tooltip disabled,
             onPressed: _loadDashboardAndProducts,
           ),
           const SizedBox(width: 8),
@@ -1308,7 +917,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
             icon: Icon(_isTakingOrder ? Icons.arrow_back : Icons.add_shopping_cart),
             label: Text(_isTakingOrder ? 'Back to Dashboard' : 'Take Customer Order'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _isTakingOrder ? Colors.grey.shade700 : Colors.deepPurple,
+              backgroundColor: _isTakingOrder ? Colors.grey.shade700 : AppColors.primary,
               foregroundColor: Colors.white,
             ),
           ),
@@ -1329,224 +938,14 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
 
   // --- FLOOR PLAN TAB ---
   Widget _buildFloorPlanTab() {
-    final filteredTables = _tableInfoList.where((ti) {
-      final matchesSection = _selectedSectionFilter == 'All' || ti.table.section == _selectedSectionFilter;
-      final matchesStatus = _selectedStatusFilter == 'All' || ti.table.status == _selectedStatusFilter;
-      return matchesSection && matchesStatus;
-    }).toList();
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Section & Status Filters
-          Row(
-            children: [
-              // Section Filter Chips
-              Expanded(
-                child: SizedBox(
-                  height: 38,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _sectionsList.length,
-                    itemBuilder: (context, index) {
-                      final sec = _sectionsList[index];
-                      final isSelected = sec == _selectedSectionFilter;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6.0),
-                        child: ChoiceChip(
-                          label: Text(sec, style: TextStyle(fontSize: 12, color: isSelected ? Colors.white : Colors.black87)),
-                          selected: isSelected,
-                          selectedColor: Colors.deepPurple,
-                          backgroundColor: Colors.white,
-                          onSelected: (val) {
-                            setState(() => _selectedSectionFilter = sec);
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Status Filter Chips
-              DropdownButton<String>(
-                value: _selectedStatusFilter,
-                underline: const SizedBox(),
-                items: ['All', 'Available', 'Occupied', 'Billing Pending', 'Served', 'Cleaning'].map((st) {
-                  return DropdownMenuItem<String>(
-                    value: st,
-                    child: Text('Status: $st', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() => _selectedStatusFilter = val);
-                  }
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Floor Legend
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildLegendChip(const Color(0xFF2E7D32), 'Available'),
-              _buildLegendChip(const Color(0xFF1565C0), 'Occupied'),
-              _buildLegendChip(const Color(0xFFF9A825), 'Billing Pending'),
-              _buildLegendChip(const Color(0xFF00897B), 'Served'),
-              _buildLegendChip(const Color(0xFF0288D1), 'Cleaning'),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Tables Grid
-          Expanded(
-            child: filteredTables.isEmpty
-                ? const Center(child: Text('No tables found for this filter.', style: TextStyle(color: Colors.grey)))
-                : GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 240,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      childAspectRatio: 0.95,
-                    ),
-                    itemCount: filteredTables.length,
-                    itemBuilder: (context, index) {
-                      final tableInfo = filteredTables[index];
-                      final table = tableInfo.table;
-                      final activeOrder = tableInfo.activeOrder;
-                      final statusColor = _getStatusColor(table.status);
-                      final typeIcon = _getTableTypeIcon(table.tableType);
-
-                      return Card(
-                        elevation: 1.5,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          side: BorderSide(color: statusColor.withValues(alpha: 0.5), width: 1.5),
-                        ),
-                        color: statusColor.withValues(alpha: 0.03),
-                        child: InkWell(
-                          onTap: () => _handleTableCardTap(tableInfo),
-                          borderRadius: BorderRadius.circular(14),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Header: Table Type Icon & Status Badge
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 14,
-                                      backgroundColor: statusColor.withValues(alpha: 0.15),
-                                      child: Icon(typeIcon, color: statusColor, size: 16),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: statusColor,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        table.status.toUpperCase(),
-                                        style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const Spacer(),
-
-                                // Display Name
-                                Text(
-                                  table.displayName,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 2),
-
-                                // Section & Capacity
-                                Text(
-                                  '${table.section} • ${table.capacity} Seats',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                                ),
-
-                                // Active Order summary if present
-                                if (activeOrder != null) ...[
-                                  const SizedBox(height: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.deepPurple.shade50,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      'Order #${activeOrder['id']} • ₹${activeOrder['total_amount']}',
-                                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.deepPurple),
-                                    ),
-                                  ),
-                                ],
-                                const Spacer(),
-
-                                // Quick Action Bar on each card
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    // Quick Water Action Button
-                                    InkWell(
-                                      onTap: () => _showQuickWaterServiceDialog(preselectedTable: table),
-                                      borderRadius: BorderRadius.circular(6),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.shade50,
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: Colors.blue.shade200),
-                                        ),
-                                        child: const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.water_drop, size: 12, color: Colors.blue),
-                                            SizedBox(width: 4),
-                                            Text('Water', style: TextStyle(fontSize: 10.5, color: Colors.blue, fontWeight: FontWeight.bold)),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-
-                                    // Take Order / View Order Button
-                                    ElevatedButton(
-                                      onPressed: () => _handleTableCardTap(tableInfo),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: statusColor,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      child: Text(
-                                        activeOrder != null ? 'View' : 'Order',
-                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
+    return WaiterFloorPlanView(
+      tableInfoList: _tableInfoList,
+      sectionsList: _sectionsList,
+      selectedSectionFilter: _selectedSectionFilter,
+      selectedStatusFilter: _selectedStatusFilter,
+      onSectionFilterChanged: (val) => setState(() => _selectedSectionFilter = val),
+      onStatusFilterChanged: (val) => setState(() => _selectedStatusFilter = val),
+      onTableCardTap: _handleTableCardTap,
     );
   }
 
@@ -1565,19 +964,140 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
     );
   }
 
-  void _handleTableCardTap(_WaiterTableInfo tableInfo) {
+  Future<void> _promptGuestCountAndTakeOrder(TableModel table) async {
+    final tableInfo = _tableInfoList.firstWhere((t) => t.table.id == table.id, orElse: () => _tableInfoList.first);
+    setState(() {
+      _selectedTableId = table.id;
+      _selectedTableDisplayName = tableInfo.displayNameForOrder;
+      _orderType = 'Dine-In';
+      _isTakingOrder = true;
+      _cartItems.clear();
+      _currentOrderGuestCount = tableInfo.combinedCapacity;
+    });
+  }
+
+  Future<void> _showMergeTableDialog(TableModel primaryTable) async {
+    final availableTables = _tableInfoList
+        .where((t) => t.table.id != primaryTable.id && t.table.mergedWithId == null && t.table.status == 'Available')
+        .toList();
+
+    if (availableTables.isEmpty) {
+      if(false) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No available tables to merge with.')));
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Merge into ${primaryTable.displayName}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: availableTables.length,
+            itemBuilder: (context, index) {
+              final tableToMerge = availableTables[index].table;
+              return ListTile(
+                title: Text(tableToMerge.displayName),
+                subtitle: Text('Capacity: ${tableToMerge.capacity}'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final db = await DatabaseHelper.instance.database;
+                  await db.update('tables', {'merged_with_id': primaryTable.id}, where: 'id = ?', whereArgs: [tableToMerge.id]);
+                  _loadDashboardAndProducts();
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _unmergeTable(TableModel table) async {
+    final db = await DatabaseHelper.instance.database;
+
+    // Unmerge the whole group: if this is the anchor, clear all its members.
+    final List<int> targetIds = [];
+    if (table.mergedWithId != null) {
+      targetIds.add(table.id!);
+    } else {
+      targetIds.addAll(_tableInfoList
+          .where((t) => t.table.mergedWithId == table.id)
+          .map((t) => t.table.id!));
+    }
+
+    for (final tid in targetIds) {
+      await db.update('tables', {'merged_with_id': null}, where: 'id = ?', whereArgs: [tid]);
+    }
+    _loadDashboardAndProducts();
+  }
+
+  void _handleTableCardTap(WaiterTableInfo tableInfo) {
     final table = tableInfo.table;
     final activeOrder = tableInfo.activeOrder;
 
     if (activeOrder == null) {
-      // Table is empty or available -> Start new order directly
-      setState(() {
-        _selectedTableId = table.id;
-        _selectedTableDisplayName = table.displayName;
-        _orderType = 'Dine-In';
-        _isTakingOrder = true;
-        _cartItems.clear();
-      });
+      final isMergedGroup = tableInfo.isMergedGroup;
+      showModalBottomSheet(
+        context: context,
+        builder: (context) {
+          return SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isMergedGroup)
+                  ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.merge_type, color: Colors.blue),
+                    title: Text(
+                      'Merged group: ${tableInfo.mergedTableNumbers} • Capacity: ${tableInfo.combinedCapacity}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.add_shopping_cart, color: AppColors.primary),
+                  title: const Text('Take Order'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _promptGuestCountAndTakeOrder(table);
+                  },
+                ),
+                if (isMergedGroup)
+                  ListTile(
+                    leading: const Icon(Icons.call_split, color: Colors.red),
+                    title: Text('Unmerge merged tables (${tableInfo.mergedTableNumbers})'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _unmergeTable(table);
+                    },
+                  )
+                else if (table.mergedWithId == null)
+                  ListTile(
+                    leading: const Icon(Icons.merge_type, color: Colors.blue),
+                    title: const Text('Merge with another table'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showMergeTableDialog(table);
+                    },
+                  ),
+                if (table.mergedWithId != null && !isMergedGroup)
+                  ListTile(
+                    leading: const Icon(Icons.call_split, color: Colors.red),
+                    title: const Text('Unmerge Table'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _unmergeTable(table);
+                    },
+                  ),
+              ],
+            ),
+          );
+        },
+      );
       return;
     }
 
@@ -1605,7 +1125,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      table.displayName,
+                      tableInfo.displayNameForOrder,
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     Container(
@@ -1623,7 +1143,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                 ),
                 const SizedBox(height: 12),
                 ListTile(
-                  leading: const Icon(Icons.receipt_long, color: Colors.deepPurple),
+                  leading: const Icon(Icons.receipt_long, color: AppColors.primary),
                   title: Text('Active Order #$orderId (${activeOrder['type'] ?? "Dine-In"})'),
                   subtitle: Text('Guest: $customerName • Waiter: $waiterName • Items: ${tableInfo.orderItemsCount}'),
                   dense: true,
@@ -1641,20 +1161,11 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                         Navigator.pop(context);
                         setState(() {
                           _selectedTableId = table.id;
-                          _selectedTableDisplayName = table.displayName;
+                          _selectedTableDisplayName = tableInfo.displayNameForOrder;
                           _orderType = 'Dine-In';
                           _isTakingOrder = true;
                           _cartItems.clear();
                         });
-                      },
-                    ),
-                    ElevatedButton.icon(
-                      icon: const Icon(Icons.water_drop, size: 16),
-                      label: const Text('Quick Water'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, foregroundColor: Colors.white),
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _showQuickWaterServiceDialog(preselectedTable: table);
                       },
                     ),
                     ElevatedButton.icon(
@@ -1781,7 +1292,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                                     Text('Customer: $customer • Type: $type • Time: ${DateFormat('hh:mm a').format(parsedTime)}',
                                         style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
                                     Text('Total: ₹${total.toStringAsFixed(2)}',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.deepPurple)),
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary)),
                                   ],
                                 ),
                               ),
@@ -1812,7 +1323,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                                   if (type == 'Dine-In' && status != 'Billing Pending' && status != 'Served')
                                     IconButton(
                                       icon: const Icon(Icons.move_down, color: Colors.blue),
-                                      tooltip: 'Transfer Table',
+                                      // tooltip disabled,
                                       onPressed: () => _showTransferTableDialog(orderId, order['table_id'] as int, tableDisplay),
                                     ),
                                 ],
@@ -1858,16 +1369,14 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
 
     return Row(
       children: [
-        // Left Side: Catalog of products with preferences & attributes
+        // Left Side: Catalog
         Expanded(
           flex: 5,
-          child: Container(
-            color: Colors.grey.shade50,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // Search Field
-                TextField(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: TextField(
                   decoration: InputDecoration(
                     hintText: 'Search Menu Item...',
                     prefixIcon: const Icon(Icons.search),
@@ -1879,406 +1388,67 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                     setState(() => _searchQuery = val);
                   },
                 ),
-                const SizedBox(height: 12),
-
-                // Category Tabs Selector
-                SizedBox(
-                  height: 42,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _categories.length,
-                    itemBuilder: (context, index) {
-                      final cat = _categories[index];
-                      final isSelected = cat == _selectedCategory;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: ChoiceChip(
-                          label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontSize: 12)),
-                          selected: isSelected,
-                          selectedColor: Colors.deepPurple,
-                          backgroundColor: Colors.white,
-                          onSelected: (val) {
-                            setState(() => _selectedCategory = cat);
-                          },
-                        ),
-                      );
-                    },
-                  ),
+              ),
+              Expanded(
+                child: WaiterMenuView(
+                  categories: _categories,
+                  selectedCategory: _selectedCategory,
+                  onCategorySelected: (cat) => setState(() => _selectedCategory = cat),
+                  filteredProducts: filteredProducts,
+                  cartItems: _cartItems,
+                  onProductTap: _handleProductTap,
                 ),
-                const SizedBox(height: 12),
-
-                // Product Grid View
-                Expanded(
-                  child: GridView.builder(
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 220,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.78,
-                    ),
-                    itemCount: filteredProducts.length,
-                    itemBuilder: (context, index) {
-                      final prod = filteredProducts[index];
-                      final inCartCount = _cartItems.where((it) => it.product.id == prod.id).fold(0, (sum, it) => sum + it.quantity);
-
-                      return Card(
-                        color: Colors.white,
-                        elevation: 1,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: Colors.grey.shade200),
-                        ),
-                        child: InkWell(
-                          onTap: () => _handleProductTap(prod),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(10.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Icon(
-                                      Icons.circle,
-                                      color: prod.isVeg == 1 ? Colors.green : Colors.red,
-                                      size: 14,
-                                    ),
-                                    if (inCartCount > 0)
-                                      CircleAvatar(
-                                        backgroundColor: Colors.deepPurple,
-                                        radius: 10,
-                                        child: Text('$inCartCount', style: const TextStyle(color: Colors.white, fontSize: 10)),
-                                      ),
-                                  ],
-                                ),
-                                const Spacer(),
-
-                                // Name
-                                Text(
-                                  prod.name,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-
-                                // Food Attributes Badge (compact micro tags)
-                                if (prod.hasAttributes || prod.hasPreferences) ...[
-                                  const SizedBox(height: 4),
-                                  FoodAttributesBadge(product: prod, compact: true, maxVisible: 2),
-                                ],
-
-                                const SizedBox(height: 4),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text('₹${prod.price}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
-                                    Icon(
-                                      prod.hasPreferences ? Icons.tune : Icons.add_circle,
-                                      color: Colors.deepPurple,
-                                      size: 20,
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-
-        // Right Side: Cart side panel with dynamic preference chips
+        
+        // Right Side: Cart Panel
         Expanded(
           flex: 3,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(left: BorderSide(color: Colors.grey.shade200)),
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Order Setup Header
-                Text(
-                  _orderType == 'Dine-In' ? 'Order: $_selectedTableDisplayName' : 'New Order - Takeaway',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const SizedBox(height: 12),
-
-                // Order Type & Table Selection
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _orderType,
-                        decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Type', isDense: true),
-                        items: ['Dine-In', 'Takeaway', 'Delivery'].map((type) {
-                          return DropdownMenuItem<String>(value: type, child: Text(type));
-                        }).toList(),
-                        onChanged: (val) {
-                          setState(() {
-                            _orderType = val!;
-                            if (_orderType != 'Dine-In') {
-                              _selectedTableId = null;
-                              _selectedTableDisplayName = 'Takeaway';
-                            }
-                          });
-                        },
-                      ),
-                    ),
-                    if (_orderType == 'Dine-In') ...[
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: SearchableDropdown<_WaiterTableInfo>(
-                          items: _tableInfoList,
-                          value: _selectedTableId != null && _tableInfoList.any((ti) => ti.table.id == _selectedTableId)
-                              ? _tableInfoList.firstWhere((ti) => ti.table.id == _selectedTableId)
-                              : null,
-                          labelText: 'Table',
-                          hintText: 'Select...',
-                          itemToString: (ti) => '${ti.table.displayName} (${ti.table.status})',
-                          filterFn: (ti, query) => ti.table.displayName.toLowerCase().contains(query.toLowerCase()),
-                          onChanged: (val) {
-                            setState(() {
-                              _selectedTableId = val?.table.id;
-                              _selectedTableDisplayName = val != null ? val.table.displayName : 'Takeaway';
-                            });
-                          },
-                          prefixIcon: const Icon(Icons.table_restaurant),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // Customer Info
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _customerNameController,
-                        decoration: const InputDecoration(labelText: 'Customer Name', border: OutlineInputBorder(), isDense: true),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _customerPhoneController,
-                        keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder(), isDense: true),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // Waiter & Chef assignment
-                Row(
-                  children: [
-                    Expanded(
-                      child: SearchableDropdown<Map<String, dynamic>>(
-                        items: _waitersList,
-                        value: _selectedWaiterId != null && _waitersList.any((w) => w['id'] == _selectedWaiterId)
-                            ? _waitersList.firstWhere((w) => w['id'] == _selectedWaiterId)
-                            : null,
-                        labelText: 'Waiter',
-                        hintText: 'Select...',
-                        itemToString: (w) => w['name'] as String? ?? '',
-                        filterFn: (w, query) => (w['name'] as String? ?? '').toLowerCase().contains(query.toLowerCase()),
-                        onChanged: (val) {
-                          setState(() {
-                            _selectedWaiterId = val?['id'] as int?;
-                            _selectedWaiterName = val?['name'] as String?;
-                          });
-                        },
-                        prefixIcon: const Icon(Icons.person_outline),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SearchableDropdown<Map<String, dynamic>>(
-                        items: _chefsList,
-                        value: _selectedChefId != null && _chefsList.any((c) => c['id'] == _selectedChefId)
-                            ? _chefsList.firstWhere((c) => c['id'] == _selectedChefId)
-                            : null,
-                        labelText: 'Chef',
-                        hintText: 'Select...',
-                        itemToString: (c) => c['name'] as String? ?? '',
-                        filterFn: (c, query) => (c['name'] as String? ?? '').toLowerCase().contains(query.toLowerCase()),
-                        onChanged: (val) {
-                          setState(() {
-                            _selectedChefId = val?['id'] as int?;
-                            _selectedChefName = val?['name'] as String?;
-                          });
-                        },
-                        prefixIcon: const Icon(Icons.restaurant_menu),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Divider(),
-
-                // Selected Items Cart List Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Selected Items List', style: TextStyle(fontWeight: FontWeight.bold)),
-                    if (_cartItems.isNotEmpty)
-                      TextButton(
-                        onPressed: () => setState(() => _cartItems.clear()),
-                        child: const Text('Clear', style: TextStyle(color: Colors.red, fontSize: 12)),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-
-                // Selected Items Cart List
-                Expanded(
-                  child: _cartItems.isEmpty
-                      ? const Center(child: Text('No items added. Click on menu cards to append.'))
-                      : ListView.builder(
-                          itemCount: _cartItems.length,
-                          itemBuilder: (context, index) {
-                            final item = _cartItems[index];
-
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: BorderSide(color: Colors.grey.shade200),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(10.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            item.product.name,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        Row(
-                                          children: [
-                                            IconButton(
-                                              icon: const Icon(Icons.remove_circle_outline, size: 18),
-                                              onPressed: () => _decrementCart(index),
-                                            ),
-                                            Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                            IconButton(
-                                              icon: const Icon(Icons.add_circle_outline, size: 18),
-                                              onPressed: () => setState(() => item.quantity++),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                                              onPressed: () => _removeCartItem(index),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-
-                                    // Customization & Preference Badges
-                                    if (item.dietaryPreference != null || item.tastePreference != null || (item.notes != null && item.notes!.isNotEmpty)) ...[
-                                      const SizedBox(height: 4),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 4,
-                                        children: [
-                                          if (item.dietaryPreference != null)
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: Colors.green.shade50,
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: Colors.green.shade300),
-                                              ),
-                                              child: Text(
-                                                item.dietaryPreference!,
-                                                style: TextStyle(fontSize: 10, color: Colors.green.shade800, fontWeight: FontWeight.bold),
-                                              ),
-                                            ),
-                                          if (item.tastePreference != null)
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: Colors.deepOrange.shade50,
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: Colors.deepOrange.shade300),
-                                              ),
-                                              child: Text(
-                                                item.tastePreference!,
-                                                style: TextStyle(fontSize: 10, color: Colors.deepOrange.shade800, fontWeight: FontWeight.bold),
-                                              ),
-                                            ),
-                                          if (item.notes != null && item.notes!.isNotEmpty)
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey.shade100,
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                item.notes!,
-                                                style: TextStyle(fontSize: 10, color: Colors.grey.shade800),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    ],
-
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '₹${item.subtotal.toStringAsFixed(2)}',
-                                      textAlign: TextAlign.end,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.deepPurple),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-                const Divider(),
-
-                // Totals & Submit
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Total (excluding Tax):', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                      Text('₹${_calculateSubtotal().toStringAsFixed(2)}',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.deepPurple)),
-                    ],
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: _submitWaiterOrder,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: const Text('Send Order to Kitchen (KOT)', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
+          child: WaiterCartPanel(
+            orderType: _orderType,
+            selectedTableDisplayName: _selectedTableDisplayName,
+            selectedTableId: _selectedTableId,
+            tableInfoList: _tableInfoList,
+            cartItems: _cartItems,
+            customerNameController: _customerNameController,
+            customerPhoneController: _customerPhoneController,
+            waitersList: _waitersList,
+            chefsList: _chefsList,
+            selectedWaiterId: _selectedWaiterId,
+            selectedChefId: _selectedChefId,
+            onWaiterSelected: (id, name) => setState(() { _selectedWaiterId = id; _selectedWaiterName = name; }),
+            onChefSelected: (id, name) => setState(() { _selectedChefId = id; _selectedChefName = name; }),
+            showWaiterAssignment: _showWaiterAssignment,
+            showChefAssignment: _showChefAssignment,
+            onOrderTypeChanged: (val) {
+              setState(() {
+                _orderType = val!;
+                if (_orderType != 'Dine-In') {
+                  _selectedTableId = null;
+                  _selectedTableDisplayName = 'Takeaway';
+                }
+              });
+            },
+            onTableSelected: (tableId) {
+              setState(() {
+                _selectedTableId = tableId;
+                if (tableId != null) {
+                  final tableInfo = _tableInfoList.firstWhere((t) => t.table.id == tableId);
+                  _selectedTableDisplayName = tableInfo.displayNameForOrder;
+                  _orderType = 'Dine-In';
+                  _currentOrderGuestCount = tableInfo.combinedCapacity;
+                }
+              });
+            },
+            onDecrementCart: _decrementCart,
+            onRemoveCartItem: _removeCartItem,
+            onEditCartItem: _editCartItem,
+            onClearCart: () => setState(() => _cartItems.clear()),
+            onSendKOT: _submitWaiterOrder,
+            onPrintBill: () {},
+            onCheckout: () {},
           ),
         ),
       ],

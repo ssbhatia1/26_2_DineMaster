@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pdf/pdf.dart';
@@ -193,7 +194,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Total Amount:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text('₹${order['total_amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepPurple)),
+                  Text('₹${order['total_amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
                 ],
               ),
             ],
@@ -211,7 +212,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
             },
             icon: const Icon(Icons.track_changes),
             label: const Text('Track KOT'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
           ),
           ElevatedButton.icon(
             onPressed: () => _printInvoice(order, items),
@@ -321,7 +322,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                   children: [
                     Text('Order #$orderId - Live History', style: const TextStyle(fontWeight: FontWeight.bold)),
                     IconButton(
-                      icon: const Icon(Icons.refresh, color: Colors.deepPurple),
+                      icon: const Icon(Icons.refresh, color: AppColors.primary),
                       onPressed: () => reloadData(),
                     ),
                   ],
@@ -336,9 +337,9 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                           child: Column(
                             children: [
                               const TabBar(
-                                labelColor: Colors.deepPurple,
+                                labelColor: AppColors.primary,
                                 unselectedLabelColor: Colors.grey,
-                                indicatorColor: Colors.deepPurple,
+                                indicatorColor: AppColors.primary,
                                 tabs: [
                                   Tab(icon: Icon(Icons.restaurant_menu), text: 'KOT History'),
                                   Tab(icon: Icon(Icons.history_toggle_off), text: 'Status Timeline'),
@@ -439,7 +440,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                                                   children: [
                                                     const Padding(
                                                       padding: EdgeInsets.only(top: 4.0),
-                                                      child: Icon(Icons.circle, size: 12, color: Colors.deepPurple),
+                                                      child: Icon(Icons.circle, size: 12, color: AppColors.primary),
                                                     ),
                                                     const SizedBox(width: 12),
                                                     Expanded(
@@ -578,7 +579,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
       });
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    if(false) ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Payment of order #$orderId processed via $method')),
     );
     _loadOrders(); // Refresh list
@@ -727,7 +728,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                 Navigator.pop(context);
                 _loadOrders();
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(
+                if(false) ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Total split amounts must match the order total')),
                 );
               }
@@ -771,12 +772,12 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
       await db.delete('orders', where: 'id = ?', whereArgs: [orderId]);
       await db.delete('payments', where: 'order_id = ?', whereArgs: [orderId]);
       
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Order #$orderId deleted successfully')),
       );
       _loadOrders(); // Refresh list
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error deleting order: $e')),
       );
     }
@@ -954,8 +955,8 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                               children: [
                                 ListTile(
                                   leading: CircleAvatar(
-                                    backgroundColor: Colors.deepPurple.withAlpha(25),
-                                    child: const Icon(Icons.receipt, color: Colors.deepPurple),
+                                    backgroundColor: AppColors.primary.withAlpha(25),
+                                    child: const Icon(Icons.receipt, color: AppColors.primary),
                                   ),
                                   title: Text(
                                     'Order #${order['id']} - ₹${order['total_amount']}',
@@ -1034,7 +1035,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                                                     label: const Text('Pay Bill Amount'),
                                                     onPressed: () => _showPaymentSelectionDialog(order),
                                                     style: ElevatedButton.styleFrom(
-                                                      backgroundColor: Colors.deepPurple,
+                                                      backgroundColor: AppColors.primary,
                                                       foregroundColor: Colors.white,
                                                     ),
                                                   )

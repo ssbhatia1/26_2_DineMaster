@@ -14,6 +14,7 @@ class TableModel {
   final int? waiterId;
   final String? waiterName; // Cached/joined from users table
   final int? restaurantId;
+  final int? mergedWithId;
 
   TableModel({
     this.id,
@@ -29,6 +30,7 @@ class TableModel {
     this.waiterId,
     this.waiterName,
     this.restaurantId,
+    this.mergedWithId,
   });
 
   // Helper getters for UI status checks
@@ -61,6 +63,7 @@ class TableModel {
     int? waiterId,
     String? waiterName,
     int? restaurantId,
+    int? mergedWithId,
   }) {
     return TableModel(
       id: id ?? this.id,
@@ -76,6 +79,7 @@ class TableModel {
       waiterId: waiterId ?? this.waiterId,
       waiterName: waiterName ?? this.waiterName,
       restaurantId: restaurantId ?? this.restaurantId,
+      mergedWithId: mergedWithId ?? this.mergedWithId,
     );
   }
 
@@ -94,6 +98,7 @@ class TableModel {
       'waiter_id': waiterId,
       'waiter_name': waiterName,
       'restaurant_id': restaurantId,
+      'merged_with_id': mergedWithId,
     };
   }
 
@@ -112,6 +117,7 @@ class TableModel {
       waiterId: map['waiter_id'],
       waiterName: map['waiter_name'],
       restaurantId: map['restaurant_id'],
+      mergedWithId: map['merged_with_id'],
     );
   }
 }

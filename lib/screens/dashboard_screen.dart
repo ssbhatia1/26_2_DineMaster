@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:nexodine/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -191,16 +192,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.all(24),
                     child: Row(
                       children: [
-                        const Icon(Icons.restaurant_menu, color: Colors.white, size: 32),
+                        Image.asset(
+                          'assets/images/logo.jpg',
+                          height: 40,
+                          width: 40,
+                        ),
                         const SizedBox(width: 12),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'RestoPro ERP',
+                              'DINE MASTER',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 20,
+                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: 1,
                               ),
@@ -232,7 +237,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ListTile(
                     leading: const CircleAvatar(
                       backgroundColor: Colors.white,
-                      child: Icon(Icons.person, color: Colors.deepPurple),
+                      child: Icon(Icons.person, color: AppColors.primary),
                     ),
                     title: const Text(
                       'Owner Account',
@@ -284,7 +289,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             _selectedRestaurantId = value;
                             DatabaseHelper.currentRestaurantId = value;
                           });
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          if(false) ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('Switched to ${_restaurants.firstWhere((r) => r['id'] == value)['name']}')),
                           );
                         },
@@ -328,7 +333,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ? BottomNavigationBar(
               currentIndex: activeIndex >= 5 ? 0 : activeIndex,
               type: BottomNavigationBarType.fixed,
-              selectedItemColor: Colors.deepPurple.shade900,
+              selectedItemColor: AppColors.primaryMaterialColor[900]!,
               unselectedItemColor: Colors.grey,
               onTap: (index) {
                 context.go(_navItems[index]['route']);

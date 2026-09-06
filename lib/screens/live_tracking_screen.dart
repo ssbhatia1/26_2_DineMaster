@@ -1,8 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 import '../core/database/database_helper.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import '../services/sync_service.dart';
+import '../models/table_model.dart';
 
 class LiveTrackingScreen extends StatefulWidget {
   const LiveTrackingScreen({super.key});
@@ -29,13 +31,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
   List<Map<String, dynamic>> _chefStats = [];
   List<Map<String, dynamic>> _peakHours = [];
 
-  // Selected Order for Customer QR view simulation
-  Map<String, dynamic>? _selectedCustomerOrder;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _loadAllTrackingData();
     
     // Live WebSocket synchronization
@@ -102,12 +102,12 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
         if (tableId != null) {
           final List<Map<String, dynamic>> tables = await db.query(
             'tables',
-            columns: ['table_number'],
             where: 'id = ?',
             whereArgs: [tableId],
           );
           if (tables.isNotEmpty) {
-            tableNumber = tables.first['table_number'] as String;
+            final tableModel = TableModel.fromMap(tables.first);
+            tableNumber = tableModel.displayName;
           }
         }
 
@@ -200,17 +200,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
           _chefStats = chefStats;
           _peakHours = peakHours;
           
-          if (_selectedCustomerOrder != null) {
-            // Update reference state of currently tracked order
-            final matched = _liveOrders.firstWhere(
-              (o) => o['id'] == _selectedCustomerOrder!['id'],
-              orElse: () => _selectedCustomerOrder!,
-            );
-            _selectedCustomerOrder = matched;
-          } else if (_liveOrders.isNotEmpty) {
-            _selectedCustomerOrder = _liveOrders.first;
-          }
-          
           _isLoading = false;
         });
       }
@@ -272,11 +261,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
       });
 
       _loadAllTrackingData(silent: true);
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Order #$orderId marked as $newStatus')),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if(false) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error updating order: $e')),
       );
     }
@@ -356,12 +345,11 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Colors.deepPurple,
+          labelColor: AppColors.primary,
           unselectedLabelColor: Colors.grey,
-          indicatorColor: Colors.deepPurple,
+          indicatorColor: AppColors.primary,
           tabs: const [
             Tab(icon: Icon(Icons.dashboard_customize), text: 'Live Status Tracker'),
-            Tab(icon: Icon(Icons.qr_code_scanner), text: 'Customer QR View'),
             Tab(icon: Icon(Icons.analytics_outlined), text: 'Performance Analytics'),
           ],
         ),
@@ -372,7 +360,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
               controller: _tabController,
               children: [
                 _buildLiveStatusTrackerView(),
-                _buildCustomerQRView(),
                 _buildPerformanceAnalyticsView(),
               ],
             ),
@@ -423,8 +410,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
                         Row(
                           children: [
                             CircleAvatar(
-                              backgroundColor: Colors.deepPurple.shade50,
-                              child: Text('#${order['id']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                              backgroundColor: AppColors.primaryLight,
+                              child: Text('#${order['id']}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -506,243 +493,6 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
                   ),
                 );
               },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // VIEW 2: Customer Live Order Tracking View (QR Simulator)
-  Widget _buildCustomerQRView() {
-    if (_selectedCustomerOrder == null) {
-      return const Center(child: Text('Create an order to track customer QR status'));
-    }
-
-    final order = _selectedCustomerOrder!;
-    final status = order['status'] as String;
-    final progress = _getProgressValue(status);
-    final orderTime = DateTime.tryParse(order['order_time']) ?? DateTime.now();
-
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 450),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.deepPurple.withAlpha(20),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: Scaffold(
-              backgroundColor: Colors.white,
-              appBar: AppBar(
-                title: const Text('Customer Live Order Tracking', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                centerTitle: true,
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                elevation: 0,
-                leading: const Icon(Icons.qr_code, color: Colors.deepPurple),
-              ),
-              body: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      // Active tracking header card
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.deepPurple.shade600, Colors.deepPurple.shade900],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text('ORDER #${order['id']}', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
-                                Text(order['type'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Estimating Serving Time',
-                              style: TextStyle(color: Colors.white70, fontSize: 13),
-                            ),
-                            Text(
-                              '${order['estimated_time']} Minutes',
-                              style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                const Icon(Icons.access_time, color: Colors.white70, size: 14),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Ordered at: ${DateFormat('hh:mm a').format(orderTime)}',
-                                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Progress bar and active status text
-                      Text(
-                        status.toUpperCase(),
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _getStatusColor(status)),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _getStatusDescription(status),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Steps Visualizer Vertical Progress
-                      _buildProgressStep(
-                        title: 'Order Placed & Confirmed',
-                        subtitle: 'Received at counter',
-                        isCompleted: progress >= 0.15,
-                        isActive: status == 'Received',
-                        icon: Icons.check_circle_outline,
-                      ),
-                      _buildProgressStep(
-                        title: 'Sent to Kitchen Queue',
-                        subtitle: 'Ticket verified by staff',
-                        isCompleted: progress >= 0.35,
-                        isActive: status == 'Sent to Kitchen',
-                        icon: Icons.send,
-                      ),
-                      _buildProgressStep(
-                        title: 'Preparing Food',
-                        subtitle: 'Chef has started cooking',
-                        isCompleted: progress >= 0.55,
-                        isActive: status == 'Preparing',
-                        icon: Icons.outdoor_grill,
-                      ),
-                      _buildProgressStep(
-                        title: 'Ready for Collection',
-                        subtitle: 'Dish is fully prepared',
-                        isCompleted: progress >= 0.75,
-                        isActive: status == 'Ready',
-                        icon: Icons.room_service_outlined,
-                      ),
-                      _buildProgressStep(
-                        title: 'Served / Picked Up',
-                        subtitle: 'Enjoy your meal!',
-                        isCompleted: progress >= 1.0,
-                        isActive: status == 'Completed' || status == 'Served',
-                        icon: Icons.celebration,
-                      ),
-
-                      const SizedBox(height: 20),
-                      
-                      // Dropdown to switch active simulated customer tracking
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: DropdownButtonFormField<int>(
-                          value: order['id'],
-                          decoration: const InputDecoration(labelText: 'Track different active order', border: InputBorder.none),
-                          items: _liveOrders.map((o) => DropdownMenuItem(
-                            value: o['id'] as int,
-                            child: Text('Order #${o['id']} - ${o['customer_name']}'),
-                          )).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() {
-                                _selectedCustomerOrder = _liveOrders.firstWhere((o) => o['id'] == val);
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProgressStep({
-    required String title,
-    required String subtitle,
-    required bool isCompleted,
-    required bool isActive,
-    required IconData icon,
-  }) {
-    final activeColor = isActive ? Colors.deepPurple : (isCompleted ? Colors.green : Colors.grey.shade300);
-    final labelColor = isActive ? Colors.black : (isCompleted ? Colors.grey.shade800 : Colors.grey.shade400);
-
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Column(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: activeColor.withAlpha(20),
-                  border: Border.all(color: activeColor, width: 2),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 16, color: activeColor),
-              ),
-              Expanded(
-                child: Container(
-                  width: 2,
-                  color: isCompleted ? Colors.green : Colors.grey.shade200,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: labelColor),
-                  ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
-                  ),
-                ],
-              ),
             ),
           ),
         ],
@@ -853,7 +603,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
                       children: [
                         Padding(padding: const EdgeInsets.all(10.0), child: Text(cs['chef_name'])),
                         Padding(padding: const EdgeInsets.all(10.0), child: Text('${cs['orders_completed']}')),
-                        Padding(padding: const EdgeInsets.all(10.0), child: Text('${cs['avg_time']} mins', style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold))),
+                        Padding(padding: const EdgeInsets.all(10.0), child: Text('${cs['avg_time']} mins', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold))),
                       ],
                     )),
                 ],

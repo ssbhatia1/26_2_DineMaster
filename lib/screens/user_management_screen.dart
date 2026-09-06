@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import '../core/database/database_helper.dart';
+import 'package:nexodine/core/theme/app_colors.dart';
 import '../services/sync_service.dart';
 import 'dart:async';
 
@@ -73,7 +74,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              Icon(isEditing ? Icons.edit_outlined : Icons.person_add_alt_1_outlined, color: Colors.deepPurple),
+              Icon(isEditing ? Icons.edit_outlined : Icons.person_add_alt_1_outlined, color: AppColors.primary),
               const SizedBox(width: 8),
               Text(isEditing ? 'Edit Employee Profile' : 'Add New Employee'),
             ],
@@ -175,7 +176,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                 final shift = shiftController.text.trim();
 
                 if (name.isEmpty || username.isEmpty || password.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Please fill name, username, and password')),
                   );
                   return;
@@ -206,13 +207,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
 
                 if (context.mounted) {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(isEditing ? 'Employee profile updated' : 'Employee added successfully')),
                   );
                 }
                 _loadUsers();
               },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
               child: Text(isEditing ? 'Save Changes' : 'Add Employee'),
             ),
           ],
@@ -245,7 +246,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                 await db.delete('users', where: 'id = ?', whereArgs: [id]);
                 if (context.mounted) {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if(false) ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Employee removed successfully')),
                   );
                 }
@@ -305,7 +306,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         // Initials and gradient colors
         final initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'S';
         final List<Color> avatarGradient = isActive 
-            ? [Colors.deepPurple, Colors.indigo] 
+            ? [AppColors.primary, Colors.indigo] 
             : [Colors.grey, Colors.blueGrey];
 
         return Card(
@@ -393,7 +394,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Icon(Icons.phone_outlined, size: 14, color: Colors.deepPurple.shade300),
+                          Icon(Icons.phone_outlined, size: 14, color: AppColors.primaryMaterialColor[300]!),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
@@ -407,7 +408,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Icon(Icons.schedule_outlined, size: 14, color: Colors.deepPurple.shade300),
+                          Icon(Icons.schedule_outlined, size: 14, color: AppColors.primaryMaterialColor[300]!),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
@@ -429,12 +430,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                     IconButton(
                       icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
                       onPressed: () => _showUserDialog(emp),
-                      tooltip: 'Edit Profile',
+                      // tooltip disabled,
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
                       onPressed: () => _confirmDelete(emp['id'], name),
-                      tooltip: 'Delete Staff',
+                      // tooltip disabled,
                     ),
                   ],
                 ),
@@ -465,9 +466,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           elevation: 0,
           bottom: TabBar(
             controller: _tabController,
-            labelColor: Colors.deepPurple,
+            labelColor: AppColors.primary,
             unselectedLabelColor: Colors.grey,
-            indicatorColor: Colors.deepPurple,
+            indicatorColor: AppColors.primary,
             tabs: const [
               Tab(icon: Icon(Icons.restaurant), text: 'Chefs'),
               Tab(icon: Icon(Icons.directions_walk), text: 'Waiters'),
@@ -476,7 +477,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           ),
         ),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: Colors.deepPurple))
+            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
             : Column(
                 children: [
                   // Sleek Search Bar
@@ -485,7 +486,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                     child: TextField(
                       decoration: InputDecoration(
                         hintText: 'Search staff by name or username...',
-                        prefixIcon: const Icon(Icons.search, color: Colors.deepPurple),
+                        prefixIcon: const Icon(Icons.search, color: AppColors.primary),
                         fillColor: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
                         filled: true,
                         contentPadding: const EdgeInsets.symmetric(vertical: 12),
@@ -515,7 +516,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
               ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _showUserDialog(),
-          backgroundColor: Colors.deepPurple,
+          backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           icon: const Icon(Icons.person_add_alt_1_outlined),
           label: const Text('Onboard Staff', style: TextStyle(fontWeight: FontWeight.bold)),
