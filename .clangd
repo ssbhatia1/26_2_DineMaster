@@ -1,0 +1,12 @@
+CompileFlags:
+  Add:
+    - -I../flutter/ephemeral/cpp_client_wrapper/include
+    - -I../flutter/ephemeral
+    - -I.
+    - -IC:/Users/ssbha/Desktop/acccount/26_2_DineMaster/windows/flutter/ephemeral/cpp_client_wrapper/include
+    - -IC:/Users/ssbha/Desktop/acccount/26_2_DineMaster/windows/flutter/ephemeral
+    - -IC:/Users/ssbha/Desktop/acccount/26_2_DineMaster/windows/runner
+    - -std=c++20
+    - -DNOMINMAX
+    - -DUNICODE
+    - -D_UNICODE

@@ -1,0 +1,22 @@
+[
+  {
+    "directory": "C:/Users/ssbha/Desktop/acccount/26_2_DineMaster/windows/runner",
+    "command": "clang++ -std=c++20 -DNOMINMAX -DUNICODE -D_UNICODE -I../flutter/ephemeral/cpp_client_wrapper/include -I../flutter/ephemeral -I. -c main.cpp",
+    "file": "main.cpp"
+  },
+  {
+    "directory": "C:/Users/ssbha/Desktop/acccount/26_2_DineMaster/windows/runner",
+    "command": "clang++ -std=c++20 -DNOMINMAX -DUNICODE -D_UNICODE -I../flutter/ephemeral/cpp_client_wrapper/include -I../flutter/ephemeral -I. -c flutter_window.cpp",
+    "file": "flutter_window.cpp"
+  },
+  {
+    "directory": "C:/Users/ssbha/Desktop/acccount/26_2_DineMaster/windows/runner",
+    "command": "clang++ -std=c++20 -DNOMINMAX -DUNICODE -D_UNICODE -I../flutter/ephemeral/cpp_client_wrapper/include -I../flutter/ephemeral -I. -c utils.cpp",
+    "file": "utils.cpp"
+  },
+  {
+    "directory": "C:/Users/ssbha/Desktop/acccount/26_2_DineMaster/windows/runner",
+    "command": "clang++ -std=c++20 -DNOMINMAX -DUNICODE -D_UNICODE -I../flutter/ephemeral/cpp_client_wrapper/include -I../flutter/ephemeral -I. -c win32_window.cpp",
+    "file": "win32_window.cpp"
+  }
+]

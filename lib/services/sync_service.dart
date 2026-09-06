@@ -1,0 +1,108 @@
+﻿import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class SyncService {
+  static final SyncService instance = SyncService._init();
+  
+  WebSocket? _socket;
+  Timer? _reconnectTimer;
+  bool _isConnecting = false;
+  String? _currentIp;
+
+  final StreamController<String> _syncController = StreamController<String>.broadcast();
+  Stream<String> get syncEvents => _syncController.stream;
+
+  final ValueNotifier<bool> connectionState = ValueNotifier<bool>(false);
+
+  SyncService._init();
+
+  Future<void> initConnection() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isServer = prefs.getBool('is_server') ?? true;
+    final serverIp = prefs.getString('server_ip') ?? 'localhost';
+    
+    _currentIp = isServer ? 'localhost' : serverIp;
+    
+    // Stop any existing connection or reconnect timers
+    await closeConnection();
+    
+    _connect();
+  }
+
+  void _connect() async {
+    if (_isConnecting || _currentIp == null) return;
+    _isConnecting = true;
+    
+    final url = 'ws://$_currentIp:8081';
+    print('SyncService: Connecting to $url...');
+    
+    try {
+      _socket = await WebSocket.connect(url).timeout(const Duration(seconds: 5));
+      connectionState.value = true;
+      _isConnecting = false;
+      print('SyncService: Connected to WebSocket server at $url');
+      
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+
+      _socket!.listen(
+        (data) {
+          if (data is String) {
+            print('SyncService: Received message: $data');
+            _syncController.add(data);
+          }
+        },
+        onDone: () {
+          print('SyncService: WebSocket connection closed by server.');
+          _handleDisconnect();
+        },
+        onError: (error) {
+          print('SyncService: WebSocket error: $error');
+          _handleDisconnect();
+        },
+        cancelOnError: true,
+      );
+    } catch (e) {
+      print('SyncService: Connection failed: $e');
+      _isConnecting = false;
+      _handleDisconnect();
+    }
+  }
+
+  void _handleDisconnect() {
+    connectionState.value = false;
+    _socket = null;
+    
+    // Attempt reconnection every 5 seconds
+    if (_reconnectTimer == null || !_reconnectTimer!.isActive) {
+      _reconnectTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+        print('SyncService: Retrying connection...');
+        _connect();
+      });
+    }
+  }
+
+  void broadcastEvent(String eventType, Map<String, dynamic> data) {
+    // If we are the client, send the event to the server to broadcast to everyone else
+    final payload = '{"event": "$eventType", "data": ${kIsWeb ? '' : '...'}';
+    // For simplicity, we just format as JSON
+    final jsonStr = '{"event": "$eventType", "timestamp": "${DateTime.now().toIso8601String()}"}';
+    
+    if (_socket != null && connectionState.value) {
+      _socket!.add(jsonStr);
+    } else {
+      print('SyncService: Cannot broadcast, socket is not connected');
+    }
+  }
+
+  Future<void> closeConnection() async {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _isConnecting = false;
+    await _socket?.close();
+    _socket = null;
+    connectionState.value = false;
+  }
+}
