@@ -432,22 +432,26 @@ class SettingsScreen extends StatelessWidget {
 
   void _showBackupRestoreDialog(BuildContext context) async {
     final String homeDir = Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '.';
-    final backupDir = Directory(join(homeDir, 'Downloads', 'NexodineBackups'));
-    List<File> backups = [];
+    final backupDir = Directory(join(homeDir, 'Downloads', 'DineMasterBackups'));
+    final legacyDir = Directory(join(homeDir, 'Downloads', 'NexodineBackups'));
 
-    if (await backupDir.exists()) {
-      try {
-        backups = backupDir
-            .listSync()
-            .whereType<File>()
-            .where((file) => file.path.endsWith('.db'))
-            .toList();
-        // Sort newest first
-        backups.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-      } catch (e) {
-        print('Error reading backups directory: $e');
+    List<File> fetchBackups() {
+      final List<File> list = [];
+      if (backupDir.existsSync()) {
+        try {
+          list.addAll(backupDir.listSync().whereType<File>().where((file) => file.path.endsWith('.db')));
+        } catch (_) {}
       }
+      if (legacyDir.existsSync()) {
+        try {
+          list.addAll(legacyDir.listSync().whereType<File>().where((file) => file.path.endsWith('.db')));
+        } catch (_) {}
+      }
+      list.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+      return list;
     }
+
+    List<File> backups = fetchBackups();
 
     if (!context.mounted) return;
 
@@ -470,24 +474,14 @@ class SettingsScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Save a copy of your database to Downloads/NexodineBackups, or restore from a previous session.'),
+                    const Text('Save a copy of your database to Downloads/DineMasterBackups, or restore from a previous session.'),
                     const SizedBox(height: 16),
                     ElevatedButton.icon(
                       onPressed: () async {
                         try {
                           await DatabaseHelper.instance.backupDatabase();
-                          // Reload files list
-                          List<File> updatedBackups = [];
-                          if (await backupDir.exists()) {
-                            updatedBackups = backupDir
-                                .listSync()
-                                .whereType<File>()
-                                .where((file) => file.path.endsWith('.db'))
-                                .toList();
-                            updatedBackups.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-                          }
                           setStateDialog(() {
-                            backups = updatedBackups;
+                            backups = fetchBackups();
                           });
                           if (context.mounted) {
 

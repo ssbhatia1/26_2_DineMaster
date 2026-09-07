@@ -26,7 +26,7 @@ class DatabaseHelper {
     }
 
     if (_database != null) return _database!;
-    _database = await _initDB('nexodine_restaurant.db');
+    _database = await _initDB('dinemaster_restaurant.db');
     return _database!;
   }
 
@@ -37,7 +37,13 @@ class DatabaseHelper {
     }
 
     final dbPath = await getDatabasesPath();
+    final oldPath = join(dbPath, 'nexodine_restaurant.db');
     final path = join(dbPath, filePath);
+    if (await File(oldPath).exists() && !await File(path).exists()) {
+      try {
+        await File(oldPath).copy(path);
+      } catch (_) {}
+    }
 
     final db = await openDatabase(
       path,
@@ -888,11 +894,17 @@ CREATE TABLE bookings (
 
   Future<String> backupDatabase() async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'nexodine_restaurant.db');
-    final dbFile = File(path);
+    final path = join(dbPath, 'dinemaster_restaurant.db');
+    var dbFile = File(path);
+    if (!await dbFile.exists()) {
+      final legacyFile = File(join(dbPath, 'nexodine_restaurant.db'));
+      if (await legacyFile.exists()) {
+        dbFile = legacyFile;
+      }
+    }
     if (await dbFile.exists()) {
       final String homeDir = Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '.';
-      final backupDir = Directory(join(homeDir, 'Downloads', 'NexodineBackups'));
+      final backupDir = Directory(join(homeDir, 'Downloads', 'DineMasterBackups'));
       if (!await backupDir.exists()) {
         await backupDir.create(recursive: true);
       }
@@ -905,7 +917,7 @@ CREATE TABLE bookings (
 
   Future<void> restoreDatabase(String backupPath) async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'nexodine_restaurant.db');
+    final path = join(dbPath, 'dinemaster_restaurant.db');
     final backupFile = File(backupPath);
     if (await backupFile.exists()) {
       final db = await database;

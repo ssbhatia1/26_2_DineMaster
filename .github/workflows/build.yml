@@ -184,11 +184,27 @@ jobs:
       # ============ BUILD PER PLATFORM ============
       - name: Build Windows
         if: ${{ inputs.platform == 'windows' }}
-        shell: bash
+        shell: pwsh
         run: |
           flutter build windows --release
-          cd build/windows/x64/runner/Release
-          powershell -NoProfile -Command "Compress-Archive -Path '*' -DestinationPath '$GITHUB_WORKSPACE/build/dist/${{ inputs.archive-name }}-windows-x64.zip' -Force"
+
+          # Locate or install Inno Setup compiler
+          $isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $isccPath)) {
+            Write-Host "Installing Inno Setup via chocolatey..."
+            choco install innosetup -y --no-progress
+          }
+
+          $distDir = Join-Path $env:GITHUB_WORKSPACE "build\dist"
+          if (-not (Test-Path $distDir)) {
+            New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+          }
+
+          Write-Host "Compiling Windows Setup Wizard installer (.exe)..."
+          & $isccPath "/DMyAppVersion=${{ inputs.version-name }}" "/DMyAppSourceDir=$env:GITHUB_WORKSPACE\build\windows\x64\runner\Release" "/O$distDir" "/F${{ inputs.archive-name }}-windows-setup" "$env:GITHUB_WORKSPACE\windows\installer\dinemaster_setup.iss"
+
+          Write-Host "Creating portable zip archive..."
+          Compress-Archive -Path "$env:GITHUB_WORKSPACE\build\windows\x64\runner\Release\*" -DestinationPath "$distDir\${{ inputs.archive-name }}-windows-x64.zip" -Force
 
       - name: Build Linux
         if: ${{ inputs.platform == 'linux' }}

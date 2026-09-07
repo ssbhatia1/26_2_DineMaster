@@ -89,7 +89,7 @@ typedef struct _GtkContainer GtkContainer;
 #define G_CALLBACK(f) ((void*)(f))
 
 #define G_APPLICATION_NON_UNIQUE 0
-#define APPLICATION_ID "com.nexodine"
+#define APPLICATION_ID "com.dinemaster"
 
 #define g_autoptr(TypeName) TypeName*
 #define g_clear_object(ptr) do {} while(0)

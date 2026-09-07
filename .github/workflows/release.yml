@@ -163,18 +163,16 @@ jobs:
             ### Included platforms
             - **Android**: `dine-master-release.apk` (signed if Android secrets are configured)
             - **Web**: `dine-master-web.tar.gz` (hostable static build)
-            - **Windows**: `dine-master-windows-x64.zip`
+            - **Windows**: `dine-master-windows-setup.exe` (Setup Wizard) / `dine-master-windows-x64.zip` (Portable)
             - **macOS**: `dine-master-macos.app.zip` (signed if macOS secrets are configured)
             - **iOS**: `dine-master-ios.ipa` + App Store Connect (TestFlight) upload (if iOS secrets are configured)
 
             ### Linux
-            - **Linux (best-effort)**: ${{ needs.build-linux-nonfatal.result == 'success' && 'uploaded' || 'skipped (build failure non-fatal)' }}
+            - **Linux**: `dine-master-linux-x64.tar.gz` (${{ needs.build-linux-nonfatal.result == 'success' && 'uploaded' || 'skipped (build failure non-fatal)' }})
 
             Download the artifact for your platform and install it directly.
 
-            > **Note**: These builds use placeholder bundle identifiers
-            > (`com.nexodine` / `com.example.kos`). Update the iOS, Android and
-            > macOS bundle IDs before distributing via public app stores.
+            > **Note**: Application bundle identifier is configured as `com.dinemaster`.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

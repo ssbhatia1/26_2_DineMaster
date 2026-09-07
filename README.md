@@ -272,11 +272,9 @@ Artifacts are retained for 14 days from the CI run.
 
 ## Notes on Production Distribution
 
-- The current iOS and Android bundle identifiers are placeholders
-  (`com.nexodine`) and macOS uses `com.example.kos`. Update these in
-  `ios/Runner.xcodeproj`, `android/app/build.gradle.kts`, and
-  `macos/Runner/Configs/AppInfo.xcconfig` **before** distributing via public app
-  stores or enabling automatic signing.
+- The application bundle identifier is configured as `com.dinemaster`
+  across Android, iOS, and macOS (`ios/Runner.xcodeproj`,
+  `android/app/build.gradle.kts`, and `macos/Runner/Configs/AppInfo.xcconfig`).
 - Android release builds sign with the **debug keystore by default**. Configure
   the Android signing secrets (described above) before shipping to Google Play.
 - App Store / TestFlight distribution requires a paid Apple Developer account, a
