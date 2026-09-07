@@ -79,6 +79,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Java (Android)
+        if: ${{ inputs.platform == 'android' }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -181,7 +188,7 @@ jobs:
         run: |
           flutter build windows --release
           cd build/windows/x64/runner/Release
-          powershell -NoProfile -Command "Compress-Archive -Path '*' -DestinationPath '$GITHUB_WORKSPACE/build/dist/nexodine-windows-x64.zip' -Force"
+          powershell -NoProfile -Command "Compress-Archive -Path '*' -DestinationPath '$GITHUB_WORKSPACE/build/dist/${{ inputs.archive-name }}-windows-x64.zip' -Force"
 
       - name: Build Linux
         if: ${{ inputs.platform == 'linux' }}
@@ -191,7 +198,7 @@ jobs:
           sudo apt-get install -y ninja-build libgtk-3-dev
           flutter build linux --release
           cd build/linux/x64/release/bundle
-          tar -czf "$GITHUB_WORKSPACE/build/dist/nexodine-linux-x64.tar.gz" .
+          tar -czf "$GITHUB_WORKSPACE/build/dist/${{ inputs.archive-name }}-linux-x64.tar.gz" .
 
       - name: Build macOS
         if: ${{ inputs.platform == 'macos' }}
@@ -200,7 +207,7 @@ jobs:
           flutter build macos --release
           cd build/macos/Build/Products/Release
           APP_BUNDLE="$(ls -d *.app | head -n 1)"
-          ditto -c -k --keepParent "$APP_BUNDLE" "$GITHUB_WORKSPACE/build/dist/nexodine-macos.app.zip"
+          ditto -c -k --keepParent "$APP_BUNDLE" "$GITHUB_WORKSPACE/build/dist/${{ inputs.archive-name }}-macos.app.zip"
 
       - name: Build Android
         if: ${{ inputs.platform == 'android' }}
@@ -208,7 +215,7 @@ jobs:
         run: |
           flutter build apk --release --build-name ${{ inputs.version-name }} --build-number ${{ inputs.build-number }}
           cd build/app/outputs/flutter-apk
-          cp app-release.apk "$GITHUB_WORKSPACE/build/dist/nexodine-release.apk"
+          cp app-release.apk "$GITHUB_WORKSPACE/build/dist/${{ inputs.archive-name }}-release.apk"
 
       - name: Build Web
         if: ${{ inputs.platform == 'web' }}
@@ -216,7 +223,7 @@ jobs:
         run: |
           flutter build web --release
           cd build/web
-          tar -czf "$GITHUB_WORKSPACE/build/dist/nexodine-web.tar.gz" .
+          tar -czf "$GITHUB_WORKSPACE/build/dist/${{ inputs.archive-name }}-web.tar.gz" .
 
       - name: Build iOS (ipa)
         if: ${{ inputs.platform == 'ios' }}
@@ -226,7 +233,7 @@ jobs:
           cd build/ios/iphoneos
           mkdir -p Payload
           cp -R Runner.app Payload/Runner.app
-          zip -r "$GITHUB_WORKSPACE/build/dist/nexodine-ios.ipa" Payload
+          zip -r "$GITHUB_WORKSPACE/build/dist/${{ inputs.archive-name }}-ios.ipa" Payload
 
       - name: Upload iOS to App Store Connect (TestFlight)
         if: ${{ inputs.platform == 'ios' && inputs.upload-ios && success() }}

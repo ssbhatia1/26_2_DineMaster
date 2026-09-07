@@ -10,3 +10,13 @@ CompileFlags:
     - -DNOMINMAX
     - -DUNICODE
     - -D_UNICODE
+---
+If:
+  PathMatch: .*linux[/\\]runner[/\\].*
+CompileFlags:
+  Add:
+    - -IC:/Users/ssbha/Desktop/acccount/26_2_DineMaster/linux/include_stubs
+    - -IC:/Users/ssbha/Desktop/acccount/26_2_DineMaster/linux/flutter
+Diagnostics:
+  Suppress: ["*"]
+  UnusedIncludes: None

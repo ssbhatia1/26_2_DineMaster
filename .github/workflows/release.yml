@@ -161,11 +161,11 @@ jobs:
             Automated production release built by GitHub Actions.
 
             ### Included platforms
-            - **Android**: `nexodine-release.apk` (signed if Android secrets are configured)
-            - **Web**: `nexodine-web.tar.gz` (hostable static build)
-            - **Windows**: `nexodine-windows-x64.zip`
-            - **macOS**: `nexodine-macos.app.zip` (signed if macOS secrets are configured)
-            - **iOS**: `nexodine-ios.ipa` + App Store Connect (TestFlight) upload (if iOS secrets are configured)
+            - **Android**: `dine-master-release.apk` (signed if Android secrets are configured)
+            - **Web**: `dine-master-web.tar.gz` (hostable static build)
+            - **Windows**: `dine-master-windows-x64.zip`
+            - **macOS**: `dine-master-macos.app.zip` (signed if macOS secrets are configured)
+            - **iOS**: `dine-master-ios.ipa` + App Store Connect (TestFlight) upload (if iOS secrets are configured)
 
             ### Linux
             - **Linux (best-effort)**: ${{ needs.build-linux-nonfatal.result == 'success' && 'uploaded' || 'skipped (build failure non-fatal)' }}
