@@ -23,10 +23,7 @@ jobs:
       archive-name: dine-master
       version-name: 1.0.0
       build-number: ${{ github.run_number }}
-    secrets:
-      ANDROID_CREDENTIALS: ${{ secrets.ANDROID_CREDENTIALS }}
-      ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
-      ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+    secrets: inherit
 
   build-web:
     name: Build Web
@@ -71,10 +68,7 @@ jobs:
       archive-name: dine-master
       version-name: 1.0.0
       build-number: ${{ github.run_number }}
-    secrets:
-      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-      MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-      MACOS_CERTIFICATE_NAME: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+    secrets: inherit
 
   build-ios:
     name: Build iOS
@@ -86,12 +80,4 @@ jobs:
       archive-name: dine-master
       version-name: 1.0.0
       build-number: ${{ github.run_number }}
-    secrets:
-      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_CERTIFICATE_FILENAME: ${{ secrets.APPLE_CERTIFICATE_FILENAME }}
-      APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
-      APPLE_PROVISIONING_FILENAME: ${{ secrets.APPLE_PROVISIONING_FILENAME }}
-      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-      APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+    secrets: inherit

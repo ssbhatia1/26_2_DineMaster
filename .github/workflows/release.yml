@@ -40,10 +40,7 @@ jobs:
       archive-name: dine-master
       version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
-    secrets:
-      ANDROID_CREDENTIALS: ${{ secrets.ANDROID_CREDENTIALS }}
-      ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
-      ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+    secrets: inherit
 
   build-web:
     name: Build Web
@@ -77,10 +74,7 @@ jobs:
       archive-name: dine-master
       version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
-    secrets:
-      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-      MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-      MACOS_CERTIFICATE_NAME: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+    secrets: inherit
 
   build-ios:
     name: Build iOS
@@ -93,15 +87,7 @@ jobs:
       version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
       upload-ios: true
-    secrets:
-      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_CERTIFICATE_FILENAME: ${{ secrets.APPLE_CERTIFICATE_FILENAME }}
-      APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
-      APPLE_PROVISIONING_FILENAME: ${{ secrets.APPLE_PROVISIONING_FILENAME }}
-      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-      APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+    secrets: inherit
 
   # Linux desktop builds are best-effort: they commonly fail in GitHub CI
   # due to missing GTK/system libraries, so a failure here is reported but
@@ -143,27 +129,26 @@ jobs:
           ASSET_COUNT="$(gh release view "$GITHUB_REF_NAME" --json assets -q '.assets | length' 2>/dev/null || true)"
           if [ -n "$ASSET_COUNT" ] && [ "$ASSET_COUNT" -gt 0 ] 2>/dev/null; then
             echo "::notice::Release $GITHUB_REF_NAME already has $ASSET_COUNT artifact(s); skipping duplicate build."
-            echo "SKIP_RELEASE=true" >> "$GITHUB_ENV"
+            echo "skip_release=true" >> "$GITHUB_OUTPUT"
           else
-            echo "SKIP_RELEASE=false" >> "$GITHUB_ENV"
+            echo "skip_release=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Download release artifacts
-        if: env.SKIP_RELEASE != 'true'
+        if: steps.dupcheck.outputs.skip_release != 'true'
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
           merge-multiple: false
 
       - name: Print artifact summary
-        if: env.SKIP_RELEASE != 'true'
+        if: steps.dupcheck.outputs.skip_release != 'true'
         shell: bash
         run: |
           find release-artifacts -type f -printf '%p (%s bytes)\n'
-          echo "linux_build_success=${{ needs.build-linux-nonfatal.result }}" >> "$GITHUB_ENV"
 
       - name: Create Private GitHub Release
-        if: env.SKIP_RELEASE != 'true'
+        if: steps.dupcheck.outputs.skip_release != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
@@ -183,7 +168,7 @@ jobs:
             - **iOS**: `nexodine-ios.ipa` + App Store Connect (TestFlight) upload (if iOS secrets are configured)
 
             ### Linux
-            - **Linux (best-effort)**: ${{ env.linux_build_success == 'success' && 'uploaded' || 'skipped (build failure non-fatal)' }}
+            - **Linux (best-effort)**: ${{ needs.build-linux-nonfatal.result == 'success' && 'uploaded' || 'skipped (build failure non-fatal)' }}
 
             Download the artifact for your platform and install it directly.
 
@@ -201,13 +186,13 @@ jobs:
           PUBLIC_REPO_PAT: ${{ secrets.PUBLIC_REPO_PAT }}
         run: |
           if [ -n "$PUBLIC_RELEASE_REPO" ] && [ -n "$PUBLIC_REPO_PAT" ]; then
-            echo "has_public_secrets=true" >> "$GITHUB_ENV"
+            echo "has_public_secrets=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_public_secrets=false" >> "$GITHUB_ENV"
+            echo "has_public_secrets=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Publish to Public Release Repository
-        if: env.SKIP_RELEASE != 'true' && env.has_public_secrets == 'true'
+        if: steps.dupcheck.outputs.skip_release != 'true' && steps.check_public_secrets.outputs.has_public_secrets == 'true'
         uses: softprops/action-gh-release@v2
         with:
           repository: ${{ secrets.PUBLIC_RELEASE_REPO }}
