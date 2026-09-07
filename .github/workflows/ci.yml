@@ -3,8 +3,26 @@ name: CI - Push to Master
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
+  versions:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version-name: ${{ steps.resolve.outputs.version-name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Resolve version
+        id: resolve
+        shell: bash
+        run: |
+          PUB_VER=$(grep '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//; s/+.*//; s/[[:space:]]//g')
+          CLEAN_VER="${PUB_VER:-1.0.0}"
+          echo "version-name=${CLEAN_VER}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version name: ${CLEAN_VER}"
+
   validate:
     name: Validate & Test
     uses: ./.github/workflows/validate.yml
@@ -15,69 +33,69 @@ jobs:
   # separate job so caching and secret wiring stays consistent.
   build-android:
     name: Build Android
-    needs: validate
+    needs: [validate, versions]
     uses: ./.github/workflows/build.yml
     with:
       runner: ubuntu-latest
       platform: android
       archive-name: dine-master
-      version-name: 1.0.0
+      version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
     secrets: inherit
 
   build-web:
     name: Build Web
-    needs: validate
+    needs: [validate, versions]
     uses: ./.github/workflows/build.yml
     with:
       runner: ubuntu-latest
       platform: web
       archive-name: dine-master
-      version-name: 1.0.0
+      version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
 
   build-windows:
     name: Build Windows
-    needs: validate
+    needs: [validate, versions]
     uses: ./.github/workflows/build.yml
     with:
       runner: windows-latest
       platform: windows
       archive-name: dine-master
-      version-name: 1.0.0
+      version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
 
   build-linux:
     name: Build Linux
-    needs: validate
+    needs: [validate, versions]
     uses: ./.github/workflows/build.yml
     with:
       runner: ubuntu-latest
       platform: linux
       archive-name: dine-master
-      version-name: 1.0.0
+      version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
 
   build-macos:
     name: Build macOS
-    needs: validate
+    needs: [validate, versions]
     uses: ./.github/workflows/build.yml
     with:
       runner: macos-latest
       platform: macos
       archive-name: dine-master
-      version-name: 1.0.0
+      version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
     secrets: inherit
 
   build-ios:
     name: Build iOS
-    needs: validate
+    needs: [validate, versions]
     uses: ./.github/workflows/build.yml
     with:
       runner: macos-latest
       platform: ios
       archive-name: dine-master
-      version-name: 1.0.0
+      version-name: ${{ needs.versions.outputs.version-name }}
       build-number: ${{ github.run_number }}
     secrets: inherit
