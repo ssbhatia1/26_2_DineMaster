@@ -6,7 +6,8 @@
         "${workspaceFolder}/windows/runner",
         "${workspaceFolder}/windows/flutter/ephemeral",
         "${workspaceFolder}/windows/flutter/ephemeral/cpp_client_wrapper/include",
-        "${workspaceFolder}/windows"
+        "${workspaceFolder}/windows",
+        "${workspaceFolder}/linux/include_stubs"
       ],
       "defines": [
         "_DEBUG",

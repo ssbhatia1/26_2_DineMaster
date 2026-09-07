@@ -12,10 +12,12 @@ CompileFlags:
     - -D_UNICODE
 ---
 If:
-  PathMatch: .*linux[/\\]runner[/\\].*
+  PathMatch: .*linux[/\\].*
 CompileFlags:
   Add:
+    - -Ilinux/include_stubs
     - -IC:/Users/ssbha/Desktop/acccount/26_2_DineMaster/linux/include_stubs
+    - -Ilinux/flutter
     - -IC:/Users/ssbha/Desktop/acccount/26_2_DineMaster/linux/flutter
 Diagnostics:
   Suppress: ["*"]
