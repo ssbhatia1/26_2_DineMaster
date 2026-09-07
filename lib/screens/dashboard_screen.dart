@@ -150,6 +150,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
     },
   ];
 
+  Widget _buildSidebar(BuildContext context, int activeIndex) {
+    return Container(
+      width: 260,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF1E1E2F),
+            Color(0xFF0F0F1A),
+          ],
+        ),
+      ),
+      child: Column(
+        children: [
+          // App Brand
+          Container(
+            padding: const EdgeInsets.all(24),
+            child: Row(
+              children: [
+                Image.asset(
+                  'assets/images/logo.jpg',
+                  height: 40,
+                  width: 40,
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'DINE MASTER',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    Text(
+                      'Hi, $_username',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const Divider(color: Colors.white12, height: 1),
+          
+          // Nav Items
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              children: _buildNavSections(context, activeIndex),
+            ),
+          ),
+
+          // User Profile
+          const Divider(color: Colors.white12, height: 1),
+          ListTile(
+            leading: const CircleAvatar(
+              backgroundColor: Colors.white,
+              child: Icon(Icons.person, color: AppColors.primary),
+            ),
+            title: const Text(
+              'Owner Account',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            subtitle: const Text(
+              'System Admin',
+              style: TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+            trailing: IconButton(
+              icon: const Icon(Icons.logout, color: Colors.white70, size: 20),
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.remove('token');
+                await prefs.remove('username');
+                if (context.mounted) {
+                  context.go('/');
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
@@ -169,98 +262,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (activeIndex == -1) activeIndex = 0;
 
     return Scaffold(
+      drawer: !isDesktop
+          ? Drawer(
+              backgroundColor: const Color(0xFF1E1E2F),
+              child: _buildSidebar(context, activeIndex),
+            )
+          : null,
       body: Row(
         children: [
           if (isDesktop) ...[
             // Sidebar for Desktop
-            Container(
-              width: 260,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF1E1E2F),
-                    Color(0xFF0F0F1A),
-                  ],
-                ),
-              ),
-              child: Column(
-                children: [
-                  // App Brand
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    child: Row(
-                      children: [
-                        Image.asset(
-                          'assets/images/logo.jpg',
-                          height: 40,
-                          width: 40,
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'DINE MASTER',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1,
-                              ),
-                            ),
-                            Text(
-                              'Hi, $_username',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(color: Colors.white12, height: 1),
-                  
-                  // Nav Items
-                  Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      children: _buildNavSections(context, activeIndex),
-                    ),
-                  ),
-
-                  // User Profile
-                  const Divider(color: Colors.white12, height: 1),
-                  ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Colors.white,
-                      child: Icon(Icons.person, color: AppColors.primary),
-                    ),
-                    title: const Text(
-                      'Owner Account',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
-                    subtitle: const Text(
-                      'System Admin',
-                      style: TextStyle(color: Colors.white70, fontSize: 11),
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.logout, color: Colors.white70, size: 20),
-                      onPressed: () async {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.remove('token');
-                        await prefs.remove('username');
-                        context.go('/');
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-              ),
-            ),
+            _buildSidebar(context, activeIndex),
           ],
           
           // Main Content Area
@@ -269,6 +281,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 // Top App Bar
                 AppBar(
+                  leading: !isDesktop
+                      ? Builder(
+                          builder: (context) => IconButton(
+                            icon: const Icon(Icons.menu),
+                            onPressed: () {
+                              Scaffold.of(context).openDrawer();
+                            },
+                          ),
+                        )
+                      : null,
                   title: Text(
                     _navItems[activeIndex]['label'],
                     style: const TextStyle(fontWeight: FontWeight.bold),
@@ -327,24 +349,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: !isDesktop
-          ? BottomNavigationBar(
-              currentIndex: activeIndex >= 5 ? 0 : activeIndex,
-              type: BottomNavigationBarType.fixed,
-              selectedItemColor: AppColors.primaryMaterialColor[900]!,
-              unselectedItemColor: Colors.grey,
-              onTap: (index) {
-                context.go(_navItems[index]['route']);
-              },
-              items: _navItems
-                  .take(5) // Only show first 5 on mobile bottom nav
-                  .map((item) => BottomNavigationBarItem(
-                        icon: Icon(item['icon']),
-                        label: item['label'],
-                      ))
-                  .toList(),
-            )
-          : null,
     );
   }
 

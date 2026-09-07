@@ -1,4 +1,4 @@
-﻿name: Release
+name: Release
 
 on:
   push:
@@ -162,7 +162,7 @@ jobs:
           find release-artifacts -type f -printf '%p (%s bytes)\n'
           echo "linux_build_success=${{ needs.build-linux-nonfatal.result }}" >> "$GITHUB_ENV"
 
-      - name: Create GitHub Release
+      - name: Create Private GitHub Release
         if: env.SKIP_RELEASE != 'true'
         uses: softprops/action-gh-release@v2
         with:
@@ -192,3 +192,33 @@ jobs:
             > macOS bundle IDs before distributing via public app stores.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for Public Release Secrets
+        id: check_public_secrets
+        shell: bash
+        env:
+          PUBLIC_RELEASE_REPO: ${{ secrets.PUBLIC_RELEASE_REPO }}
+          PUBLIC_REPO_PAT: ${{ secrets.PUBLIC_REPO_PAT }}
+        run: |
+          if [ -n "$PUBLIC_RELEASE_REPO" ] && [ -n "$PUBLIC_REPO_PAT" ]; then
+            echo "has_public_secrets=true" >> "$GITHUB_ENV"
+          else
+            echo "has_public_secrets=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Publish to Public Release Repository
+        if: env.SKIP_RELEASE != 'true' && env.has_public_secrets == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ secrets.PUBLIC_RELEASE_REPO }}
+          token: ${{ secrets.PUBLIC_REPO_PAT }}
+          tag_name: ${{ github.ref_name }}
+          name: 'Dine Master ${{ github.ref_name }}'
+          files: release-artifacts/**/*
+          generate_release_notes: true
+          body: |
+            ## Dine Master ${{ github.ref_name }}
+
+            Public automated production release.
+
+            Download the artifact for your platform and install it directly.
