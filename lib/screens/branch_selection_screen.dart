@@ -1,6 +1,6 @@
 ﻿import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:nexodine/core/theme/app_colors.dart';
+import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../core/database/database_helper.dart';

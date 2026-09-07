@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/database/database_helper.dart';
-import 'package:nexodine/core/theme/app_colors.dart';
+import 'package:dine_master/core/theme/app_colors.dart';
 import '../services/sync_service.dart';
 import 'dart:async';
 

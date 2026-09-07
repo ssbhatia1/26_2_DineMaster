@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:nexodine/core/theme/app_colors.dart';
+import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:file_picker/file_picker.dart' as fp;
 import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';

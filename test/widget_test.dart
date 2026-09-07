@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nexodine/main.dart';
+import 'package:dine_master/main.dart';
 
 void main() {
   testWidgets('Dine Master Login Screen Smoke Test', (WidgetTester tester) async {

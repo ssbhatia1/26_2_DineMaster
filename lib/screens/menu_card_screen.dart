@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nexodine/core/theme/app_colors.dart';
+import 'package:dine_master/core/theme/app_colors.dart';
 import '../repositories/product_repository.dart';
 import '../models/product_model.dart';
 import '../widgets/food_attributes_badge.dart';

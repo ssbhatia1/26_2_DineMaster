@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:nexodine/core/theme/app_colors.dart';
+import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/database_helper.dart';

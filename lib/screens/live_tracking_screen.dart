@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nexodine/core/theme/app_colors.dart';
+import 'package:dine_master/core/theme/app_colors.dart';
 import '../core/database/database_helper.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';

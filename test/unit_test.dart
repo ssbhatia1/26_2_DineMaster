@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nexodine/models/product_model.dart';
-import 'package:nexodine/models/table_model.dart';
+import 'package:dine_master/models/product_model.dart';
+import 'package:dine_master/models/table_model.dart';
 
 void main() {
   group('ProductModel Unit Tests', () {
