@@ -1,0 +1,12 @@
+# ==============================================================================
+# Dine Master - Git Attributes & Release Archive Filtering
+# ==============================================================================
+# Exclude all repository source code, configs, tests, and metadata from
+# GitHub-generated release archives (Source code .zip / .tar.gz).
+# Only compiled release builds are distributed.
+
+* export-ignore
+.* export-ignore
+
+# Allow release notice so downloaded archive provides clear installation guidance
+NOTICE.txt !export-ignore

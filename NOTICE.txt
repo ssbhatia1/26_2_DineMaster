@@ -1,0 +1,12 @@
+Dine Master - Release Distribution
+==================================
+
+The source code for Dine Master is proprietary and excluded from this archive.
+
+Please download the compiled application builds directly from the GitHub Release Assets:
+- Android: dine-master-release.apk
+- Windows: dine-master-windows-setup.exe (Installer) / dine-master-windows-x64.zip (Portable)
+- macOS: dine-master-macos.app.zip
+- Linux: dine-master-linux-x64.tar.gz
+- Web: dine-master-web.tar.gz
+- iOS: dine-master-ios.ipa
