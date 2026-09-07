@@ -29,6 +29,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 PrivilegesRequired=lowest
 CloseApplications=yes
 RestartIfNeededByRun=no
+SetupIconFile=..\runner\resources\app_icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
@@ -39,7 +40,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "{#MyAppSourceDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.db,*.sqlite,*.sqlite3,*.db-journal,*.db-wal"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

@@ -107,6 +107,7 @@ void gtk_window_set_title(GtkWindow* window, const gchar* title);
 void gtk_window_set_default_size(GtkWindow* window, int width, int height);
 GtkWidget* gtk_widget_get_toplevel(GtkWidget* widget);
 GtkWidget* gtk_application_window_new(GtkApplication* application);
+gboolean gtk_window_set_icon_from_file(GtkWindow* window, const gchar* filename, GError** err);
 void gtk_widget_realize(GtkWidget* widget);
 void gtk_widget_grab_focus(GtkWidget* widget);
 void gtk_container_add(GtkContainer* container, GtkWidget* widget);

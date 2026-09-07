@@ -56,11 +56,6 @@ class DatabaseHelper {
   }
 
   Future<void> _ensureTablesExist(Database db) async {
-    // Cleanup deprecated water dummy data
-    try {
-      await db.delete('products', where: "name LIKE '%Water%' AND category = 'Beverages'");
-    } catch (_) {}
-
     // 1. Check/create ingredients
     await db.execute('''
       CREATE TABLE IF NOT EXISTS ingredients (
