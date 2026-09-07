@@ -1,5 +1,15 @@
 {
     "java.configuration.updateBuildConfiguration": "automatic",
-    "java.jdt.ls.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
-    "java.import.gradle.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr"
+    "java.jdt.ls.java.home": "c:\\Users\\ssbha\\Desktop\\acccount\\26_2_DineMaster\\.venv\\jdk",
+    "java.import.gradle.java.home": "c:\\Users\\ssbha\\Desktop\\acccount\\26_2_DineMaster\\.venv\\jdk",
+    "gradle.java.home": "c:\\Users\\ssbha\\Desktop\\acccount\\26_2_DineMaster\\.venv\\jdk",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-21",
+            "path": "c:\\Users\\ssbha\\Desktop\\acccount\\26_2_DineMaster\\.venv\\jdk",
+            "default": true
+        }
+    ],
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+    "python.terminal.activateEnvironment": true
 }
