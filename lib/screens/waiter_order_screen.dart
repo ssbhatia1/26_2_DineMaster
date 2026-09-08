@@ -12,6 +12,7 @@ import 'waiter/waiter_models.dart';
 import 'waiter/components/waiter_cart_panel.dart';
 import 'waiter/components/waiter_menu_view.dart';
 import 'waiter/components/waiter_floor_plan_view.dart';
+import 'waiter/components/item_customization_dialog.dart';
 
 class WaiterOrderScreen extends StatefulWidget {
   final int? selectedTableId;
@@ -115,11 +116,11 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
           sections.add(table.section);
         }
 
-        // Check active order
+        // Check active order (unpaid and active)
         final List<Map<String, dynamic>> activeOrders = await db.query(
           'orders',
-          where: 'table_id = ? AND status IN (\'Received\', \'Sent to Kitchen\', \'Preparing\', \'Ready\', \'Served\', \'Billing Pending\') AND restaurant_id = ?',
-          whereArgs: [table.id, restaurantId],
+          where: 'table_id = ? AND status IN (\'Received\', \'Sent to Kitchen\', \'In Kitchen\', \'Preparing\', \'Ready\', \'Served\', \'Billing Pending\', \'Held\') AND payment_status != ? AND (restaurant_id = ? OR restaurant_id IS NULL)',
+          whereArgs: [table.id, 'Paid', restaurantId],
           orderBy: 'id DESC',
           limit: 1,
         );
@@ -136,9 +137,38 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
           itemsCount = items.fold(0, (sum, it) => sum + (it['quantity'] as int? ?? 1));
         }
 
+        // Check active booking (reservation active within current hour window)
+        final now = DateTime.now();
+        final List<Map<String, dynamic>> bookingMaps = await db.query(
+          'bookings',
+          where: 'table_id = ? AND status = ? AND (restaurant_id = ? OR restaurant_id IS NULL)',
+          whereArgs: [table.id, 'Confirmed', restaurantId],
+        );
+
+        Map<String, dynamic>? currentBooking;
+        for (final b in bookingMaps) {
+          final bTimeStr = b['booking_time'] as String?;
+          if (bTimeStr == null) continue;
+          final bTime = DateTime.tryParse(bTimeStr);
+          if (bTime == null) continue;
+          final slotEnd = bTime.add(const Duration(hours: 1));
+          if (!now.isBefore(bTime) && now.isBefore(slotEnd)) {
+            currentBooking = b;
+            break;
+          }
+        }
+
+        // Keep status as Occupied if order or booking is active
+        TableModel displayTable = table;
+        if ((activeOrder != null || currentBooking != null) && table.status == 'Available') {
+          await db.update('tables', {'status': 'Occupied'}, where: 'id = ?', whereArgs: [table.id]);
+          displayTable = table.copyWith(status: 'Occupied');
+        }
+
         enrichedTables.add(WaiterTableInfo(
-          table: table,
+          table: displayTable,
           activeOrder: activeOrder,
+          activeBooking: currentBooking,
           orderItemsCount: itemsCount,
         ));
       }
@@ -220,8 +250,24 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   }
 
   // --- CART MANAGEMENT ---
-  void _handleProductTap(ProductModel product) {
-    _addToCart(product, qty: 1);
+  Future<void> _handleProductTap(ProductModel product) async {
+    if (product.hasPreferences) {
+      final res = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => ItemCustomizationDialog(product: product),
+      );
+      if (res != null) {
+        _addToCart(
+          product,
+          dietaryPreference: res['dietaryPreference'],
+          tastePreference: res['tastePreference'],
+          notes: res['notes'],
+          qty: res['quantity'] ?? 1,
+        );
+      }
+    } else {
+      _addToCart(product, qty: 1);
+    }
   }
 
   void _addToCart(

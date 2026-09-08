@@ -44,12 +44,13 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
 
   Future<void> _loadProducts() async {
     final db = await DatabaseHelper.instance.database;
+    final restId = DatabaseHelper.currentRestaurantId ?? 1;
     final whereClause = _selectedCategory == 'All'
-        ? 'restaurant_id = ?'
-        : 'restaurant_id = ? AND category = ?';
+        ? '(restaurant_id = ? OR restaurant_id IS NULL)'
+        : '(restaurant_id = ? OR restaurant_id IS NULL) AND category = ?';
     final whereArgs = _selectedCategory == 'All'
-        ? [DatabaseHelper.currentRestaurantId]
-        : [DatabaseHelper.currentRestaurantId, _selectedCategory];
+        ? [restId]
+        : [restId, _selectedCategory];
 
     final productMaps = await db.query(
       'products',
@@ -1075,6 +1076,395 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
     );
   }
 
+  Future<void> _toggleProductAvailability(ProductModel product) async {
+    if (product.id == null) return;
+    final db = await DatabaseHelper.instance.database;
+    final newStatus = !product.isAvailable;
+    await db.update(
+      'products',
+      {'is_available': newStatus ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [product.id],
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(newStatus ? '${product.name} is now In Stock' : '${product.name} is now Out of Stock'),
+        backgroundColor: newStatus ? const Color(0xFF2E7D32) : Colors.amber.shade800,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    _loadProducts();
+  }
+
+  void _showProductDetails(ProductModel product) {
+    Color typeColor = Colors.red;
+    String typeLabel = 'Non-Veg';
+    if (product.isVeg == 1) {
+      typeColor = Colors.green;
+      typeLabel = 'Pure Veg';
+    } else if (product.isVeg == 2) {
+      typeColor = Colors.orange;
+      typeLabel = 'Contains Egg';
+    } else if (product.isVeg == 3) {
+      typeColor = Colors.blue;
+      typeLabel = 'Jain Friendly';
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                border: Border.all(color: typeColor.withOpacity(0.4), width: 1.5),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(color: typeColor, shape: BoxShape.circle),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                product.name,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '₹${product.price.toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: product.isAvailable ? Colors.green.shade50 : Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: product.isAvailable ? Colors.green.shade300 : Colors.red.shade300,
+                      ),
+                    ),
+                    child: Text(
+                      product.isAvailable ? 'IN STOCK' : 'OUT OF STOCK',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: product.isAvailable ? Colors.green.shade800 : Colors.red.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Text('Category: ', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  Text(product.category, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Spacer(),
+                  Text('GST: ', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  Text('${product.gstPercentage}%', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Text('Diet Type: ', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  Text(typeLabel, style: TextStyle(color: typeColor, fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              if (product.description != null && product.description!.trim().isNotEmpty) ...[
+                const Divider(height: 20),
+                const Text('Description', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 4),
+                Text(product.description!, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+              ],
+              if (product.ingredients != null && product.ingredients!.trim().isNotEmpty) ...[
+                const Divider(height: 20),
+                const Text('Ingredients', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 4),
+                Text(product.ingredients!, style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+              ],
+              if (product.hasAttributes || product.hasPreferences) ...[
+                const Divider(height: 20),
+                const Text('Attributes & Preferences', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 6),
+                FoodAttributesBadge(product: product, compact: false),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.menu_book, size: 16),
+            label: const Text('Recipe'),
+            onPressed: () async {
+              Navigator.pop(context);
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => RecipeManagementScreen(product: product.toMap()),
+                ),
+              );
+              if (result == true) _loadProducts();
+            },
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+            icon: const Icon(Icons.edit, size: 16),
+            label: const Text('Edit Product'),
+            onPressed: () {
+              Navigator.pop(context);
+              _showProductDialog(product);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductCard(ProductModel product) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isAvailable = product.isAvailable;
+
+    Color typeColor = Colors.red;
+    if (product.isVeg == 1) {
+      typeColor = Colors.green;
+    } else if (product.isVeg == 2) {
+      typeColor = Colors.orange;
+    } else if (product.isVeg == 3) {
+      typeColor = Colors.blue;
+    }
+
+    return Card(
+      elevation: 0,
+      color: isDark ? const Color(0xFF1E1E24) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+          width: 1.5,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Opacity(
+        opacity: isAvailable ? 1.0 : 0.5,
+        child: InkWell(
+          onTap: () => _showProductDialog(product),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: typeColor.withOpacity(0.4), width: 1.5),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: typeColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.info_outline, color: Colors.grey, size: 18),
+                              onPressed: () => _showProductDetails(product),
+                              constraints: const BoxConstraints(),
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Product Details',
+                            ),
+                            const SizedBox(width: 4),
+                            PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert, color: Colors.grey, size: 18),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              tooltip: 'Product Actions',
+                              onSelected: (val) async {
+                                if (val == 'edit') {
+                                  _showProductDialog(product);
+                                } else if (val == 'recipe') {
+                                  final result = await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => RecipeManagementScreen(product: product.toMap()),
+                                    ),
+                                  );
+                                  if (result == true) _loadProducts();
+                                } else if (val == 'toggle_stock') {
+                                  await _toggleProductAvailability(product);
+                                } else if (val == 'delete') {
+                                  _confirmDelete(product.id, product.name);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'edit',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.edit_outlined, size: 18, color: Colors.blue),
+                                      SizedBox(width: 8),
+                                      Text('Edit Product'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'recipe',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.menu_book, size: 18, color: Colors.orange),
+                                      SizedBox(width: 8),
+                                      Text('Manage Recipe'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'toggle_stock',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        product.isAvailable ? Icons.remove_shopping_cart : Icons.add_shopping_cart,
+                                        size: 18,
+                                        color: product.isAvailable ? Colors.amber.shade800 : Colors.green,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(product.isAvailable ? 'Mark Out of Stock' : 'Mark In Stock'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                      SizedBox(width: 8),
+                                      Text('Delete Product'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.grey.shade800.withOpacity(0.5) : AppColors.primaryLight.withOpacity(0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          product.isVeg == 1 ? Icons.local_pizza : Icons.lunch_dining,
+                          size: 36,
+                          color: AppColors.primaryMaterialColor[300]!,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          product.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: isDark ? Colors.white : Colors.grey.shade800,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (product.hasAttributes || product.hasPreferences) ...[
+                          const SizedBox(height: 3),
+                          FoodAttributesBadge(product: product, compact: true, maxVisible: 2),
+                        ],
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '₹${product.price.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                product.category,
+                                style: const TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (!isAvailable)
+                Container(
+                  color: Colors.black.withOpacity(0.05),
+                  alignment: Alignment.center,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade600,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'SOLD OUT',
+                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filteredProducts;
@@ -1099,13 +1489,11 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
           IconButton(
             icon: const Icon(Icons.category_outlined),
             onPressed: _showCategoryManager,
-            // tooltip disabled,
           ),
           IconButton(
             onPressed: () async {
               await _showIngredientsManager();
             },
-            // tooltip disabled,
             icon: const Icon(Icons.inventory),
           ),
           const SizedBox(width: 8),
@@ -1160,142 +1548,18 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                           ],
                         ),
                       )
-                    : ListView.builder(
+                    : GridView.builder(
                         padding: const EdgeInsets.all(16),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 220,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 0.82,
+                        ),
                         itemCount: filtered.length,
                         itemBuilder: (context, index) {
                           final product = filtered[index];
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: Colors.grey.shade200),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 20,
-                                        backgroundColor: product.isVeg == 1
-                                            ? Colors.green.withAlpha(25)
-                                            : (product.isVeg == 2
-                                                ? Colors.yellow.withAlpha(50)
-                                                : (product.isVeg == 3
-                                                    ? Colors.teal.withAlpha(25)
-                                                    : Colors.red.withAlpha(25))),
-                                        child: Icon(
-                                          product.isVeg == 1
-                                              ? Icons.eco
-                                              : (product.isVeg == 2
-                                                  ? Icons.egg
-                                                  : (product.isVeg == 3
-                                                      ? Icons.spa
-                                                      : Icons.restaurant)),
-                                          color: product.isVeg == 1
-                                              ? Colors.green
-                                              : (product.isVeg == 2
-                                                  ? Colors.orange
-                                                  : (product.isVeg == 3
-                                                      ? Colors.teal
-                                                      : Colors.red)),
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    product.name,
-                                                    style: const TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 16,
-                                                    ),
-                                                  ),
-                                                ),
-                                                Text(
-                                                  '₹${product.price.toStringAsFixed(2)}',
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16,
-                                                    color: AppColors.primary,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              '${product.category} • GST: ${product.gstPercentage}% • ${product.isAvailable ? "In Stock" : "Out of Stock"}',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade600,
-                                              ),
-                                            ),
-                                            if (product.description != null && product.description!.trim().isNotEmpty) ...[
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                product.description!,
-                                                style: const TextStyle(fontSize: 12, color: Colors.black54),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.menu_book, color: Colors.orange, size: 20),
-                                            onPressed: () async {
-                                              final result = await Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) => RecipeManagementScreen(product: product.toMap()),
-                                                ),
-                                              );
-                                              if (result == true) _loadProducts();
-                                            },
-                                            // tooltip disabled,
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
-                                            onPressed: () => _showProductDialog(product),
-                                            // tooltip disabled,
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                            onPressed: () => _confirmDelete(product.id, product.name),
-                                            // tooltip disabled,
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  // Attributes & Preferences Badges Row
-                                  if (product.dietaryPreferences.isNotEmpty ||
-                                      product.tastePreferences.isNotEmpty ||
-                                      product.attributes.isNotEmpty ||
-                                      (product.customDietaryNotes != null && product.customDietaryNotes!.isNotEmpty)) ...[
-                                    const SizedBox(height: 8),
-                                    FoodAttributesBadge(product: product, compact: false),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          );
+                          return _buildProductCard(product);
                         },
                       ),
           ),

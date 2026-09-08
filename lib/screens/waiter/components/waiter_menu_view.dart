@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 import '../../../models/product_model.dart';
-import '../../../widgets/food_attributes_badge.dart';
+import '../../../widgets/pos_item_card.dart';
 import '../waiter_models.dart';
 
 class WaiterMenuView extends StatelessWidget {
@@ -24,12 +24,14 @@ class WaiterMenuView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Row(
       children: [
         // Left Side: Category Sidebar
         Container(
           width: 100,
-          color: Colors.grey.shade50,
+          color: isDark ? const Color(0xFF1E1E24) : Colors.grey.shade50,
           child: ListView.builder(
             itemCount: categories.length,
             itemBuilder: (context, index) {
@@ -40,7 +42,9 @@ class WaiterMenuView extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppColors.primaryLight : Colors.transparent,
+                    color: isSelected
+                        ? (isDark ? AppColors.primary.withValues(alpha: 0.2) : AppColors.primaryLight)
+                        : Colors.transparent,
                     border: Border(
                       left: BorderSide(
                         color: isSelected ? AppColors.primary : Colors.transparent,
@@ -54,7 +58,9 @@ class WaiterMenuView extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected ? AppColors.primary : Colors.black87,
+                        color: isSelected
+                            ? AppColors.primary
+                            : (isDark ? Colors.white70 : Colors.black87),
                         fontSize: 12,
                       ),
                     ),
@@ -65,92 +71,35 @@ class WaiterMenuView extends StatelessWidget {
           ),
         ),
 
-        // Middle: Product Grid View
+        // Middle: Product Grid View matching POS Billing exactly
         Expanded(
           child: Container(
-            color: Colors.grey.shade100,
+            color: isDark ? const Color(0xFF121214) : Colors.grey.shade100,
             padding: const EdgeInsets.all(12),
-            child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 220,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.78,
-              ),
-              itemCount: filteredProducts.length,
-              itemBuilder: (context, index) {
-                final prod = filteredProducts[index];
-                final inCartCount = cartItems.where((it) => it.product.id == prod.id).fold<int>(0, (sum, it) => sum + it.quantity);
-
-                return Card(
-                  color: Colors.white,
-                  elevation: 1,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(color: Colors.grey.shade200),
-                  ),
-                  child: InkWell(
-                    onTap: () => onProductTap(prod),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Icon(
-                                Icons.circle,
-                                color: prod.isVeg == 1 ? Colors.green : Colors.red,
-                                size: 14,
-                              ),
-                              if (inCartCount > 0)
-                                Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: const BoxDecoration(
-                                    color: AppColors.primary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Text('$inCartCount', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                ),
-                            ],
-                          ),
-                          const Spacer(),
-
-                          // Name
-                          Text(
-                            prod.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-
-                          // Food Attributes Badge (compact micro tags)
-                          if (prod.hasAttributes || prod.hasPreferences) ...[
-                            const SizedBox(height: 4),
-                            FoodAttributesBadge(product: prod, compact: true, maxVisible: 2),
-                          ],
-
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('₹${prod.price}', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.primary, fontSize: 15)),
-                              Icon(
-                                prod.hasPreferences ? Icons.tune : Icons.add_circle,
-                                color: AppColors.primary,
-                                size: 22,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+            child: filteredProducts.isEmpty
+                ? const Center(child: Text('No products found'))
+                : GridView.builder(
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 220,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 0.85,
                     ),
+                    itemCount: filteredProducts.length,
+                    itemBuilder: (context, index) {
+                      final prod = filteredProducts[index];
+                      final inCartCount = cartItems
+                          .where((it) => it.product.id == prod.id)
+                          .fold<int>(0, (sum, it) => sum + it.quantity);
+
+                      return PosItemCard(
+                        product: prod,
+                        inCartCount: inCartCount,
+                        onTap: () => onProductTap(prod),
+                        onInfoTap: () => showProductDetailsDialog(context, prod),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ),
       ],

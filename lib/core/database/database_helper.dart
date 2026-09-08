@@ -39,7 +39,9 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final oldPath = join(dbPath, 'nexodine_restaurant.db');
     final path = join(dbPath, filePath);
-    if (await File(oldPath).exists() && !await File(path).exists()) {
+    final prefs = await SharedPreferences.getInstance();
+    final setupChoice = prefs.getString('setup_data_choice');
+    if (setupChoice != 'fresh' && await File(oldPath).exists() && !await File(path).exists()) {
       try {
         await File(oldPath).copy(path);
       } catch (_) {}
@@ -52,7 +54,64 @@ class DatabaseHelper {
       onUpgrade: _onUpgrade,
     );
     await _ensureTablesExist(db);
+    await _sanitizeTableStatuses(db);
+    // Only remove dummy data on fresh setup, never on subsequent launches
+    // to avoid accidentally deleting user-created data that matches dummy names
+    if (setupChoice == 'fresh') {
+      final prefs2 = await SharedPreferences.getInstance();
+      final alreadyCleaned = prefs2.getBool('dummy_data_cleaned') ?? false;
+      if (!alreadyCleaned) {
+        await _removeDummyData(db);
+        await prefs2.setBool('dummy_data_cleaned', true);
+      }
+    }
     return db;
+  }
+
+  Future<void> _sanitizeTableStatuses(Database db) async {
+    try {
+      final now = DateTime.now();
+      final tables = await db.query('tables');
+      for (final t in tables) {
+        final tableId = t['id'] as int;
+        final currentStatus = t['status'] as String? ?? 'Available';
+
+        final activeOrders = await db.query(
+          'orders',
+          where: 'table_id = ? AND payment_status != ? AND status NOT IN (?, ?)',
+          whereArgs: [tableId, 'Paid', 'Completed', 'Cancelled'],
+        );
+
+        final bookings = await db.query(
+          'bookings',
+          where: 'table_id = ? AND status = ?',
+          whereArgs: [tableId, 'Confirmed'],
+        );
+
+        bool hasCurrentBooking = false;
+        for (final b in bookings) {
+          final bTimeStr = b['booking_time'] as String?;
+          if (bTimeStr == null) continue;
+          final bTime = DateTime.tryParse(bTimeStr);
+          if (bTime == null) continue;
+          final slotEnd = bTime.add(const Duration(hours: 1));
+          if (!now.isBefore(bTime) && now.isBefore(slotEnd)) {
+            hasCurrentBooking = true;
+            break;
+          }
+        }
+
+        if (activeOrders.isNotEmpty || hasCurrentBooking) {
+          if (currentStatus != 'Occupied') {
+            await db.update('tables', {'status': 'Occupied'}, where: 'id = ?', whereArgs: [tableId]);
+          }
+        } else {
+          if (currentStatus == 'Occupied' || currentStatus == 'Billing Pending') {
+            await db.update('tables', {'status': 'Available'}, where: 'id = ?', whereArgs: [tableId]);
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _ensureTablesExist(Database db) async {
@@ -124,6 +183,7 @@ class DatabaseHelper {
       'is_reservable': 'INTEGER DEFAULT 1',
       'notes': 'TEXT',
       'merged_with_id': 'INTEGER',
+      'waiter_name': 'TEXT',
     };
     for (var entry in tableColumns.entries) {
       try {
@@ -416,6 +476,7 @@ CREATE TABLE tables (
   notes TEXT,
   merged_with_id INTEGER,
   waiter_id INTEGER,
+  waiter_name TEXT,
   restaurant_id INTEGER,
   FOREIGN KEY (waiter_id) REFERENCES users (id),
   FOREIGN KEY (restaurant_id) REFERENCES restaurants (id)
@@ -834,8 +895,159 @@ CREATE TABLE bookings (
     }
   }
 
+  /// Checks whether previous application data exists (legacy nexodine db or existing dinemaster db).
+  Future<bool> checkPreviousDataExists() async {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
+    final dbPath = await getDatabasesPath();
+    final dineMasterPath = join(dbPath, 'dinemaster_restaurant.db');
+    final legacyPath = join(dbPath, 'nexodine_restaurant.db');
+
+    final hasDineMaster = await File(dineMasterPath).exists();
+    final hasLegacy = await File(legacyPath).exists();
+
+    return hasDineMaster || hasLegacy;
+  }
+
+  /// Retains existing application data and completes setup.
+  Future<void> keepPreviousData() async {
+    final dbPath = await getDatabasesPath();
+    final dineMasterPath = join(dbPath, 'dinemaster_restaurant.db');
+    final legacyPath = join(dbPath, 'nexodine_restaurant.db');
+
+    if (await File(legacyPath).exists() && !await File(dineMasterPath).exists()) {
+      try {
+        await File(legacyPath).copy(dineMasterPath);
+      } catch (_) {}
+    }
+
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    await database;
+  }
+
+  /// Continues without previous data: safely creates a timestamped archive backup
+  /// of any existing database so existing data is NEVER deleted or overwritten,
+  /// then initializes a clean fresh database.
+  Future<String?> continueWithoutPreviousData() async {
+    final dbPath = await getDatabasesPath();
+    final dineMasterPath = join(dbPath, 'dinemaster_restaurant.db');
+    final legacyPath = join(dbPath, 'nexodine_restaurant.db');
+
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+
+    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+    String? archivedPath;
+
+    if (await File(dineMasterPath).exists()) {
+      archivedPath = join(dbPath, 'dinemaster_restaurant_archive_$timestamp.db');
+      try {
+        await File(dineMasterPath).rename(archivedPath);
+      } catch (_) {
+        await File(dineMasterPath).copy(archivedPath);
+        try {
+          await File(dineMasterPath).delete();
+        } catch (_) {}
+      }
+      try {
+        if (await File(dineMasterPath).exists()) {
+          await File(dineMasterPath).delete();
+        }
+      } catch (_) {}
+    }
+    if (await File(legacyPath).exists()) {
+      final legacyArchive = join(dbPath, 'nexodine_restaurant_archive_$timestamp.db');
+      try {
+        await File(legacyPath).rename(legacyArchive);
+      } catch (_) {
+        await File(legacyPath).copy(legacyArchive);
+        try {
+          await File(legacyPath).delete();
+        } catch (_) {}
+      }
+      try {
+        if (await File(legacyPath).exists()) {
+          await File(legacyPath).delete();
+        }
+      } catch (_) {}
+    }
+
+    // Initialize a fresh clean database
+    _database = null;
+    try {
+      await database;
+    } catch (_) {}
+    return archivedPath;
+  }
+
+  /// Removes all legacy sample / test dummy data from database while preserving
+  /// clean configuration defaults (Default Restaurant, Owner user, categories, types, sections).
+  Future<void> _removeDummyData(Database db) async {
+    try {
+      // 1. Remove dummy/sample products
+      final dummyProductNames = [
+        'Paneer Butter Masala',
+        'Chicken Biryani',
+        'Garlic Naan',
+        'Cold Coffee',
+      ];
+      for (final name in dummyProductNames) {
+        await db.delete('products', where: 'name = ?', whereArgs: [name]);
+      }
+
+      // 2. Remove dummy/sample tables (T1..T10 created without custom name/section changes)
+      final dummyTableNumbers = List.generate(10, (i) => 'T${i + 1}');
+      for (final num in dummyTableNumbers) {
+        await db.delete('tables', where: 'table_number = ? AND (name IS NULL OR name = \'\')', whereArgs: [num]);
+      }
+
+      // 3. Remove dummy/sample users (manager, cashier, waiters, chefs seeded in initial demo)
+      final dummyUsernames = [
+        'manager',
+        'cashier',
+        'john_waiter',
+        'sarah_waiter',
+        'chef_marco',
+        'chef_priya',
+      ];
+      for (final uname in dummyUsernames) {
+        await db.delete('users', where: 'username = ?', whereArgs: [uname]);
+      }
+
+      // 4. Ensure default categories exist if categories table is empty
+      final catCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM categories')) ?? 0;
+      if (catCount == 0) {
+        final defaultCategories = ['Starters', 'Main Course', 'Breads', 'Beverages', 'Desserts'];
+        for (var cat in defaultCategories) {
+          try {
+            await db.insert('categories', {'name': cat, 'restaurant_id': 1});
+          } catch (_) {}
+        }
+      }
+    } catch (_) {
+      // Silent catch to prevent startup failure
+    }
+  }
+
+  /// Public helper to trigger complete dummy data removal on active database.
+  Future<void> removeAllDummyData() async {
+    final db = await database;
+    await _removeDummyData(db);
+  }
+
   Future<void> close() async {
-    final db = await instance.database;
-    db.close();
+    if (_database != null) {
+      try {
+        await _database!.close();
+      } catch (_) {}
+      _database = null;
+    }
   }
 }

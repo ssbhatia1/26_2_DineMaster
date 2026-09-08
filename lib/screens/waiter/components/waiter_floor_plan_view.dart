@@ -91,7 +91,7 @@ class WaiterFloorPlanView extends StatelessWidget {
         .where((ti) => ti.table.mergedWithId == null)
         .where((ti) {
           final matchesSection = selectedSectionFilter == 'All' || ti.table.section == selectedSectionFilter;
-          final matchesStatus = selectedStatusFilter == 'All' || ti.table.status == selectedStatusFilter;
+          final matchesStatus = selectedStatusFilter == 'All' || ti.effectiveStatus == selectedStatusFilter;
           return matchesSection && matchesStatus;
         })
         .toList();
@@ -171,10 +171,10 @@ class WaiterFloorPlanView extends StatelessWidget {
                 ? const Center(child: Text('No tables found for this filter.', style: TextStyle(color: Colors.grey)))
                 : GridView.builder(
                     gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 240,
+                      maxCrossAxisExtent: 280,
+                      mainAxisExtent: 230,
                       crossAxisSpacing: 14,
                       mainAxisSpacing: 14,
-                      childAspectRatio: 0.95,
                     ),
                     itemCount: filteredTables.length,
                     itemBuilder: (context, index) {
@@ -182,126 +182,195 @@ class WaiterFloorPlanView extends StatelessWidget {
                       final table = tableInfo.table;
                       final isMergedGroup = tableInfo.isMergedGroup;
                       final activeOrder = tableInfo.activeOrder;
-                      final statusColor = _getStatusColor(table.status);
+                      final activeBooking = tableInfo.activeBooking;
+                      final effectiveStatus = tableInfo.effectiveStatus;
+                      final statusColor = _getStatusColor(effectiveStatus);
                       final typeIcon = _getTableTypeIcon(table.tableType);
 
                       // Combined capacity of the whole merged group
                       final combinedCapacity = tableInfo.combinedCapacity;
 
-                      String capacityText = 'Capacity: $combinedCapacity';
+                      String capacityText = '$combinedCapacity Seats';
                       if (activeOrder != null && activeOrder['guest_count'] != null) {
-                        capacityText = 'Guests: ${activeOrder['guest_count']} / Max: $combinedCapacity';
+                        capacityText = '${activeOrder['guest_count']} / $combinedCapacity Seats';
                       }
 
-                      final titleText = isMergedGroup ? tableInfo.mergedTableNumbers : table.displayName;
-
                       return Card(
-                        elevation: 1.5,
+                        elevation: 2,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
-                          side: BorderSide(color: statusColor.withValues(alpha: 0.5), width: 1.5),
+                          side: BorderSide(color: statusColor.withAlpha(90), width: 1.2),
                         ),
-                        color: statusColor.withValues(alpha: 0.03),
+                        color: Colors.white,
+                        surfaceTintColor: Colors.transparent,
+                        clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: () => onTableCardTap(tableInfo),
-                          borderRadius: BorderRadius.circular(14),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Header: Table Type Icon & Status Badge
-                                Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Top Header Bar
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                color: statusColor.withAlpha(30),
+                                child: Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Row(
-                                      children: [
-                                        CircleAvatar(
-                                          radius: 14,
-                                          backgroundColor: statusColor.withValues(alpha: 0.15),
-                                          child: Icon(typeIcon, color: statusColor, size: 16),
-                                        ),
-                                        if (isMergedGroup) ...[
-                                          const SizedBox(width: 6),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: Colors.blue.withValues(alpha: 0.12),
-                                              borderRadius: BorderRadius.circular(8),
-                                              border: Border.all(color: Colors.blue.withValues(alpha: 0.4)),
-                                            ),
-                                            child: const Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(Icons.merge_type, size: 11, color: Colors.blue),
-                                                SizedBox(width: 2),
-                                                Text('MERGED', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blue)),
-                                              ],
-                                            ),
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 13,
+                                            backgroundColor: statusColor,
+                                            child: Icon(typeIcon, color: Colors.white, size: 14),
                                           ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            table.tableNumber,
+                                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: statusColor),
+                                          ),
+                                          if (table.name != null && table.name!.isNotEmpty) ...[
+                                            const SizedBox(width: 4),
+                                            Flexible(
+                                              child: Text(
+                                                '(${table.name})',
+                                                style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                          if (isMergedGroup) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue.withAlpha(40),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Text('MERGED', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                            ),
+                                          ],
                                         ],
-                                      ],
+                                      ),
                                     ),
+                                    const SizedBox(width: 6),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
                                         color: statusColor,
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Text(
-                                        table.status.toUpperCase(),
-                                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                        effectiveStatus.toUpperCase(),
+                                        style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                                       ),
                                     ),
                                   ],
                                 ),
-                                const Spacer(),
+                              ),
 
-                                // Table Info
-                                Text(
-                                  titleText,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                                  overflow: TextOverflow.ellipsis,
+                              // Table Attributes
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.location_on_outlined, size: 12, color: Colors.grey.shade700),
+                                          const SizedBox(width: 3),
+                                          Text(table.section, style: TextStyle(fontSize: 11, color: Colors.grey.shade800, fontWeight: FontWeight.w500)),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.people_outline, size: 12, color: Colors.grey.shade700),
+                                          const SizedBox(width: 3),
+                                          Text(capacityText, style: TextStyle(fontSize: 11, color: Colors.grey.shade800, fontWeight: FontWeight.w500)),
+                                        ],
+                                      ),
+                                    ),
+                                    if (activeBooking != null) ...[
+                                      const Spacer(),
+                                      const Icon(Icons.bookmark, size: 16, color: Colors.amber),
+                                    ],
+                                  ],
                                 ),
-                                Text('$capacityText | ${table.section}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                              ),
 
-                                const SizedBox(height: 8),
-                                const Divider(height: 1),
-                                const SizedBox(height: 8),
-                                
-                                // Active Order Highlights
-                                if (activeOrder != null) ...[
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text('Order #', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                      Text('${activeOrder['id']}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text('Items:', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                      Text('${tableInfo.orderItemsCount}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text('Total:', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                      Text('₹${activeOrder['total_amount']}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green)),
-                                    ],
-                                  ),
-                                ] else ...[
-                                  const Center(
-                                    child: Padding(
-                                      padding: EdgeInsets.symmetric(vertical: 8.0),
-                                      child: Text('No Active Orders', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                              // Reservation Highlight if active
+                              if (activeBooking != null) ...[
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.amber.shade300),
+                                    ),
+                                    child: Text(
+                                      'Reserved: ${activeBooking['customer_name'] ?? 'Guest'} (${activeBooking['guest_count'] ?? table.capacity} guests)',
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                ],
+                                ),
                               ],
-                            ),
+
+                              const Spacer(),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 12.0),
+                                child: Divider(height: 1),
+                              ),
+
+                              // Active Order Highlights or Idle State
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+                                child: activeOrder != null
+                                    ? Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text('Order #${activeOrder['id']}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87)),
+                                              Text('${tableInfo.orderItemsCount} items', style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600)),
+                                            ],
+                                          ),
+                                          Text(
+                                            '₹${activeOrder['total_amount']}',
+                                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2E7D32)),
+                                          ),
+                                        ],
+                                      )
+                                    : Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 2.0),
+                                          child: Text(
+                                            'No Active Orders',
+                                            style: TextStyle(color: Colors.grey.shade500, fontSize: 11.5, fontWeight: FontWeight.w500),
+                                          ),
+                                        ),
+                                      ),
+                              ),
+                            ],
                           ),
                         ),
                       );

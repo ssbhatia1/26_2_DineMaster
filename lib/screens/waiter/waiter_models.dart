@@ -38,6 +38,7 @@ class WaiterCartItem {
 class WaiterTableInfo {
   final TableModel table;
   final Map<String, dynamic>? activeOrder;
+  final Map<String, dynamic>? activeBooking;
   final int orderItemsCount;
 
   /// Tables currently merged into this table (members whose [TableModel.mergedWithId]
@@ -47,9 +48,20 @@ class WaiterTableInfo {
   WaiterTableInfo({
     required this.table,
     this.activeOrder,
+    this.activeBooking,
     this.orderItemsCount = 0,
     List<TableModel>? mergedTables,
   }) : mergedTables = mergedTables ?? [];
+
+  bool get hasActiveOrder => activeOrder != null;
+  bool get hasActiveBooking => activeBooking != null;
+
+  String get effectiveStatus {
+    if (activeOrder != null || activeBooking != null) {
+      return 'Occupied';
+    }
+    return table.status;
+  }
 
   /// Whether this table is the anchor of a merged group (it has member tables).
   bool get isMergedGroup => mergedTables.isNotEmpty;

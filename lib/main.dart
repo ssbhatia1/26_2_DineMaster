@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:go_router/go_router.dart';
+import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/branch_selection_screen.dart';
@@ -38,22 +39,21 @@ void main() async {
   }
   final hasToken = (prefs.getString('token') != null) && rememberMe;
 
-  final themeStr = prefs.getString('theme_mode') ?? 'light';
-  if (themeStr == 'dark') {
-    themeNotifier.value = ThemeMode.dark;
-  } else if (themeStr == 'system') {
-    themeNotifier.value = ThemeMode.system;
-  } else {
-    themeNotifier.value = ThemeMode.light;
-  }
+  // Always enforce clean light theme
+  themeNotifier.value = ThemeMode.light;
+  await prefs.setString('theme_mode', 'light');
   
   runApp(MyApp(hasToken: hasToken));
 }
 
-GoRouter _buildRouter(bool hasToken) {
+GoRouter _buildRouter(bool hasToken, [String? initialLocation]) {
   return GoRouter(
-    initialLocation: hasToken ? '/branch_selection' : '/',
+    initialLocation: initialLocation ?? '/splash',
     routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
       GoRoute(
         path: '/',
         builder: (context, state) => const LoginScreen(),
@@ -146,7 +146,8 @@ GoRouter _buildRouter(bool hasToken) {
 
 class MyApp extends StatefulWidget {
   final bool hasToken;
-  const MyApp({super.key, required this.hasToken});
+  final String? initialLocation;
+  const MyApp({super.key, required this.hasToken, this.initialLocation});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -158,7 +159,7 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _router = _buildRouter(widget.hasToken);
+    _router = _buildRouter(widget.hasToken, widget.initialLocation);
   }
 
   @override
@@ -169,17 +170,20 @@ class _MyAppState extends State<MyApp> {
         return MaterialApp.router(
           title: 'Dine Master',
           debugShowCheckedModeBanner: false,
-          themeMode: currentThemeMode,
+          themeMode: ThemeMode.light,
           theme: ThemeData(
             useMaterial3: true,
+            brightness: Brightness.light,
             primarySwatch: AppColors.primaryMaterialColor,
             colorScheme: ColorScheme.fromSeed(
               seedColor: AppColors.primary,
               primary: AppColors.primary,
               secondary: AppColors.secondary,
               brightness: Brightness.light,
+              surface: Colors.white,
             ),
             scaffoldBackgroundColor: AppColors.background,
+            cardColor: Colors.white,
             appBarTheme: const AppBarTheme(
               elevation: 0,
               backgroundColor: Colors.white,
@@ -187,33 +191,10 @@ class _MyAppState extends State<MyApp> {
               iconTheme: IconThemeData(color: Colors.black),
             ),
             cardTheme: const CardThemeData(
-              elevation: 2,
+              elevation: 1.5,
+              color: Colors.white,
+              surfaceTintColor: Colors.transparent,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.all(Radius.circular(12)),
-              ),
-            ),
-          ),
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            brightness: Brightness.dark,
-            primarySwatch: AppColors.primaryMaterialColor,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: AppColors.primary,
-              primary: AppColors.primary,
-              secondary: AppColors.secondary,
-              brightness: Brightness.dark,
-            ),
-            scaffoldBackgroundColor: const Color(0xFF14141E),
-            appBarTheme: AppBarTheme(
-              elevation: 0,
-              backgroundColor: Colors.grey.shade900,
-              foregroundColor: Colors.white,
-              iconTheme: const IconThemeData(color: Colors.white),
-            ),
-            cardTheme: CardThemeData(
-              elevation: 2,
-              color: Colors.grey.shade900,
-              shape: const RoundedRectangleBorder(
                 borderRadius: BorderRadius.all(Radius.circular(12)),
               ),
             ),

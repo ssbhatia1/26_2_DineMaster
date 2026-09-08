@@ -98,7 +98,7 @@ class SettingsScreen extends StatelessWidget {
             context,
             Icons.palette,
             'Theme Settings',
-            'Select light mode, dark mode, or system default',
+            'Clean Modern Light Theme is active',
             () => _showThemeSelectionDialog(context),
           ),
           _buildSettingsTile(
@@ -214,59 +214,20 @@ class SettingsScreen extends StatelessWidget {
 
   void _showThemeSelectionDialog(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
-    final current = prefs.getString('theme_mode') ?? 'system';
+    await prefs.setString('theme_mode', 'light');
+    themeNotifier.value = ThemeMode.light;
 
     if (!context.mounted) return;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Select Theme Mode'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            RadioListTile<String>(
-              title: const Text('System Default'),
-              value: 'system',
-              groupValue: current,
-              onChanged: (val) async {
-                if (val != null) {
-                  await prefs.setString('theme_mode', val);
-                  themeNotifier.value = ThemeMode.system;
-                  Navigator.pop(context);
-                }
-              },
-            ),
-            RadioListTile<String>(
-              title: const Text('Light Theme'),
-              value: 'light',
-              groupValue: current,
-              onChanged: (val) async {
-                if (val != null) {
-                  await prefs.setString('theme_mode', val);
-                  themeNotifier.value = ThemeMode.light;
-                  Navigator.pop(context);
-                }
-              },
-            ),
-            RadioListTile<String>(
-              title: const Text('Dark Theme'),
-              value: 'dark',
-              groupValue: current,
-              onChanged: (val) async {
-                if (val != null) {
-                  await prefs.setString('theme_mode', val);
-                  themeNotifier.value = ThemeMode.dark;
-                  Navigator.pop(context);
-                }
-              },
-            ),
-          ],
-        ),
+        title: const Text('Theme Settings'),
+        content: const Text('Dine Master is configured with the Clean Light Theme for maximum clarity and visibility.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: const Text('OK'),
           ),
         ],
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/database/database_helper.dart';
+import '../repositories/table_repository.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
@@ -231,6 +232,9 @@ class _KitchenScreenState extends State<KitchenScreen> {
           'notes': 'KOT #$kotId status changed to $newStatus.' + (delayReason != null ? ' Reason: $delayReason' : ''),
         });
       });
+
+      // Synchronize table status
+      await TableRepository().syncTableStatusForOrder(orderId);
 
       // Broadcast changes instantly via WebSocket
       SyncService.instance.broadcastEvent('database_update', {});
@@ -553,8 +557,8 @@ class _KitchenScreenState extends State<KitchenScreen> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Kitchen Display System (KDS)', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade900 : Colors.white,
-        foregroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
         elevation: 0,
         actions: [
           Padding(
@@ -775,9 +779,9 @@ class _KitchenScreenState extends State<KitchenScreen> {
                         label: Text(tab == 'Cooking' ? 'Preparing' : tab),
                         selected: isSelected,
                         selectedColor: AppColors.primary,
-                        backgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade800 : Colors.grey.shade100,
+                        backgroundColor: Colors.grey.shade100,
                         labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : (Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black87),
+                          color: isSelected ? Colors.white : Colors.black87,
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                           fontSize: 12,
                         ),
@@ -856,7 +860,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
         side: BorderSide(
           color: priority == 'High' 
               ? Colors.redAccent.shade100 
-              : (Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade800 : Colors.grey.shade200),
+              : Colors.grey.shade200,
           width: priority == 'High' ? 1.5 : 1.0,
         ),
       ),
@@ -924,8 +928,9 @@ class _KitchenScreenState extends State<KitchenScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Order #$orderId', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                Text('Est: ${kot['estimated_time']}m (Sum: ${totalPrepSum}m)', style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+                Flexible(child: Text('Order #$orderId', style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis)),
+                const SizedBox(width: 8),
+                Flexible(child: Text('Est: ${kot['estimated_time']}m (Sum: ${totalPrepSum}m)', style: const TextStyle(fontSize: 11, color: Colors.blueGrey), overflow: TextOverflow.ellipsis, textAlign: TextAlign.end)),
               ],
             ),
           ),
@@ -1037,7 +1042,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
           // Chef Interaction Panel
           Container(
             padding: const EdgeInsets.all(8.0),
-            color: Theme.of(context).brightness == Brightness.dark ? Colors.grey.shade900 : Colors.grey.shade100,
+            color: Colors.grey.shade50,
             child: Row(
               children: [
                 // Delay Alert Trigger

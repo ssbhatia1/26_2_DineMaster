@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'dart:async';
 import '../services/sync_service.dart';
 import '../models/table_model.dart';
+import '../repositories/table_repository.dart';
 
 class LiveTrackingScreen extends StatefulWidget {
   const LiveTrackingScreen({super.key});
@@ -259,6 +260,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> with SingleTick
           'notes': 'Order status changed manually to $newStatus.',
         });
       });
+
+      // Synchronize table status
+      await TableRepository().syncTableStatusForOrder(orderId);
+      SyncService.instance.broadcastEvent('database_update', {'orderId': orderId, 'status': newStatus});
 
       _loadAllTrackingData(silent: true);
 

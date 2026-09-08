@@ -177,26 +177,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   width: 40,
                 ),
                 const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'DINE MASTER',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'DINE MASTER',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    Text(
-                      'Hi, $_username',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
+                      Text(
+                        'Hi, $_username',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -332,24 +336,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       constraints: const BoxConstraints(),
                       onPressed: () {},
                     ),
-                    ValueListenableBuilder<ThemeMode>(
-                      valueListenable: themeNotifier,
-                      builder: (context, currentMode, _) {
-                        final isDarkTheme = currentMode == ThemeMode.dark;
-                        return IconButton(
-                          icon: Icon(isDarkTheme ? Icons.light_mode : Icons.dark_mode, size: 20),
-                          padding: const EdgeInsets.all(8),
-                          constraints: const BoxConstraints(),
-                          tooltip: isDarkTheme ? 'Switch to Light Theme' : 'Switch to Dark Theme',
-                          onPressed: () async {
-                            final newMode = isDarkTheme ? ThemeMode.light : ThemeMode.dark;
-                            themeNotifier.value = newMode;
-                            final prefs = await SharedPreferences.getInstance();
-                            await prefs.setString('theme_mode', isDarkTheme ? 'light' : 'dark');
-                          },
-                        );
-                      },
-                    ),
                     if (!isDesktop)
                       IconButton(
                         icon: const Icon(Icons.logout, size: 20),
@@ -374,9 +360,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // Content
                 Expanded(
                   child: Container(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF14141E)
-                        : Colors.grey.shade100,
+                    color: const Color(0xFFF8F9FA),
                     child: KeyedSubtree(
                       key: ValueKey(DatabaseHelper.currentRestaurantId),
                       child: widget.child,

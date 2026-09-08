@@ -18,6 +18,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'pdf_preview_screen.dart';
 import '../widgets/food_attributes_badge.dart';
+import '../widgets/pos_item_card.dart';
 
 class PosScreen extends StatefulWidget {
   final int? reopenOrderId;
@@ -167,6 +168,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Future<void> _loadTables() async {
     try {
+      await _tableRepository.syncAllTableStatuses(DatabaseHelper.currentRestaurantId);
       final tables = await _tableRepository.getTables();
       setState(() {
         _tables = tables;
@@ -594,24 +596,12 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         });
       }
 
-      // Clear Table Status if Dine-in
       // Clear Table Status if Dine-in or Table Order
       if ((_selectedOrderType == 'Table Order' || _selectedOrderType == 'Dine-In') && _selectedTableId != null) {
         if (!isSplit) {
-          // Unmerge and release all associated tables
-          await db.update(
-            'tables',
-            {'status': 'Available', 'merged_with_id': null},
-            where: 'id = ? OR merged_with_id = ?',
-            whereArgs: [_selectedTableId, _selectedTableId],
-          );
+          await _tableRepository.releaseTableIfPaid(_selectedTableId!);
         } else {
-          await db.update(
-            'tables',
-            {'status': 'Billing Pending'},
-            where: 'id = ?',
-            whereArgs: [_selectedTableId],
-          );
+          await _tableRepository.markTableOccupied(_selectedTableId!);
         }
       }
 
@@ -756,12 +746,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
       // Update table status to Occupied if it is a table order
       if (_selectedOrderType == 'Table Order' && _selectedTableId != null) {
-        await db.update(
-          'tables',
-          {'status': 'Occupied'},
-          where: 'id = ?',
-          whereArgs: [_selectedTableId],
-        );
+        await _tableRepository.markTableOccupied(_selectedTableId!);
       }
 
       setState(() {
@@ -1469,23 +1454,12 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                             int? tableId;
                             if (orderInfo.isNotEmpty) {
                               tableId = orderInfo.first['table_id'] as int?;
-                            }
-
-                            if (tableId != null) {
-                              if (fullyPaid) {
-                                await db.update(
-                                  'tables',
-                                  {'status': 'Available', 'merged_with_id': null},
-                                  where: 'id = ? OR merged_with_id = ?',
-                                  whereArgs: [tableId, tableId],
-                                );
-                              } else {
-                                await db.update(
-                                  'tables',
-                                  {'status': 'Billing Pending'},
-                                  where: 'id = ?',
-                                  whereArgs: [tableId],
-                                );
+                              if (tableId != null) {
+                                if (fullyPaid) {
+                                  await _tableRepository.releaseTableIfPaid(tableId);
+                                } else {
+                                  await _tableRepository.markTableOccupied(tableId);
+                                }
                               }
                             }
 
@@ -2856,150 +2830,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
   }
 
   Widget _buildProductCard(ProductModel product) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isAvailable = product.isAvailable;
-    
-    Color typeColor = Colors.red;
-    if (product.isVeg == 1) {
-      typeColor = Colors.green;
-    } else if (product.isVeg == 2) {
-      typeColor = Colors.orange;
-    } else if (product.isVeg == 3) {
-      typeColor = Colors.blue;
-    }
-
-    return Card(
-      elevation: 0,
-      color: isDark ? const Color(0xFF1E1E24) : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
-          width: 1.5,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Opacity(
-        opacity: isAvailable ? 1.0 : 0.5,
-        child: InkWell(
-          onTap: isAvailable ? () => _handleProductTap(product) : null,
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: typeColor.withOpacity(0.4), width: 1.5),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: typeColor,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.info_outline, color: Colors.grey, size: 18),
-                          onPressed: () => _showProductDetails(product),
-                          constraints: const BoxConstraints(),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.grey.shade800.withOpacity(0.5) : AppColors.primaryLight.withOpacity(0.5),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          product.isVeg == 1 ? Icons.local_pizza : Icons.lunch_dining,
-                          size: 36,
-                          color: AppColors.primaryMaterialColor[300]!,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          product.name,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color: isDark ? Colors.white : Colors.grey.shade800,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (product.hasAttributes || product.hasPreferences) ...[
-                          const SizedBox(height: 3),
-                          FoodAttributesBadge(product: product, compact: true, maxVisible: 2),
-                        ],
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              '₹${product.price}',
-                              style: const TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                product.category,
-                                style: const TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (!isAvailable)
-                Container(
-                  color: Colors.black.withOpacity(0.05),
-                  alignment: Alignment.center,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade600,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'SOLD OUT',
-                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+    return PosItemCard(
+      product: product,
+      onTap: () => _handleProductTap(product),
+      onInfoTap: () => _showProductDetails(product),
     );
   }
 

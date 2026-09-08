@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -84,15 +84,18 @@ class SyncService {
     }
   }
 
-  void broadcastEvent(String eventType, Map<String, dynamic> data) {
+  void broadcastEvent(String eventType, [Map<String, dynamic>? data]) {
     // If we are the client, send the event to the server to broadcast to everyone else
     // For simplicity, we just format as JSON
     final jsonStr = '{"event": "$eventType", "timestamp": "${DateTime.now().toIso8601String()}"}';
     
+    // Immediately notify all local screen listeners so the active UI updates instantly
+    _syncController.add(jsonStr);
+    
     if (_socket != null && connectionState.value) {
       _socket!.add(jsonStr);
     } else {
-      print('SyncService: Cannot broadcast, socket is not connected');
+      print('SyncService: Local broadcast dispatched (socket not connected)');
     }
   }
 

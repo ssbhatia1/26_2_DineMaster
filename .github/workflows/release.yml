@@ -183,26 +183,26 @@ jobs:
           name: 'Dine Master ${{ needs.versions.outputs.tag-name }}'
           files: release-artifacts/**/*
           generate_release_notes: true
-          body: |
-            ## Dine Master ${{ needs.versions.outputs.tag-name }}
+          # body: |
+          #   ## Dine Master ${{ needs.versions.outputs.tag-name }}
 
-            Automated production release built by GitHub Actions.
+          #   Automated production release built by GitHub Actions.
 
-            > **Distribution Notice**: This release contains compiled application binaries only. Source code archives are excluded from this release.
+          #   > **Distribution Notice**: This release contains compiled application binaries only. Source code archives are excluded from this release.
 
-            ### Included platforms
-            - **Android**: `dine-master-release.apk` (signed if Android secrets are configured)
-            - **Web**: `dine-master-web.tar.gz` (hostable static build)
-            - **Windows**: `dine-master-windows-setup.exe` (Setup Wizard) / `dine-master-windows-x64.zip` (Portable)
-            - **macOS**: `dine-master-macos.app.zip` (signed if macOS secrets are configured)
-            - **iOS**: `dine-master-ios.ipa` + App Store Connect (TestFlight) upload (if iOS secrets are configured)
+          #   ### Included platforms
+          #   - **Android**: `dine-master-release.apk` (signed if Android secrets are configured)
+          #   - **Web**: `dine-master-web.tar.gz` (hostable static build)
+          #   - **Windows**: `dine-master-windows-setup.exe` (Setup Wizard) / `dine-master-windows-x64.zip` (Portable)
+          #   - **macOS**: `dine-master-macos.app.zip` (signed if macOS secrets are configured)
+          #   - **iOS**: `dine-master-ios.ipa` + App Store Connect (TestFlight) upload (if iOS secrets are configured)
 
-            ### Linux
-            - **Linux**: `dine-master-linux-x64.tar.gz` (${{ needs.build-linux-nonfatal.result == 'success' && 'uploaded' || 'skipped (build failure non-fatal)' }})
+          #   ### Linux
+          #   - **Linux**: `dine-master-linux-x64.tar.gz` (${{ needs.build-linux-nonfatal.result == 'success' && 'uploaded' || 'skipped (build failure non-fatal)' }})
 
-            Download the compiled artifact for your platform and install it directly.
+          #   Download the compiled artifact for your platform and install it directly.
 
-            > **Note**: Application bundle identifier is configured as `com.dinemaster`.
+          #   > **Note**: Application bundle identifier is configured as `com.dinemaster`.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

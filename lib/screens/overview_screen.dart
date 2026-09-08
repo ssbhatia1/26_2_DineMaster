@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 import '../core/database/database_helper.dart';
+import '../repositories/table_repository.dart';
 import '../services/sync_service.dart';
 
 class OverviewScreen extends StatefulWidget {
@@ -69,8 +70,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
       final liveOrders = liveRes.first['count'] as int? ?? 0;
 
       // 3. Occupied / Total Tables
+      await TableRepository().syncAllTableStatuses(restaurantId);
       final occupiedRes = await db.rawQuery(
-        "SELECT COUNT(*) as count FROM tables WHERE restaurant_id = ? AND status = 'Occupied'",
+        "SELECT COUNT(*) as count FROM tables WHERE (restaurant_id = ? OR restaurant_id IS NULL) AND status = 'Occupied'",
         [restaurantId],
       );
       final occupied = occupiedRes.first['count'] as int? ?? 0;
@@ -173,19 +175,23 @@ class _OverviewScreenState extends State<OverviewScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Welcome Back, $_username',
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                      ),
-                      const Text(
-                        'Here is what is happening today',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Welcome Back, $_username',
+                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const Text(
+                          'Here is what is happening today',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 12),
                   CircleAvatar(
                     radius: 24,
                     backgroundColor: AppColors.primary,
@@ -352,9 +358,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                Flexible(
+                  child: Text(
+                    title,
+                    style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 Icon(icon, color: color),
               ],
@@ -366,10 +375,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 fontWeight: FontWeight.bold,
                 color: Colors.grey.shade900,
               ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
             Text(
               subtitle,
               style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

@@ -84,8 +84,7 @@ class TableModel {
   }
 
   Map<String, dynamic> toMap() {
-    return {
-      'id': id,
+    final map = <String, dynamic>{
       'table_number': tableNumber,
       'name': name,
       'capacity': capacity,
@@ -100,6 +99,10 @@ class TableModel {
       'restaurant_id': restaurantId,
       'merged_with_id': mergedWithId,
     };
+    if (id != null) {
+      map['id'] = id;
+    }
+    return map;
   }
 
   factory TableModel.fromMap(Map<String, dynamic> map) {
@@ -120,4 +123,14 @@ class TableModel {
       mergedWithId: map['merged_with_id'],
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TableModel &&
+          runtimeType == other.runtimeType &&
+          (id != null && other.id != null ? id == other.id : tableNumber == other.tableNumber);
+
+  @override
+  int get hashCode => (id ?? tableNumber).hashCode;
 }

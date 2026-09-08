@@ -7,6 +7,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../core/database/database_helper.dart';
+import '../repositories/table_repository.dart';
+import '../services/sync_service.dart';
 import 'pdf_preview_screen.dart';
 
 class OrdersHistoryScreen extends StatefulWidget {
@@ -19,6 +21,8 @@ class OrdersHistoryScreen extends StatefulWidget {
 class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
   List<Map<String, dynamic>> _orders = [];
   bool _isLoading = true;
+  final TableRepository _tableRepository = TableRepository();
+  StreamSubscription? _syncSubscription;
 
   // Search & Filter state
   final TextEditingController _searchController = TextEditingController();
@@ -36,6 +40,17 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
       end: DateTime.now(),
     );
     _loadOrders();
+
+    _syncSubscription = SyncService.instance.syncEvents.listen((_) {
+      if (mounted) _loadOrders();
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncSubscription?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadOrders() async {
@@ -123,7 +138,9 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Invoice #${order['id']}'),
+            Flexible(
+              child: Text('Invoice #${order['id']}', overflow: TextOverflow.ellipsis),
+            ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -141,65 +158,68 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
         ),
         content: SizedBox(
           width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Date: ${DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(order['order_time']))}'),
-              Text('Type: ${order['type']}'),
-              if (order['table_number'] != null) Text('Table: ${order['table_number']}'),
-              if (order['customer_name'] != null) Text('Customer: ${order['customer_name']}'),
-              if (order['customer_phone'] != null) Text('Phone: ${order['customer_phone']}'),
-              if (order['order_taker_name'] != null) ...[
-                const SizedBox(height: 4),
-                Text('Order Taken By: ${order['order_taker_name']} (ID: ${order['order_taker_id'] ?? "N/A"})'),
-              ],
-              if (order['delivered_by_name'] != null) ...[
-                const SizedBox(height: 4),
-                Text('Delivered By: ${order['delivered_by_name']} (ID: ${order['delivered_by_id'] ?? "N/A"})'),
-              ],
-              if (order['delivery_timestamp'] != null) ...[
-                const SizedBox(height: 4),
-                Text('Delivered At: ${DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(order['delivery_timestamp']))}'),
-              ],
-              const Divider(height: 24),
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(child: Text('Item', style: TextStyle(fontWeight: FontWeight.bold))),
-                  Text('Qty', style: TextStyle(fontWeight: FontWeight.bold)),
-                  SizedBox(width: 16),
-                  Text('Price', style: TextStyle(fontWeight: FontWeight.bold)),
-                  SizedBox(width: 16),
-                  Text('Total', style: TextStyle(fontWeight: FontWeight.bold)),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Date: ${DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(order['order_time']))}'),
+                Text('Type: ${order['type']}'),
+                if (order['table_number'] != null) Text('Table: ${order['table_number']}'),
+                if (order['customer_name'] != null) Text('Customer: ${order['customer_name']}'),
+                if (order['customer_phone'] != null) Text('Phone: ${order['customer_phone']}'),
+                if (order['order_taker_name'] != null) ...[
+                  const SizedBox(height: 4),
+                  Text('Order Taken By: ${order['order_taker_name']} (ID: ${order['order_taker_id'] ?? "N/A"})'),
                 ],
-              ),
-              const SizedBox(height: 8),
-              ...items.map((item) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                child: Row(
+                if (order['delivered_by_name'] != null) ...[
+                  const SizedBox(height: 4),
+                  Text('Delivered By: ${order['delivered_by_name']} (ID: ${order['delivered_by_id'] ?? "N/A"})'),
+                ],
+                if (order['delivery_timestamp'] != null) ...[
+                  const SizedBox(height: 4),
+                  Text('Delivered At: ${DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(order['delivery_timestamp']))}'),
+                ],
+                const Divider(height: 24),
+                const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(child: Text(item['product_name'])),
-                    Text('${item['quantity']}'),
-                    const SizedBox(width: 16),
-                    Text('₹${item['price']}'),
-                    const SizedBox(width: 16),
-                    Text('₹${((item['price'] as num) * (item['quantity'] as num)).toStringAsFixed(2)}'),
+                    Expanded(child: Text('Item', style: TextStyle(fontWeight: FontWeight.bold))),
+                    Text('Qty', style: TextStyle(fontWeight: FontWeight.bold)),
+                    SizedBox(width: 16),
+                    Text('Price', style: TextStyle(fontWeight: FontWeight.bold)),
+                    SizedBox(width: 16),
+                    Text('Total', style: TextStyle(fontWeight: FontWeight.bold)),
                   ],
                 ),
-              )).toList(),
-              const Divider(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Total Amount:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text('₹${order['total_amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
-                ],
-              ),
-            ],
+                const SizedBox(height: 8),
+                ...items.map((item) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: Text(item['product_name'])),
+                      Text('${item['quantity']}'),
+                      const SizedBox(width: 16),
+                      Text('₹${item['price']}'),
+                      const SizedBox(width: 16),
+                      Text('₹${((item['price'] as num) * (item['quantity'] as num)).toStringAsFixed(2)}'),
+                    ],
+                  ),
+                )).toList(),
+                const Divider(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Total Amount:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text('₹${order['total_amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
+        actionsOverflowButtonSpacing: 8,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -578,6 +598,8 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
       });
     }
 
+    // Automatically release table to Available once bill is fully paid
+    await _tableRepository.syncTableStatusForOrder(orderId);
 
     _loadOrders(); // Refresh list
   }
@@ -722,6 +744,9 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                   'payment_time': DateTime.now().toIso8601String(),
                 });
 
+                // Automatically release table to Available once bill is fully paid
+                await _tableRepository.syncTableStatusForOrder(order['id'] as int);
+
                 Navigator.pop(context);
                 _loadOrders();
               } else {
@@ -797,7 +822,9 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                 borderRadius: BorderRadius.circular(16),
                 side: BorderSide(color: Colors.grey.shade200),
               ),
-                child: LayoutBuilder(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: LayoutBuilder(
                   builder: (context, constraints) {
                     final isMobile = constraints.maxWidth < 600;
 
@@ -918,6 +945,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                     );
                   },
                 ),
+                ),
             ),
           ),
           
@@ -1009,14 +1037,18 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text(
-                                              'Payment Status: ${order['payment_status'] ?? 'Unpaid'}' +
-                                              (order['payment_method'] != null ? ' (${order['payment_method']})' : ''),
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                color: order['payment_status'] == 'Paid' ? Colors.green : Colors.red,
+                                            Flexible(
+                                              child: Text(
+                                                'Payment Status: ${order['payment_status'] ?? 'Unpaid'}' +
+                                                (order['payment_method'] != null ? ' (${order['payment_method']})' : ''),
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: order['payment_status'] == 'Paid' ? Colors.green : Colors.red,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
+                                            const SizedBox(width: 8),
                                             Wrap(
                                               spacing: 8,
                                               children: [

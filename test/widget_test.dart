@@ -3,8 +3,8 @@ import 'package:dine_master/main.dart';
 
 void main() {
   testWidgets('Dine Master Login Screen Smoke Test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp(hasToken: false));
+    // Build our app and trigger a frame on login screen.
+    await tester.pumpWidget(const MyApp(hasToken: false, initialLocation: '/'));
     await tester.pumpAndSettle();
 
     // Verify that the login screen header is displayed

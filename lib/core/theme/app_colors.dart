@@ -4,7 +4,7 @@ class AppColors {
   // Brand Colors
   static const Color navyBlue = Color(0xFF040E21); // Primary Navy
   static const Color gold = Color(0xFF946F3C); // Primary Gold
-  static const Color background = Color(0xFFF5F3F1); // Background
+  static const Color background = Color(0xFFF8F9FA); // Clean light background
   static const Color white = Color(0xFFFFFFFF); // White
   
   // Neutral Tints based on Navy Blue
