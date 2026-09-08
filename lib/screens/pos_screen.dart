@@ -17,7 +17,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'pdf_preview_screen.dart';
-import '../widgets/food_attributes_badge.dart';
 import '../widgets/pos_item_card.dart';
 
 class PosScreen extends StatefulWidget {

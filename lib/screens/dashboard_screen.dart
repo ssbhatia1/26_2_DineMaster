@@ -1,10 +1,8 @@
-import 'dart:ui';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/database_helper.dart';
-import '../main.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Widget child;

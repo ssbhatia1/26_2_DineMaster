@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SyncService {
   static final SyncService instance = SyncService._init();
+  final Logger _logger = Logger();
   
   WebSocket? _socket;
   Timer? _reconnectTimer;
@@ -36,13 +38,13 @@ class SyncService {
     _isConnecting = true;
     
     final url = 'ws://$_currentIp:8081';
-    print('SyncService: Connecting to $url...');
+    _logger.i('SyncService: Connecting to $url...');
     
     try {
       _socket = await WebSocket.connect(url).timeout(const Duration(seconds: 5));
       connectionState.value = true;
       _isConnecting = false;
-      print('SyncService: Connected to WebSocket server at $url');
+      _logger.i('SyncService: Connected to WebSocket server at $url');
       
       _reconnectTimer?.cancel();
       _reconnectTimer = null;
@@ -50,22 +52,22 @@ class SyncService {
       _socket!.listen(
         (data) {
           if (data is String) {
-            print('SyncService: Received message: $data');
+            _logger.d('SyncService: Received message: $data');
             _syncController.add(data);
           }
         },
         onDone: () {
-          print('SyncService: WebSocket connection closed by server.');
+          _logger.w('SyncService: WebSocket connection closed by server.');
           _handleDisconnect();
         },
         onError: (error) {
-          print('SyncService: WebSocket error: $error');
+          _logger.e('SyncService: WebSocket error: $error');
           _handleDisconnect();
         },
         cancelOnError: true,
       );
     } catch (e) {
-      print('SyncService: Connection failed: $e');
+      _logger.e('SyncService: Connection failed: $e');
       _isConnecting = false;
       _handleDisconnect();
     }
@@ -78,7 +80,7 @@ class SyncService {
     // Attempt reconnection every 5 seconds
     if (_reconnectTimer == null || !_reconnectTimer!.isActive) {
       _reconnectTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-        print('SyncService: Retrying connection...');
+        _logger.i('SyncService: Retrying connection...');
         _connect();
       });
     }
@@ -95,7 +97,7 @@ class SyncService {
     if (_socket != null && connectionState.value) {
       _socket!.add(jsonStr);
     } else {
-      print('SyncService: Local broadcast dispatched (socket not connected)');
+      _logger.i('SyncService: Local broadcast dispatched (socket not connected)');
     }
   }
 
