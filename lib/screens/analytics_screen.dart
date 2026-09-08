@@ -145,30 +145,42 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       );
     }
 
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reports & Analytics', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            // tooltip disabled,
+            tooltip: 'Refresh',
             onPressed: _loadAnalyticsData,
           ),
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: () => _showExportDialog(context),
-            icon: const Icon(Icons.download),
-            label: const Text('Export Report'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          if (isMobile)
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: 'Export Report',
+              onPressed: () => _showExportDialog(context),
+            )
+          else ...[
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: () => _showExportDialog(context),
+              icon: const Icon(Icons.download),
+              label: const Text('Export Report'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
             ),
-          ),
+          ],
           const SizedBox(width: 16),
         ],
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           labelColor: AppColors.primary,
           unselectedLabelColor: Colors.grey,
           indicatorColor: AppColors.primary,
@@ -194,8 +206,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
 
   // --- TAB 1: OVERVIEW TAB ---
   Widget _buildOverviewTab() {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isMobile ? 12 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -203,12 +217,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
           LayoutBuilder(
             builder: (context, constraints) {
               double cardWidth = (constraints.maxWidth - 48) / 4;
+              double spacing = 16;
               if (constraints.maxWidth < 800) {
-                cardWidth = (constraints.maxWidth - 16) / 2;
+                spacing = isMobile ? 8 : 16;
+                cardWidth = (constraints.maxWidth - spacing) / 2;
               }
               return Wrap(
-                spacing: 16,
-                runSpacing: 16,
+                spacing: spacing,
+                runSpacing: spacing,
                 children: [
                   _buildStatCard(
                     title: 'Total Revenue',
@@ -242,7 +258,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
               );
             },
           ),
-          const SizedBox(height: 32),
+          SizedBox(height: isMobile ? 16 : 32),
 
           // Custom Revenue Bar Chart & Payment Breakdown Side-by-Side
           LayoutBuilder(
@@ -279,9 +295,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
     required Color color,
     required double width,
   }) {
+    final isCompact = width < 220;
+
     return Container(
       width: width,
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isCompact ? 10 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -294,19 +312,32 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
         children: [
           CircleAvatar(
             backgroundColor: color.withOpacity(0.1),
-            radius: 26,
-            child: Icon(icon, color: color, size: 28),
+            radius: isCompact ? 18 : 26,
+            child: Icon(icon, color: color, size: isCompact ? 20 : 28),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: isCompact ? 8 : 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(title, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 4),
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: isCompact ? 11 : 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: isCompact ? 2 : 4),
                 Text(
                   value,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: isCompact ? 16 : 22,
+                    fontWeight: FontWeight.bold,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],

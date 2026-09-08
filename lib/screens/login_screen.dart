@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:convert';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -18,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   String _selectedRole = 'Owner';
+  bool _rememberMe = false;
 
   @override
   Widget build(BuildContext context) {
@@ -186,16 +188,35 @@ class _LoginScreenState extends State<LoginScreen> {
                         ).animate().fadeIn(delay: 1100.ms).slideX(begin: -0.1),
                         const SizedBox(height: 12),
 
-                        // Forgot Password
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: () {},
-                            child: const Text(
-                              'Forgot Password?',
-                              style: TextStyle(color: Colors.white70),
+                        // Keep me signed in
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: _rememberMe,
+                              activeColor: Colors.white,
+                              checkColor: AppColors.primary,
+                              side: const BorderSide(color: Colors.white70),
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                              onChanged: (val) {
+                                setState(() {
+                                  _rememberMe = val ?? false;
+                                });
+                              },
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _rememberMe = !_rememberMe;
+                                });
+                              },
+                              child: const Text(
+                                'Keep me signed in',
+                                style: TextStyle(color: Colors.white70, fontSize: 13),
+                              ),
+                            ),
+                          ],
                         ).animate().fadeIn(delay: 1200.ms),
                         const SizedBox(height: 24),
 
@@ -219,9 +240,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             if (users.isNotEmpty) {
                               final prefs = await SharedPreferences.getInstance();
-                              await prefs.setString('token', 'mock_token_123');
+                              final sessionToken = base64Url.encode(utf8.encode('$username:${DateTime.now().millisecondsSinceEpoch}'));
+                              await prefs.setString('token', sessionToken);
                               await prefs.setString('username', username);
                               await prefs.setString('role', _selectedRole);
+                              await prefs.setBool('remember_me', _rememberMe);
                               context.go('/branch_selection');
                             } else {
 

@@ -2845,8 +2845,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
   Future<void> _previewCartPdf() async {
     final pdf = await _createCartPdfDocument();
     if (pdf == null) return;
-    Navigator.push(
-      context,
+    Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (context) => PdfPreviewScreen(
           title: 'Preview Invoice',

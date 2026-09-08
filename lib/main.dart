@@ -24,7 +24,7 @@ import 'services/server_service.dart';
 import 'services/sync_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-final themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.system);
+final themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.light);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,15 +32,19 @@ void main() async {
   await SyncService.instance.initConnection();
   
   final prefs = await SharedPreferences.getInstance();
-  final hasToken = prefs.getString('token') != null;
+  final rememberMe = prefs.getBool('remember_me') ?? false;
+  if (!rememberMe) {
+    await prefs.remove('token');
+  }
+  final hasToken = (prefs.getString('token') != null) && rememberMe;
 
-  final themeStr = prefs.getString('theme_mode') ?? 'system';
-  if (themeStr == 'light') {
-    themeNotifier.value = ThemeMode.light;
-  } else if (themeStr == 'dark') {
+  final themeStr = prefs.getString('theme_mode') ?? 'light';
+  if (themeStr == 'dark') {
     themeNotifier.value = ThemeMode.dark;
-  } else {
+  } else if (themeStr == 'system') {
     themeNotifier.value = ThemeMode.system;
+  } else {
+    themeNotifier.value = ThemeMode.light;
   }
   
   runApp(MyApp(hasToken: hasToken));
@@ -140,9 +144,22 @@ GoRouter _buildRouter(bool hasToken) {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   final bool hasToken;
   const MyApp({super.key, required this.hasToken});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _router = _buildRouter(widget.hasToken);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +203,7 @@ class MyApp extends StatelessWidget {
               secondary: AppColors.secondary,
               brightness: Brightness.dark,
             ),
-            scaffoldBackgroundColor: AppColors.background,
+            scaffoldBackgroundColor: const Color(0xFF14141E),
             appBarTheme: AppBarTheme(
               elevation: 0,
               backgroundColor: Colors.grey.shade900,
@@ -201,7 +218,7 @@ class MyApp extends StatelessWidget {
               ),
             ),
           ),
-          routerConfig: _buildRouter(hasToken),
+          routerConfig: _router,
         );
       },
     );

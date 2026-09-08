@@ -135,13 +135,10 @@ flutter test test/order_model_test.dart
 
 ## GitHub Actions CI/CD
 
-The repository ships three workflows under `.github/workflows/`:
+The repository ships two primary workflows under `.github/workflows/`:
 
 - **`pull_request.yml`** — Runs on every PR to `master`. Installs dependencies,
   runs static analysis, and runs all tests. Fails the PR if any step fails.
-- **`ci.yml`** — Runs on every push to `master`. Runs the full quality gate, then
-  builds production packages and uploads them as GitHub Actions **artifacts**
-  for Windows, Linux, macOS, iOS, Android, and Web.
 - **`release.yml`** — Runs when a `v*` tag is pushed, a GitHub Release is
   published, **or manually triggered** via `workflow_dispatch` (Actions tab).
   Automatically resolves the version from `pubspec.yaml` or a user-provided input.
@@ -163,23 +160,9 @@ flowchart LR
     PR[Pull Request] --> PRJ[validate.yml]
     PRJ --> |fail| FAIL[PR blocked]
 
-    Push[Push to master] --> CI[ci.yml]
-    CI --> V[validate.yml]
-    V --> B1[Windows]
-    V --> B2[Linux]
-    V --> B3[macOS]
-    V --> B4[iOS]
-    V --> B5[Android]
-    V --> B6[Web]
-    B1 --> A1[(Artifacts)]
-    B2 --> A1
-    B3 --> A1
-    B4 --> A1
-    B5 --> A1
-    B6 --> A1
-
-    Tag[v1.0.0 tag] --> R[release.yml]
-    R --> RB[build.yml: all platforms]
+    Tag[v1.0.0 tag / dispatch] --> R[release.yml]
+    R --> V[validate.yml]
+    V --> RB[build.yml: all platforms]
     RB --> GHR[GitHub Release]
 ```
 

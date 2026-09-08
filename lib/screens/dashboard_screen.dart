@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/database_helper.dart';
+import '../main.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Widget child;
@@ -231,6 +232,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 final prefs = await SharedPreferences.getInstance();
                 await prefs.remove('token');
                 await prefs.remove('username');
+                await prefs.remove('role');
+                await prefs.remove('remember_me');
                 if (context.mounted) {
                   context.go('/');
                 }
@@ -297,47 +300,83 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   actions: [
                     if (_restaurants.isNotEmpty)
-                      DropdownButton<int>(
-                        value: _selectedRestaurantId,
-                        underline: const SizedBox(),
-                        items: _restaurants.map((r) {
-                          return DropdownMenuItem<int>(
-                            value: r['id'],
-                            child: Text(r['name']),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedRestaurantId = value;
-                            DatabaseHelper.currentRestaurantId = value;
-                          });
-
-                        },
+                      DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          value: _selectedRestaurantId,
+                          isDense: true,
+                          items: _restaurants.map((r) {
+                            return DropdownMenuItem<int>(
+                              value: r['id'],
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(maxWidth: isDesktop ? 180 : 120),
+                                child: Text(
+                                  r['name'],
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedRestaurantId = value;
+                              DatabaseHelper.currentRestaurantId = value;
+                            });
+                          },
+                        ),
                       ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     IconButton(
-                      icon: const Icon(Icons.notifications),
+                      icon: const Icon(Icons.notifications_outlined, size: 20),
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(),
                       onPressed: () {},
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.dark_mode),
-                      onPressed: () {},
+                    ValueListenableBuilder<ThemeMode>(
+                      valueListenable: themeNotifier,
+                      builder: (context, currentMode, _) {
+                        final isDarkTheme = currentMode == ThemeMode.dark;
+                        return IconButton(
+                          icon: Icon(isDarkTheme ? Icons.light_mode : Icons.dark_mode, size: 20),
+                          padding: const EdgeInsets.all(8),
+                          constraints: const BoxConstraints(),
+                          tooltip: isDarkTheme ? 'Switch to Light Theme' : 'Switch to Dark Theme',
+                          onPressed: () async {
+                            final newMode = isDarkTheme ? ThemeMode.light : ThemeMode.dark;
+                            themeNotifier.value = newMode;
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setString('theme_mode', isDarkTheme ? 'light' : 'dark');
+                          },
+                        );
+                      },
                     ),
                     if (!isDesktop)
                       IconButton(
-                        icon: const Icon(Icons.logout),
-                        onPressed: () {
-                          context.go('/');
+                        icon: const Icon(Icons.logout, size: 20),
+                        padding: const EdgeInsets.all(8),
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Logout',
+                        onPressed: () async {
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.remove('token');
+                          await prefs.remove('username');
+                          await prefs.remove('role');
+                          await prefs.remove('remember_me');
+                          if (context.mounted) {
+                            context.go('/');
+                          }
                         },
                       ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                   ],
                 ),
                 
                 // Content
                 Expanded(
                   child: Container(
-                    color: Colors.grey.shade100,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF14141E)
+                        : Colors.grey.shade100,
                     child: KeyedSubtree(
                       key: ValueKey(DatabaseHelper.currentRestaurantId),
                       child: widget.child,
@@ -353,6 +392,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   List<Widget> _buildNavSections(BuildContext context, int activeIndex) {
+    final isDesktop = MediaQuery.of(context).size.width >= 1024;
     final Map<String, List<int>> categories = {};
     for (int i = 0; i < _navItems.length; i++) {
       final cat = _navItems[i]['category'] ?? 'General';
@@ -403,6 +443,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               selected: isSelected,
               selectedTileColor: Colors.white.withAlpha(25),
               onTap: () {
+                if (!isDesktop) {
+                  Navigator.of(context).pop();
+                }
                 context.go(item['route']);
               },
             ),

@@ -103,16 +103,26 @@ class _MenuCardScreenState extends State<MenuCardScreen> {
                 ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : filtered.isEmpty
                     ? const Center(child: Text('No products found matching your filter'))
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(16),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 0.72,
-                        ),
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) => _buildProductCard(filtered[index]),
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          final width = constraints.maxWidth;
+                          final int crossAxisCount = width >= 1100
+                              ? 4
+                              : (width >= 700 ? 3 : 2);
+                          final double childAspectRatio = width < 400 ? 0.72 : (width < 700 ? 0.76 : 0.75);
+
+                          return GridView.builder(
+                            padding: const EdgeInsets.all(16),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: crossAxisCount,
+                              crossAxisSpacing: 14,
+                              mainAxisSpacing: 14,
+                              childAspectRatio: childAspectRatio,
+                            ),
+                            itemCount: filtered.length,
+                            itemBuilder: (context, index) => _buildProductCard(filtered[index]),
+                          );
+                        },
                       ),
           ),
         ],
@@ -145,7 +155,7 @@ class _MenuCardScreenState extends State<MenuCardScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: Colors.white.withAlpha(25),
+              color: Colors.white.withAlpha(20),
               shape: BoxShape.circle,
               border: Border.all(color: AppColors.secondary, width: 1.2),
             ),
@@ -208,6 +218,57 @@ class _MenuCardScreenState extends State<MenuCardScreen> {
   }
 
   Widget _buildCategoryBar() {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    if (isMobile) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Search dishes...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              onChanged: (val) => setState(() => _searchQuery = val),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 38,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _categories.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final c = _categories[index];
+                  final selected = c == _selectedCategory;
+                  return ChoiceChip(
+                    label: Text(c),
+                    selected: selected,
+                    onSelected: (_) => setState(() => _selectedCategory = c),
+                    selectedColor: AppColors.secondary,
+                    backgroundColor: Colors.white,
+                    side: BorderSide(color: selected ? AppColors.secondary : Colors.grey.shade300),
+                    showCheckmark: false,
+                    labelStyle: TextStyle(
+                      color: selected ? Colors.white : Colors.grey.shade800,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12.5,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -262,17 +323,25 @@ class _MenuCardScreenState extends State<MenuCardScreen> {
 
   Widget _buildLegend() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        alignment: WrapAlignment.spaceBetween,
         children: [
-          _legendDot(color: const Color(0xFF2E7D32), icon: Icons.eco, label: 'Veg'),
-          const SizedBox(width: 14),
-          _legendDot(color: const Color(0xFFC62828), icon: Icons.restaurant, label: 'Non-Veg'),
-          const SizedBox(width: 14),
-          _legendDot(color: const Color(0xFFE65100), icon: Icons.egg, label: 'Egg'),
-          const SizedBox(width: 14),
-          _legendDot(color: const Color(0xFF00897B), icon: Icons.spa, label: 'Jain'),
-          const Spacer(),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _legendDot(color: const Color(0xFF2E7D32), icon: Icons.eco, label: 'Veg'),
+              const SizedBox(width: 10),
+              _legendDot(color: const Color(0xFFC62828), icon: Icons.restaurant, label: 'Non-Veg'),
+              const SizedBox(width: 10),
+              _legendDot(color: const Color(0xFFE65100), icon: Icons.egg, label: 'Egg'),
+              const SizedBox(width: 10),
+              _legendDot(color: const Color(0xFF00897B), icon: Icons.spa, label: 'Jain'),
+            ],
+          ),
           Text(
             'Prices incl. taxes',
             style: TextStyle(color: Colors.grey.shade500, fontSize: 11),

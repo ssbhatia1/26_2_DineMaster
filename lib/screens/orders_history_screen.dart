@@ -507,8 +507,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
   }
 
   void _previewInvoice(Map<String, dynamic> order, List<Map<String, dynamic>> items) {
-    Navigator.push(
-      context,
+    Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (context) => PdfPreviewScreen(
           title: 'Invoice #${order['id']}',

@@ -642,11 +642,11 @@ CREATE TABLE bookings (
 )
 ''');
 
-    // Insert Sample Data
-    await _insertSampleData(db);
+    // Insert Initial Configuration Data
+    await _insertInitialData(db);
   }
 
-  Future<void> _insertSampleData(Database db) async {
+  Future<void> _insertInitialData(Database db) async {
     final now = DateTime.now().toIso8601String();
     
     // Insert Default Restaurant
@@ -655,116 +655,14 @@ CREATE TABLE bookings (
       'created_at': now,
     });
 
-    // Insert Users
+    // Insert Default Owner
     await db.insert('users', {
       'name': 'Owner User',
       'username': 'owner',
       'password': hashPassword('owner123'),
       'role': 'Owner',
       'is_active': 1,
-      'created_at': now
-    });
-    
-    await db.insert('users', {
-      'name': 'Manager User',
-      'username': 'manager',
-      'password': hashPassword('manager123'),
-      'role': 'Manager',
-      'is_active': 1,
-      'created_at': now
-    });
-
-    await db.insert('users', {
-      'name': 'Cashier User',
-      'username': 'cashier',
-      'password': hashPassword('cashier123'),
-      'role': 'Cashier',
-      'is_active': 1,
-      'created_at': now
-    });
-
-    // Seed default Waiters
-    await db.insert('users', {
-      'name': 'John Waiter',
-      'username': 'john_waiter',
-      'password': hashPassword('password123'),
-      'role': 'Waiter',
-      'contact_details': '+91 99999 88888',
-      'shift_timing': 'Morning (09:00 AM - 05:00 PM)',
-      'is_active': 1,
-      'created_at': now
-    });
-    await db.insert('users', {
-      'name': 'Sarah Waiter',
-      'username': 'sarah_waiter',
-      'password': hashPassword('password123'),
-      'role': 'Waiter',
-      'contact_details': '+91 99999 77777',
-      'shift_timing': 'Evening (05:00 PM - 01:00 AM)',
-      'is_active': 1,
-      'created_at': now
-    });
-
-    // Seed default Chefs
-    await db.insert('users', {
-      'name': 'Chef Marco',
-      'username': 'chef_marco',
-      'password': hashPassword('password123'),
-      'role': 'Chef',
-      'contact_details': '+91 99999 66666',
-      'shift_timing': 'Morning (09:00 AM - 05:00 PM)',
-      'is_active': 1,
-      'created_at': now
-    });
-    await db.insert('users', {
-      'name': 'Chef Priya',
-      'username': 'chef_priya',
-      'password': hashPassword('password123'),
-      'role': 'Chef',
-      'contact_details': '+91 99999 55555',
-      'shift_timing': 'Evening (05:00 PM - 01:00 AM)',
-      'is_active': 1,
-      'created_at': now
-    });
-
-    // Insert Sample Tables
-    for (int i = 1; i <= 10; i++) {
-      await db.insert('tables', {
-        'table_number': 'T$i',
-        'capacity': 4,
-        'status': 'Available',
-        'restaurant_id': restId
-      });
-    }
-
-    // Insert Sample Products
-    await db.insert('products', {
-      'name': 'Paneer Butter Masala',
-      'price': 250.0,
-      'category': 'Main Course',
-      'is_veg': 1,
-      'restaurant_id': restId
-    });
-    await db.insert('products', {
-      'name': 'Chicken Biryani',
-      'price': 300.0,
-      'category': 'Main Course',
-      'is_veg': 0,
-      'restaurant_id': restId
-    });
-    await db.insert('products', {
-      'name': 'Garlic Naan',
-      'price': 50.0,
-      'category': 'Breads',
-      'is_veg': 1,
-      'restaurant_id': restId
-    });
-    await db.insert('products', {
-      'name': 'Cold Coffee',
-      'price': 120.0,
-      'category': 'Beverages',
-      'is_veg': 1,
-      'restaurant_id': restId
+      'created_at': now,
     });
 
     // Insert Default Table Types
@@ -777,6 +675,17 @@ CREATE TABLE bookings (
     final defaultSections = ['Main Hall', 'AC Dining', 'Rooftop', 'Outdoor / Patio', 'VIP Lounge', 'Bar Counter'];
     for (var s in defaultSections) {
       await db.insert('table_sections', {'name': s, 'restaurant_id': restId});
+    }
+
+    // Insert Default Categories
+    final defaultCategories = ['Starters', 'Main Course', 'Breads', 'Beverages', 'Desserts'];
+    for (var cat in defaultCategories) {
+      try {
+        await db.insert('categories', {
+          'name': cat,
+          'restaurant_id': restId,
+        });
+      } catch (_) {}
     }
   }
 
