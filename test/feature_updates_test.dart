@@ -49,6 +49,10 @@ void main() {
   group('Feature 2: Installation Data Handling Tests', () {
     test('checkPreviousDataExists detects existing db files correctly', () async {
       final dbPath = await getDatabasesPath();
+      final dbDir = Directory(dbPath);
+      if (!await dbDir.exists()) {
+        await dbDir.create(recursive: true);
+      }
       final testDbFile = File(p.join(dbPath, 'dinemaster_restaurant.db'));
 
       // If db file doesn't exist, create temporary file
@@ -68,6 +72,10 @@ void main() {
     test('continueWithoutPreviousData archives rather than deleting existing data', () async {
       await DatabaseHelper.instance.close();
       final dbPath = await getDatabasesPath();
+      final dbDir = Directory(dbPath);
+      if (!await dbDir.exists()) {
+        await dbDir.create(recursive: true);
+      }
       final testDbFile = File(p.join(dbPath, 'dinemaster_restaurant.db'));
       await testDbFile.writeAsString('important-customer-data');
 

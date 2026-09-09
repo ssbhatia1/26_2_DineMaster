@@ -573,9 +573,10 @@ class _TablesScreenState extends State<TablesScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
+                            isExpanded: true,
                             value: section,
                             items: availableSections
-                                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                                .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
                                 .toList(),
                             onChanged: (val) => setDlgState(() => section = val!),
                             decoration: const InputDecoration(
@@ -591,8 +592,11 @@ class _TablesScreenState extends State<TablesScreen> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
+                            isExpanded: true,
                             value: tableType,
-                            items: availableTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                            items: availableTypes
+                                .map((t) => DropdownMenuItem(value: t, child: Text(t, overflow: TextOverflow.ellipsis)))
+                                .toList(),
                             onChanged: (val) => setDlgState(() => tableType = val!),
                             decoration: const InputDecoration(
                               labelText: 'Table Type / Shape',
@@ -603,10 +607,11 @@ class _TablesScreenState extends State<TablesScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
+                            isExpanded: true,
                             value: status,
                             items: _allStatuses
                                 .where((s) => s != 'All')
-                                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                                .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
                                 .toList(),
                             onChanged: (val) => setDlgState(() => status = val!),
                             decoration: const InputDecoration(

@@ -16,17 +16,21 @@ class DatabaseHelper {
 
   DatabaseHelper._init();
 
+  static String databaseName = 'dinemaster_restaurant.db';
+
   Future<Database> get database async {
-    final prefs = await SharedPreferences.getInstance();
-    final isServer = prefs.getBool('is_server') ?? true;
-    
-    if (!isServer) {
-      final serverIp = prefs.getString('server_ip') ?? 'localhost';
-      return NetworkDatabase(serverIp: serverIp);
-    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final isServer = prefs.getBool('is_server') ?? true;
+      
+      if (!isServer) {
+        final serverIp = prefs.getString('server_ip') ?? 'localhost';
+        return NetworkDatabase(serverIp: serverIp);
+      }
+    } catch (_) {}
 
     if (_database != null) return _database!;
-    _database = await _initDB('dinemaster_restaurant.db');
+    _database = await _initDB(databaseName);
     return _database!;
   }
 
@@ -37,15 +41,23 @@ class DatabaseHelper {
     }
 
     final dbPath = await getDatabasesPath();
+    final dbDir = Directory(dbPath);
+    if (!await dbDir.exists()) {
+      await dbDir.create(recursive: true);
+    }
+
     final oldPath = join(dbPath, 'nexodine_restaurant.db');
     final path = join(dbPath, filePath);
-    final prefs = await SharedPreferences.getInstance();
-    final setupChoice = prefs.getString('setup_data_choice');
-    if (setupChoice != 'fresh' && await File(oldPath).exists() && !await File(path).exists()) {
-      try {
-        await File(oldPath).copy(path);
-      } catch (_) {}
-    }
+    String? setupChoice;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setupChoice = prefs.getString('setup_data_choice');
+      if (setupChoice != 'fresh' && await File(oldPath).exists() && !await File(path).exists()) {
+        try {
+          await File(oldPath).copy(path);
+        } catch (_) {}
+      }
+    } catch (_) {}
 
     final db = await openDatabase(
       path,
@@ -58,12 +70,14 @@ class DatabaseHelper {
     // Only remove dummy data on fresh setup, never on subsequent launches
     // to avoid accidentally deleting user-created data that matches dummy names
     if (setupChoice == 'fresh') {
-      final prefs2 = await SharedPreferences.getInstance();
-      final alreadyCleaned = prefs2.getBool('dummy_data_cleaned') ?? false;
-      if (!alreadyCleaned) {
-        await _removeDummyData(db);
-        await prefs2.setBool('dummy_data_cleaned', true);
-      }
+      try {
+        final prefs2 = await SharedPreferences.getInstance();
+        final alreadyCleaned = prefs2.getBool('dummy_data_cleaned') ?? false;
+        if (!alreadyCleaned) {
+          await _removeDummyData(db);
+          await prefs2.setBool('dummy_data_cleaned', true);
+        }
+      } catch (_) {}
     }
     return db;
   }
@@ -902,6 +916,10 @@ CREATE TABLE bookings (
       databaseFactory = databaseFactoryFfi;
     }
     final dbPath = await getDatabasesPath();
+    final dbDir = Directory(dbPath);
+    if (!await dbDir.exists()) {
+      await dbDir.create(recursive: true);
+    }
     final dineMasterPath = join(dbPath, 'dinemaster_restaurant.db');
     final legacyPath = join(dbPath, 'nexodine_restaurant.db');
 
@@ -914,6 +932,10 @@ CREATE TABLE bookings (
   /// Retains existing application data and completes setup.
   Future<void> keepPreviousData() async {
     final dbPath = await getDatabasesPath();
+    final dbDir = Directory(dbPath);
+    if (!await dbDir.exists()) {
+      await dbDir.create(recursive: true);
+    }
     final dineMasterPath = join(dbPath, 'dinemaster_restaurant.db');
     final legacyPath = join(dbPath, 'nexodine_restaurant.db');
 
@@ -935,6 +957,10 @@ CREATE TABLE bookings (
   /// then initializes a clean fresh database.
   Future<String?> continueWithoutPreviousData() async {
     final dbPath = await getDatabasesPath();
+    final dbDir = Directory(dbPath);
+    if (!await dbDir.exists()) {
+      await dbDir.create(recursive: true);
+    }
     final dineMasterPath = join(dbPath, 'dinemaster_restaurant.db');
     final legacyPath = join(dbPath, 'nexodine_restaurant.db');
 

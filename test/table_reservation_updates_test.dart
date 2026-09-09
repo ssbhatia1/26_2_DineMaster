@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dine_master/core/database/database_helper.dart';
 import 'package:dine_master/repositories/table_repository.dart';
 import 'package:dine_master/models/table_model.dart';
@@ -12,11 +13,16 @@ void main() {
   setUpAll(() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
+    DatabaseHelper.databaseName = 'table_reservation_test.db';
+  });
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
   });
 
   tearDownAll(() async {
-    final db = await DatabaseHelper.instance.database;
-    await db.close();
+    await DatabaseHelper.instance.close();
+    DatabaseHelper.databaseName = 'dinemaster_restaurant.db';
   });
 
   group('Multiple Table Reservations & Occupation Logic Tests', () {
@@ -169,7 +175,11 @@ void main() {
         ),
       );
 
-      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Verify app bar title and tabs
       expect(find.text('Restaurant Table Management'), findsOneWidget);
@@ -188,7 +198,11 @@ void main() {
         ),
       );
 
-      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // Find the FAB 'Add Table' button
       final addBtn = find.text('Add Table');
@@ -217,7 +231,11 @@ void main() {
         ),
       );
 
-      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       // No flutter exception or render flex overflow should have occurred
       expect(tester.takeException(), isNull);

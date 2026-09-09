@@ -72,6 +72,9 @@ on:
         required: false
         description: 'App Store Connect API private key (.p8) contents.'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ${{ inputs.runner }}
