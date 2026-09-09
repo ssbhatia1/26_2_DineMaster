@@ -232,11 +232,11 @@ jobs:
           name: 'Dine Master ${{ needs.versions.outputs.tag-name }}'
           files: release-artifacts/**/*
           generate_release_notes: true
-          body: |
-            ## Dine Master ${{ needs.versions.outputs.tag-name }}
+          # body: |
+          #   ## Dine Master ${{ needs.versions.outputs.tag-name }}
 
-            Public automated production release.
+          #   Public automated production release.
 
-            > **Distribution Notice**: This release contains compiled application binaries only. Source code archives are excluded.
+          #   > **Distribution Notice**: This release contains compiled application binaries only. Source code archives are excluded.
 
-            Download the compiled artifact for your platform and install it directly.
+          #   Download the compiled artifact for your platform and install it directly.
