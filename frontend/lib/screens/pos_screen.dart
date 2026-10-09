@@ -213,15 +213,16 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         
         // Fetch recipe for this product
         final recipeItems = await db.rawQuery('''
-          SELECT recipes.*, ingredients.stock_quantity 
+          SELECT recipes.*, COALESCE(inv.current_stock, ing.stock_quantity, 0) as available_stock 
           FROM recipes 
-          JOIN ingredients ON recipes.ingredient_id = ingredients.id 
+          LEFT JOIN inventory inv ON recipes.ingredient_id = inv.id
+          LEFT JOIN ingredients ing ON recipes.ingredient_id = ing.id
           WHERE recipes.product_id = ?
         ''', [product.id]);
         
         for (var item in recipeItems) {
-          final stock = item['stock_quantity'] as double;
-          final qtyNeeded = item['quantity_used'] as double;
+          final stock = (item['available_stock'] as num?)?.toDouble() ?? 0.0;
+          final qtyNeeded = (item['quantity_used'] as num?)?.toDouble() ?? 0.0;
           if (stock < qtyNeeded) {
             isStockAvailable = false;
             break;
@@ -566,10 +567,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         );
         
         for (var invItem in inventory) {
-          final itemName = invItem['item_name'] as String;
-          final currentStock = invItem['current_stock'] as double;
+          final itemName = (invItem['item_name'] as String?) ?? '';
+          final currentStock = (invItem['current_stock'] as num?)?.toDouble() ?? 0.0;
           
-          if (product.name.toLowerCase().contains(itemName.toLowerCase())) {
+          if (itemName.isNotEmpty && product.name.toLowerCase().contains(itemName.toLowerCase())) {
             final newStock = currentStock - item['quantity'];
             await db.update(
               'inventory',

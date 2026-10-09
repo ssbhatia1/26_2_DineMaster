@@ -4,12 +4,85 @@ A complete enterprise-grade Restaurant ERP & POS Management System built with Fl
 
 ## Features
 
-- **POS Billing System**: High-speed billing interface with cart management.
-- **Localhost Web Ordering**: Built-in Shelf server to serve local API for customer ordering.
-- **Table Management**: Live table status tracking.
-- **Kitchen KOT**: Real-time order updates for the kitchen.
-- **Inventory Tracking**: Stock management and alerts.
-- **Analytics Dashboard**: Real-time sales and metrics.
+> 📖 **Full Feature Breakdown**: For an exhaustive, granular specification of all modules, workflows, and subfeatures, see [features.md](features.md).  
+> 🚀 **Quick Execution Guide**: For step-by-step terminal commands, paths, and backend/frontend launch options, see [run.md](run.md).
+
+### 🍽️ Point of Sale (POS) & High-Speed Billing
+- **Fast Billing Interface**: Optimized for touchscreens, keyboard shortcuts, and mouse operation.
+- **Multiple Order Types**: Full support for Dine-In, Table Orders, Takeaway, Delivery, Online Orders, and Walk-in customers.
+- **Cart & Discount Management**: Itemized quantity adjustments, custom order notes, and flexible discounts (Flat amount or Percentage).
+- **Tax & GST Calculation**: Automatic multi-slab GST tax computation with configurable rates.
+- **Flexible Payment Methods**: Record transactions via Cash, Card, UPI, and Digital Wallets with instant payment status updates.
+- **Order Park & Reopen**: Hold active orders and instantly reopen them from the POS or table view for settlement.
+- **Thermal Invoice & Receipt Printing**: Integrated thermal printer support (IP & port configuration) with PDF preview and receipt generation.
+
+### 🪑 Interactive Table Management & Reservations
+- **Visual Table Layout Grid**: Real-time floor plan with color-coded table statuses (Available, Occupied, Reserved, Ordering, Preparing, Bill Requested, Payment Pending, Paid, Cleaning, Out of Service).
+- **24-Hour Booking Time Grid**: Interactive timeline view to schedule, inspect, and manage table reservations across 1-hour time slots.
+- **Reservation & Booking Manager**: Dedicated tracking for upcoming reservations, guest headcounts, customer contact details, and check-in workflows.
+- **Active Hold Orders Tab**: Centralized view of all parked and active table tabs for quick access.
+- **Section & Layout Customization**: Organize dining spaces by sections and rooms (e.g., Main Hall, AC Room, Terrace, Bar, Private Dining).
+- **Table Configuration**: Customize table numbers, seating capacity, table types (Standard, Booth, Bar Counter), and reservability.
+- **Staff Assignment**: Direct assignment of designated waiters to tables and orders.
+
+### 👨‍🍳 Kitchen Display System (KDS) & Real-Time KOT
+- **Digital Kitchen Order Tickets (KOT)**: Paperless kitchen tickets automatically dispatched upon order placement.
+- **Live WebSocket Sync**: Real-time bi-directional synchronization between POS terminals, waiter tablets, and kitchen screens.
+- **Lifecycle Status Tracking**: Track dishes seamlessly through `Pending` ➔ `Cooking/Preparing` ➔ `Ready` ➔ `Served`.
+- **Kitchen Section Routing**: Filter and organize tickets by prep station (Chinese, Tandoor, Fast Food, Main Course, Bakery/Dessert, Beverages).
+- **Smart Ticket Sorting**: Sort tickets by Oldest First, Priority/Urgent, Table Number, or Fastest Preparation time.
+- **Automated Delay Alerts**: Target prep time countdowns with automated prompts to capture delay reasons for audit and reporting.
+- **Kitchen History Archive**: Historical log of fulfilled KOTs with timestamps and assigned chef metrics.
+
+### 📱 Dedicated Waiter Mobile & Tablet Ordering
+- **Handheld Optimized Interface**: Responsive floor plan view crafted for waiter tablets and smartphones.
+- **Quick Order Creation**: Tap any table to view occupancy, assign staff, and start taking orders immediately.
+- **Digital Menu Browsing**: Instant categorization and search with dietary badges and real-time item availability.
+- **Item Customization Dialog**: Add special dietary preferences, custom spice levels (Sweet, Spicy, Extra Spicy, Mild), and special chef instructions per item.
+- **Waiter & Chef Assignment**: Designate order takers and prep chefs directly per order ticket.
+- **1-Tap KOT Firing**: Instant submission of kitchen tickets from the table-side cart drawer.
+
+### 🌐 Customer Self-Ordering & Local LAN Web Server
+- **Zero-Install Web Ordering**: Built-in Shelf HTTP and WebSocket server running locally on port `8080`.
+- **QR Code Digital Menu**: Diners scan a table QR code to browse the live menu directly in their mobile browser.
+- **Self-Service Cart & Ordering**: Customers place orders over the local restaurant Wi-Fi without needing internet or app store downloads.
+- **Local Network Sync**: Real-time cross-device communication across all terminals on the LAN.
+
+### 📋 Menu, Recipe & Dietary Attribute Management
+- **Menu Catalog**: Manage items, categories, base pricing, tax slabs, and veg/non-veg status.
+- **Dietary & Taste Badging**: Tag items with dietary tags (*Pure Jain*, *Semi Jain*, *Vegan*, *Gluten-Free*) and taste indicators (*Mild*, *Spicy*, *Sweet*).
+- **Special Highlights**: Promote items with special badges (*Chef's Special*, *Best Seller*, *New*, *Seasonal*, *Recommended*).
+- **Recipe & Ingredient Mapping**: Link menu items to raw inventory ingredients for automatic stock deduction upon order creation.
+- **Cooking Instructions & Prep Metadata**: Document preparation time, cooking time, portion sizes, difficulty levels, and step-by-step cooking procedures.
+- **Kitchen Video Guides**: Attach and play training videos directly inside the recipe management module.
+
+### 📦 Inventory, Stock & Vendor Management
+- **Real-Time Stock Tracking**: Track raw ingredients, packaging, and supplies with automated deduction on order execution.
+- **Low Stock & Expiry Alerts**: Configurable low-stock thresholds with proactive visual warnings and out-of-stock guards.
+- **Unit of Measurement (UOM)**: Support for grams, kilograms, liters, milliliters, and individual units/pieces.
+- **Vendor & Supplier Directory**: Maintain supplier details, contact persons, phone numbers, and procurement histories.
+
+### ⏱️ Live Operations Tracking & Audit Logging
+- **Real-Time Order Timeline**: Monitor active order progress from placement to settlement.
+- **Comprehensive Audit Trail**: `order_status_logs` logging every state transition, responsible staff member, and timestamp.
+- **Operational Metrics**: Real-time calculation of average preparation times, delayed orders, and peak dining hours.
+- **Chef Speed & Performance**: Metrics tracking individual chef completion times and output efficiency.
+
+### 📊 Analytics, Financial Reporting & Accounting
+- **Executive Dashboard**: Daily sales totals, active table occupancy rates, open orders, and low-stock alerts at a glance.
+- **Sales & Revenue Breakdown**: Analyze revenue trends across dates, payment modes (Cash vs. UPI vs. Card), and order types.
+- **Product & Category Insights**: Identify top-selling dishes, highest-margin categories, and slow-moving items.
+- **Accounting Ledger & P&L**: Track total revenue, operational expenses, net profit, and collected GST taxes with date-range filters.
+- **Expense Management**: Categorize operational expenses (supplies, utilities, maintenance, payroll) with receipt logging.
+
+### 🏢 Multi-Branch, User Management & System Administration
+- **Multi-Restaurant / Multi-Branch**: Support for configuring and managing multiple restaurant outlets and branches.
+- **Role-Based Access Control (RBAC)**: Manage credentials and granular permissions for Admin, Manager, Cashier, Waiter, and Chef roles.
+- **Staff Shifts & Contact Profiles**: Track employee contact details, assigned shifts (Morning, Evening, Full Day), and active/inactive status.
+- **Database Backup & Restore**: Safe SQLite database backup, export, and migration utilities.
+- **Thermal Printer & Hardware Settings**: Network printer configuration (IP, Port, ESC/POS setup) and receipt layout settings.
+- **Theme & UI Customization**: Clean Modern Light Theme with gold & navy branding, responsive for desktop, tablet, and mobile.
+
 
 ## Tech Stack
 
@@ -21,33 +94,193 @@ A complete enterprise-grade Restaurant ERP & POS Management System built with Fl
 ## Project Structure
 
 ```text
-lib/
-├── core/
-│   ├── database/       # Database helper and schema
-│   └── ...
-├── models/             # Data models
-├── repositories/       # Data repositories
-├── screens/            # UI Screens (Login, Dashboard, POS, etc.)
-├── services/           # Background services (Local Server)
-└── main.dart           # App entry point and routing
+├── frontend/                # Cross-Platform Flutter Client
+│   ├── lib/
+│   │   ├── core/            # Database helper and schema
+│   │   ├── models/          # Data models
+│   │   ├── repositories/    # Data repositories
+│   │   ├── screens/         # UI Screens (Login, Dashboard, POS, etc.)
+│   │   ├── services/        # Background services (Shelf Local Server)
+│   │   └── main.dart        # App entry point and GoRouter
+│   ├── test/                # 41 Unit and widget tests
+│   ├── assets/              # Logos, fonts, demo assets
+│   ├── android/, ios/       # Mobile platform runners
+│   ├── windows/, macos/     # Desktop platform runners
+│   ├── linux/, web/         # Linux and Web targets
+│   └── pubspec.yaml         # Dependencies and versioning
+├── backend/                 # Spring Boot Backend (Java 21)
+│   ├── src/main/java/       # REST controllers, services, JPA repos, entities
+│   ├── src/main/resources/  # application.yml and profile configs
+│   ├── src/test/            # Automated backend integration tests
+│   ├── pom.xml              # Maven dependencies
+│   └── mvnw.cmd / mvnw      # Maven wrapper
+└── .github/workflows/       # GitHub Actions CI/CD workflows
 ```
 
-## How to Run
+## Execution Commands & How to Run
 
-1.  **Get Dependencies**:
-    ```bash
-    flutter pub get
-    ```
+### 1. Prerequisites
+- **Frontend**: [Flutter SDK](https://docs.flutter.dev/get-started/install) (stable channel, `^3.11.1+`)
+- **Backend**: [Java 21 JDK](https://www.oracle.com/java/technologies/downloads/) (LTS)
+- **Database**: [PostgreSQL 16+](https://www.postgresql.org/) (optional for standalone H2 test mode)
 
-2.  **Run the App**:
-    ```bash
-    flutter run
-    ```
+---
 
-    *Note: The app starts a local server on port 8080 for LAN access.*
+### 2. Frontend (Flutter) Execution Commands
 
-## Default Credentials
+Navigate to the `frontend/` directory before running any frontend commands:
+```bash
+cd frontend
+```
 
+#### A. Environment Setup
+```bash
+# Windows Command Prompt (CMD):
+copy .env.example .env
+
+# Windows PowerShell / Linux / macOS (Bash):
+cp .env.example .env
+```
+Key frontend variables:
+- `API_BASE_URL`: `http://localhost:8081/api` (Spring Boot backend)
+- `LOCAL_SERVER_PORT`: `8080` (Embedded Shelf server)
+
+#### B. Install Dependencies
+```bash
+flutter pub get
+```
+
+#### C. Run Application in Development Mode
+```bash
+# Run on Windows Desktop (default)
+flutter run -d windows
+
+# Run on Web (Chrome)
+flutter run -d chrome
+
+# Run on macOS Desktop
+flutter run -d macos
+
+# Run on Linux Desktop
+flutter run -d linux
+
+# Run on connected Android device/emulator
+flutter run -d android
+```
+> *Note:* At launch, the application automatically initializes the local embedded Shelf server on port `8080` for offline local-network tablet and mobile ordering.
+
+#### D. Code Quality & Test Suite Execution
+```bash
+# Static analysis (zero warning policy)
+dart analyze --fatal-warnings
+
+# Run all 41 unit and widget tests
+flutter test
+```
+
+#### E. Production Build Commands
+```bash
+# Windows Desktop Release (binary + installer)
+flutter build windows --release
+
+# Android Release APK
+flutter build apk --release
+
+# Web Production Bundle
+flutter build web --release
+
+# macOS Release Application
+flutter build macos --release
+
+# Linux Release Bundle
+flutter build linux --release
+```
+
+---
+
+### 3. Backend (Spring Boot) Execution Commands
+
+Navigate to the `backend/` directory before running any backend commands:
+```bash
+cd backend
+```
+
+#### A. Environment Setup
+```bash
+# Windows Command Prompt (CMD):
+copy .env.example .env
+
+# Windows PowerShell / Linux / macOS (Bash):
+cp .env.example .env
+```
+Key backend variables:
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` (PostgreSQL)
+- `JWT_SECRET`, `JWT_EXPIRATION_MS`
+- `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+- `PAYMENT_PROVIDER`, `PAYMENT_KEY_ID`, `PAYMENT_KEY_SECRET`
+
+#### B. Run in Development Mode (with PostgreSQL)
+Requires a local PostgreSQL instance running on port `5432` with database `dinemaster`:
+```bash
+# Windows PowerShell / CMD
+.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=dev
+
+# Linux / macOS
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+```
+Backend will start on `http://localhost:8081`.
+
+#### C. Run in Standalone / In-Memory Mode (Zero Database Setup)
+Uses embedded H2 in-memory database — no local PostgreSQL installation required:
+```bash
+# Windows PowerShell / CMD
+.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=test
+
+# Linux / macOS
+./mvnw spring-boot:run -Dspring-boot.run.profiles=test
+```
+
+#### D. Run Automated Test Suite
+Executes all Spring Boot integration and repository tests:
+```bash
+# Windows PowerShell / CMD
+.\mvnw.cmd test
+
+# Linux / macOS
+./mvnw test
+```
+
+#### E. Package & Run Executable Production JAR
+```bash
+# Build standalone fat JAR (skipping tests for quick build)
+.\mvnw.cmd clean package -DskipTests
+
+# Run the compiled JAR
+java -jar target/dinemaster-backend-1.0.0.jar
+```
+
+#### F. Verify Backend Health & Endpoints
+```bash
+# Health check
+curl http://localhost:8081/api/health
+
+# Public payment configuration (safe client key check)
+curl http://localhost:8081/api/payments/config
+```
+
+---
+
+## Service Ports & Default Credentials
+
+| Service | Address / Port | Notes |
+|---------|----------------|-------|
+| **Frontend POS / Desktop** | Native Desktop Window / Chrome | Primary interface |
+| **Embedded Shelf Server** | `http://localhost:8080` | Local network QR menu & live ordering |
+| **Spring Boot Backend** | `http://localhost:8081` | Central REST APIs, JWT, payment & media |
+| **PostgreSQL Database** | `localhost:5432` / `dinemaster` | Persistent storage (`dev` profile) |
+
+### Default Credentials
+- **Role**: Restaurant Owner / Administrator
 - **Username**: `owner`
 - **Password**: `owner123`
 
@@ -135,35 +368,22 @@ flutter test test/order_model_test.dart
 
 ## GitHub Actions CI/CD
 
-The repository ships two primary workflows under `.github/workflows/`:
+The workflow pipeline is configured under `.github/workflows/`:
 
-- **`pull_request.yml`** — Runs on every PR to `master`. Installs dependencies,
-  runs static analysis, and runs all tests. Fails the PR if any step fails.
-- **`release.yml`** — Runs when a `v*` tag is pushed, a GitHub Release is
-  published, **or manually triggered** via `workflow_dispatch` (Actions tab).
-  Automatically resolves the version from `pubspec.yaml` or a user-provided input.
-  Runs the complete test + build pipeline for all platforms, creates/populates a
-  **GitHub Release**, and attaches compiled build artifacts. Source code is
-  excluded from release archives via `.gitattributes`, distributing only compiled
-  binaries (`.apk`, `.exe`, `.zip`, `.tar.gz`, `.app.zip`, `.ipa`). A dedup guard
-  skips the run when the release already has artifacts. The Linux desktop build is
-  best-effort and does **not** block the release.
+- **`release.yml`** — Runs automatically whenever changes are pushed to the **`main`** branch.
+  - Resolves version metadata from `frontend/pubspec.yaml`.
+  - Reusable **`validate.yml`**: runs `flutter pub get`, static analysis (`dart analyze --fatal-warnings`), and all 41 unit/widget tests inside `frontend/`.
+  - Reusable **`build.yml`**: compiles release binaries across all supported platforms (Android APK, Web bundle, Windows installer & portable zip, macOS app, iOS ipa).
+  - Creates/populates a **GitHub Release** and attaches all compiled platform packages to the release.
 
-The reusable `validate.yml` and `build.yml` keep the workflows DRY and consistent.
-Actions versions are pinned to major versions (`v2`, `v4`) and Flutter/Dart caching
-is enabled for faster runs.
-
-### Workflow overview
+### Workflow Overview
 
 ```mermaid
 flowchart LR
-    PR[Pull Request] --> PRJ[validate.yml]
-    PRJ --> |fail| FAIL[PR blocked]
-
-    Tag[v1.0.0 tag / dispatch] --> R[release.yml]
-    R --> V[validate.yml]
-    V --> RB[build.yml: all platforms]
-    RB --> GHR[GitHub Release]
+    PushMain[Push to 'main' branch] --> R[release.yml]
+    R --> V[validate.yml: dart analyze + flutter test]
+    V --> RB[build.yml: Multi-platform build]
+    RB --> GHR[GitHub Release & Artifacts]
 ```
 
 ---
@@ -219,36 +439,31 @@ secrets, keystores, or Apple certificates to the repository. Store the values as
 ## Versioning & Releases
 
 Dine Master follows **`Major.Minor.Patch`** versioning (e.g. `1.0.0`). The
-application version lives in `pubspec.yaml` (`version: 1.0.0+1`). Release tags use
-the `v` prefix: `v1.0.0`, `v1.1.0`, etc.
+application version lives in `frontend/pubspec.yaml` (`version: 1.0.0+1`).
 
-### Release/tagging process
+### Release & Deployment Process
 
-1. Bump `version:` in `pubspec.yaml` and commit.
-2. Push the version tag:
+1. Update `version:` in `frontend/pubspec.yaml` if bumping the release version.
+2. Push commits to the **`main`** branch:
    ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
+   git add .
+   git commit -m "feat: release version update"
+   git push origin main
    ```
-3. The `release.yml` workflow runs automatically:
-   - Runs `dart analyze` + `flutter test`.
+3. The `release.yml` workflow triggers automatically:
+   - Runs `dart analyze` + `flutter test` inside `frontend/`.
    - Builds production packages for Android, Web, Windows, macOS, and iOS.
-   - Creates a **GitHub Release** named `Dine Master v1.0.0`.
-   - Attaches the platform build artifacts to the release.
+   - Attaches build artifacts and publishes the release.
    - Uploads the iOS build to **App Store Connect / TestFlight** when iOS signing
      and App Store Connect secrets are configured (`upload-ios: true`).
-4. Optionally edit the release notes on GitHub after creation.
-
-> The tag name minus the `v` prefix is used as the app `--build-name`, keeping the
-> published package version synchronized with the release.
 
 ---
 
 ## Downloading Generated Builds
 
-- **From Actions (push to master):** open the **Actions** tab → select the latest
-  **CI - Push to Master** run → scroll to **Artifacts** → download the platform archive.
-- **From a GitHub Release:** open the **Releases** page → select the version → the
+- **From Actions (push to main):** open the **Actions** tab → select the latest
+  **Release** run → scroll to **Artifacts** → download the desired platform archive.
+- **From a GitHub Release:** open the **Releases** page → select the release → all
   platform build files are listed under **Assets**.
 
 Artifacts are retained for 14 days from the CI run.

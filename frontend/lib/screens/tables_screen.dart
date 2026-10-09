@@ -2202,11 +2202,14 @@ class _TablesScreenState extends State<TablesScreen> {
                         children: [
                           const Icon(Icons.table_restaurant, color: AppColors.primary, size: 20),
                           const SizedBox(width: 8),
-                          const Text(
-                            'Select Table First',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          const Expanded(
+                            child: Text(
+                              'Select Table First',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          const Spacer(),
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
@@ -2452,51 +2455,56 @@ class _TablesScreenState extends State<TablesScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
       color: Colors.white,
-      child: Row(
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.calendar_month, size: 20, color: AppColors.primary),
-              const SizedBox(width: 8),
-              Text(
-                DateFormat('EEE, dd MMMM yyyy').format(_selectedGridDate),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ],
-          ),
-          const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios, size: 16),
-            tooltip: 'Previous Day',
-            onPressed: () {
-              setState(() => _selectedGridDate = _selectedGridDate.subtract(const Duration(days: 1)));
-            },
-          ),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.calendar_today, size: 14),
-            label: const Text('Select Date'),
-            style: OutlinedButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.calendar_month, size: 20, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Text(
+                  DateFormat('EEE, dd MMMM yyyy').format(_selectedGridDate),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ],
             ),
-            onPressed: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _selectedGridDate,
-                firstDate: DateTime.now().subtract(const Duration(days: 30)),
-                lastDate: DateTime.now().add(const Duration(days: 60)),
-              );
-              if (picked != null) setState(() => _selectedGridDate = picked);
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.arrow_forward_ios, size: 16),
-            tooltip: 'Next Day',
-            onPressed: () {
-              setState(() => _selectedGridDate = _selectedGridDate.add(const Duration(days: 1)));
-            },
-          ),
-        ],
+            const SizedBox(width: 24),
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios, size: 16),
+              tooltip: 'Previous Day',
+              onPressed: () {
+                setState(() => _selectedGridDate = _selectedGridDate.subtract(const Duration(days: 1)));
+              },
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.calendar_today, size: 14),
+              label: const Text('Select Date'),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              onPressed: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedGridDate,
+                  firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                  lastDate: DateTime.now().add(const Duration(days: 60)),
+                );
+                if (picked != null) setState(() => _selectedGridDate = picked);
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.arrow_forward_ios, size: 16),
+              tooltip: 'Next Day',
+              onPressed: () {
+                setState(() => _selectedGridDate = _selectedGridDate.add(const Duration(days: 1)));
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

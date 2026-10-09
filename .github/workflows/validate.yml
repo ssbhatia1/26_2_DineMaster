@@ -15,6 +15,9 @@ jobs:
   analyze-and-test:
     name: Analyze & Test  (${{ inputs.os }})
     runs-on: ${{ inputs.os }}
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v4

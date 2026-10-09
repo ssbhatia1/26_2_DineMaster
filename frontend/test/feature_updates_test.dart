@@ -108,12 +108,12 @@ void main() {
       final tabFinder = find.text('Booking Time Grid');
       expect(tabFinder, findsOneWidget);
 
-      // Tap tab and pump frame
+      // Tap tab and allow async operations to complete
       await tester.tap(tabFinder);
-      await tester.pump(const Duration(milliseconds: 500));
-
-      // Advance clock past sqflite's 10-second lock timer
-      await tester.pump(const Duration(seconds: 11));
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
     });
 
     test('TableModel status and display name work properly in grid', () {

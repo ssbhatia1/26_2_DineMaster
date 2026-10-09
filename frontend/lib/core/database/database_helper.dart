@@ -86,6 +86,9 @@ class DatabaseHelper {
     try {
       final now = DateTime.now();
       final tables = await db.query('tables');
+      if (tables.isEmpty) return;
+
+      final updates = <int, String>{};
       for (final t in tables) {
         final tableId = t['id'] as int;
         final currentStatus = t['status'] as String? ?? 'Available';
@@ -117,13 +120,21 @@ class DatabaseHelper {
 
         if (activeOrders.isNotEmpty || hasCurrentBooking) {
           if (currentStatus != 'Occupied') {
-            await db.update('tables', {'status': 'Occupied'}, where: 'id = ?', whereArgs: [tableId]);
+            updates[tableId] = 'Occupied';
           }
         } else {
           if (currentStatus == 'Occupied' || currentStatus == 'Billing Pending') {
-            await db.update('tables', {'status': 'Available'}, where: 'id = ?', whereArgs: [tableId]);
+            updates[tableId] = 'Available';
           }
         }
+      }
+
+      if (updates.isNotEmpty) {
+        await db.transaction((txn) async {
+          for (final entry in updates.entries) {
+            await txn.update('tables', {'status': entry.value}, where: 'id = ?', whereArgs: [entry.key]);
+          }
+        });
       }
     } catch (_) {}
   }
@@ -514,6 +525,12 @@ CREATE TABLE products (
   taste_preferences TEXT,
   attributes TEXT,
   custom_dietary_notes TEXT,
+  recipe_steps TEXT,
+  prep_time INTEGER,
+  cook_time INTEGER,
+  servings INTEGER,
+  difficulty TEXT,
+  video_path TEXT,
   restaurant_id INTEGER,
   FOREIGN KEY (restaurant_id) REFERENCES restaurants (id)
 )
@@ -713,6 +730,42 @@ CREATE TABLE bookings (
   restaurant_id INTEGER,
   FOREIGN KEY (table_id) REFERENCES tables (id),
   FOREIGN KEY (customer_id) REFERENCES customers (id),
+  FOREIGN KEY (restaurant_id) REFERENCES restaurants (id)
+)
+''');
+
+    // Ingredients Table
+    await db.execute('''
+CREATE TABLE ingredients (
+  id $idType,
+  name $textType,
+  unit $textType,
+  stock_quantity $realType DEFAULT 0,
+  restaurant_id INTEGER,
+  FOREIGN KEY (restaurant_id) REFERENCES restaurants (id)
+)
+''');
+
+    // Recipes Table
+    await db.execute('''
+CREATE TABLE recipes (
+  id $idType,
+  product_id INTEGER,
+  ingredient_id INTEGER,
+  quantity_used $realType,
+  FOREIGN KEY (product_id) REFERENCES products (id),
+  FOREIGN KEY (ingredient_id) REFERENCES inventory (id)
+)
+''');
+
+    // Suppliers Table
+    await db.execute('''
+CREATE TABLE suppliers (
+  id $idType,
+  name $textType,
+  contact TEXT,
+  address TEXT,
+  restaurant_id INTEGER,
   FOREIGN KEY (restaurant_id) REFERENCES restaurants (id)
 )
 ''');
