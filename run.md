@@ -15,6 +15,27 @@ This document defines the exact execution paths, environment commands, and optio
 
 ---
 
+## 🔒 0. Activating the Isolated Project Environment First
+
+Before executing backend or frontend commands, activate the project-contained environment (`.venv`) in your terminal session. This automatically configures the project's isolated JDK 21 and Flutter SDK:
+
+- **Windows PowerShell:**
+  ```powershell
+  .\Activate.ps1
+  ```
+- **Windows Command Prompt (CMD):**
+  ```cmd
+  activate.bat
+  ```
+- **Linux / macOS (Bash):**
+  ```bash
+  source ./activate.sh
+  ```
+
+> *Tip:* Run `check-env` in PowerShell or Bash to display the active toolchain paths. Run `deactivate` when finished.
+
+---
+
 ## ☕ 1. Spring Boot Backend Execution
 
 ### Working Directory

@@ -27,11 +27,8 @@ jobs:
         id: resolve
         shell: bash
         run: |
-          INPUT_VER="${{ inputs.version }}"
           REF_NAME="${{ github.ref_name }}"
-          if [ -n "$INPUT_VER" ]; then
-            RAW="$INPUT_VER"
-          elif [[ "$REF_NAME" == v* ]]; then
+          if [[ "$REF_NAME" == v* ]]; then
             RAW="$REF_NAME"
           else
             PUB_VER=$(grep '^version:' frontend/pubspec.yaml | sed 's/version:[[:space:]]*//; s/+.*//; s/[[:space:]]//g')

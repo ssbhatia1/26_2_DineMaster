@@ -117,12 +117,49 @@ A complete enterprise-grade Restaurant ERP & POS Management System built with Fl
 └── .github/workflows/       # GitHub Actions CI/CD workflows
 ```
 
+## 🔒 Isolated Project Environment
+
+DineMaster manages all required runtimes and toolchains within its own self-contained project environment (`.venv`), ensuring zero reliance on global system `PATH` variables or conflicting system-wide JDK/Flutter installations:
+
+- **Backend JDK:** Contained OpenJDK 21 LTS (`.venv/jdk`)
+- **Frontend Flutter & Dart:** Project-contained Flutter SDK (`.venv/flutter`)
+- **Build Tools:** Embedded Maven Wrapper (`backend/mvnw.cmd` / `backend/mvnw`)
+
+### One-Time Environment Setup (or Fresh Machine Clone)
+Run the automated provisioning script to set up all dependencies and tools:
+```bash
+# Windows PowerShell:
+.\setup_env.ps1
+
+# Windows Command Prompt (CMD):
+setup_env.bat
+
+# Linux / macOS (Bash):
+./setup_env.sh
+```
+
+### Virtual Environment Activation
+Activate the project environment in your terminal session before building or running:
+```bash
+# Windows PowerShell:
+.\Activate.ps1
+
+# Windows Command Prompt (CMD):
+activate.bat
+
+# Linux / macOS / Bash:
+source ./activate.sh
+```
+When active, your prompt indicates `(DineMaster-env)`. Run `check-env` (PowerShell/Bash) to verify that `java`, `flutter`, and `dart` resolve strictly from the project `.venv`. Run `deactivate` to exit.
+
+---
+
 ## Execution Commands & How to Run
 
-### 1. Prerequisites
-- **Frontend**: [Flutter SDK](https://docs.flutter.dev/get-started/install) (stable channel, `^3.11.1+`)
-- **Backend**: [Java 21 JDK](https://www.oracle.com/java/technologies/downloads/) (LTS)
-- **Database**: [PostgreSQL 16+](https://www.postgresql.org/) (optional for standalone H2 test mode)
+### 1. Prerequisites (Managed via Isolated Environment)
+- **Frontend**: Flutter SDK `^3.11.1+` (managed in `.venv/flutter`)
+- **Backend**: Java 21 JDK (managed in `.venv/jdk`)
+- **Database**: PostgreSQL 16+ (optional, H2 in-memory profile available for zero DB setup)
 
 ---
 

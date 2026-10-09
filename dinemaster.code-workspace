@@ -1,0 +1,35 @@
+{
+  "folders": [
+    {
+      "name": "DineMaster (Root)",
+      "path": "."
+    },
+    {
+      "name": "Backend (Spring Boot)",
+      "path": "backend"
+    },
+    {
+      "name": "Frontend (Flutter)",
+      "path": "frontend"
+    }
+  ],
+  "settings": {
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "java.jdt.ls.java.home": "${workspaceFolder}/.venv/jdk",
+    "java.configuration.runtimes": [
+      {
+        "name": "JavaSE-21",
+        "path": "${workspaceFolder}/.venv/jdk",
+        "default": true
+      }
+    ],
+    "dart.flutterSdkPath": "${workspaceFolder}/.venv/flutter",
+    "java.import.maven.enabled": true,
+    "java.import.gradle.enabled": false,
+    "java.import.exclusions": [
+      "**/node_modules/**",
+      "**/.metadata/**",
+      "**/frontend/**"
+    ]
+  }
+}

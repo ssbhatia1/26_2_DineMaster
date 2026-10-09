@@ -1,76 +1,163 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-__pycache__/
-.venv/
-venv/
-env/
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+# ==============================================================================
+# DineMaster — Version Control Ignore Configuration
+# Covers: Flutter Frontend, Spring Boot Backend, Native Runners, IDEs & Secrets
+# ==============================================================================
 
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-**/.dart_tool/
-**/.flutter-plugins-dependencies
-**/.pub-cache/
-**/.pub/
-**/build/
-**/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-**/android/app/debug
-**/android/app/profile
-**/android/app/release
-.kotlin/
-
-# Environment Variables & Secrets
+# ------------------------------------------------------------------------------
+# 1. Environment Variables & Secrets (CRITICAL)
+# ------------------------------------------------------------------------------
+# Root environment files
 .env
 .env.local
 .env.*.local
 *.env
 !.env.example
+
+# Frontend environment files
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
 !frontend/.env.example
+
+# Backend environment files
 backend/.env
 backend/.env.local
+backend/.env.*.local
 !backend/.env.example
+
+# Cryptographic credentials, certificates & keystores
 *.jks
 *.keystore
 *.p12
+*.key
+*.pem
+*.mobileprovision
+*.cer
+*.crt
+**/key.properties
+**/play-account.json
 
-# Java & Spring Boot Maven
+# ------------------------------------------------------------------------------
+# 2. Operating System Files
+# ------------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# Windows
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ------------------------------------------------------------------------------
+# 3. Flutter & Dart Artifacts
+# ------------------------------------------------------------------------------
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub-cache/
+**/.pub/
+**/build/
+**/coverage/
+**/doc/api/
+app.*.symbols
+app.*.map.json
+
+# Ephemeral desktop & build caches
+**/ephemeral/
+**/flutter/ephemeral/
+
+# ------------------------------------------------------------------------------
+# 4. Android Build Artifacts & Gradle
+# ------------------------------------------------------------------------------
+**/.gradle/
+**/build/
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+**/local.properties
+**/GeneratedPluginRegistrant.java
+.kotlin/
+*.hprof
+
+# ------------------------------------------------------------------------------
+# 5. iOS & macOS Xcode Artifacts
+# ------------------------------------------------------------------------------
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/macos/Flutter/ephemeral/
+**/Pods/
+**/*.mode1v3
+**/*.mode2v3
+**/*.moved-aside
+**/*.pbxuser
+**/*.perspectivev3
+
+# ------------------------------------------------------------------------------
+# 6. Windows Desktop Native C++ Runner
+# ------------------------------------------------------------------------------
+**/windows/flutter/ephemeral/
+**/windows/runner/Release/
+**/windows/runner/Debug/
+*.vcxproj.user
+
+# ------------------------------------------------------------------------------
+# 7. Java, Spring Boot & Maven Artifacts
+# ------------------------------------------------------------------------------
 **/target/
 !**/.mvn/wrapper/maven-wrapper.jar
 *.jar
 *.war
+*.ear
+*.class
 .m2/
 
+# Java language server / Eclipse JDT workspace caches
+.apt_generated/
+.factorypath
+**/bin/
+**/.metadata/
 
+# ------------------------------------------------------------------------------
+# 8. Local Databases & Storage
+# ------------------------------------------------------------------------------
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ------------------------------------------------------------------------------
+# 9. IDE & Editor Artifacts
+# ------------------------------------------------------------------------------
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# General editor backups & temporary files
+*.swp
+*.swo
+*.bak
+*.tmp
+*.temp
+*.log
+**/logs/
+
+# Python / Scripts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
