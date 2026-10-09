@@ -664,9 +664,9 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                         setDlgState(() {
                                           localRecipe.add({
                                             'ingredient_id': selectedIngredientId,
-                                            'ingredient_name': matched['name'],
+                                            'ingredient_name': matched['item_name'] ?? matched['name'] ?? '',
                                             'quantity_used': qty,
-                                            'unit': matched['unit'],
+                                            'unit': matched['unit'] ?? '',
                                           });
                                           selectedIngredientId = null;
                                           recipeQtyController.clear();
@@ -684,8 +684,8 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                     margin: const EdgeInsets.only(bottom: 4),
                                     child: ListTile(
                                       dense: true,
-                                      title: Text(rItem['ingredient_name']),
-                                      subtitle: Text('${rItem['quantity_used']} ${rItem['unit']} per serving'),
+                                      title: Text((rItem['ingredient_name'] ?? '').toString()),
+                                      subtitle: Text('${rItem['quantity_used']} ${rItem['unit'] ?? ''} per serving'),
                                       trailing: IconButton(
                                         icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
                                         onPressed: () => setDlgState(() => localRecipe.removeAt(entry.key)),
@@ -780,7 +780,10 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
 
                           final allIngredientsList = {...ingredientsList};
                           for (var rItem in localRecipe) {
-                            allIngredientsList.add(rItem['ingredient_name'] as String);
+                            final ingName = (rItem['ingredient_name'] ?? '').toString();
+                            if (ingName.isNotEmpty) {
+                              allIngredientsList.add(ingName);
+                            }
                           }
 
                           final data = {

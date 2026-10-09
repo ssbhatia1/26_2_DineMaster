@@ -148,7 +148,10 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
     final productId = widget.product['id'] as int;
 
     // Collect all ingredient names to sync back to the main products.ingredients field
-    final ingredientNames = _localRecipe.map((e) => e['ingredient_name'] as String).toList();
+    final ingredientNames = _localRecipe
+        .map((e) => (e['ingredient_name'] ?? '').toString())
+        .where((s) => s.isNotEmpty)
+        .toList();
     
     // Add any manual ingredients already defined
     final manualIngsStr = widget.product['ingredients'] as String? ?? '';
@@ -558,9 +561,9 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                         setState(() {
                           _localRecipe.add({
                             'ingredient_id': _selectedIngredientId,
-                            'ingredient_name': selectedIng['name'],
+                            'ingredient_name': selectedIng['item_name'] ?? selectedIng['name'] ?? '',
                             'quantity_used': qty,
-                            'unit': selectedIng['unit'],
+                            'unit': selectedIng['unit'] ?? '',
                           });
                           _selectedIngredientId = null;
                           _recipeQtyController.clear();
@@ -591,7 +594,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
-                        title: Text(item['ingredient_name'] as String, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                        title: Text((item['ingredient_name'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                         subtitle: Text('Required: ${item['quantity_used']} ${item['unit']}'),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
