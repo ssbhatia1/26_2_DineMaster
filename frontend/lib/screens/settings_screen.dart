@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
-import 'dart:io';
+import '../core/platform/io.dart';
+import '../core/api/api_mode.dart';
 import 'package:path/path.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
@@ -41,10 +43,16 @@ class SettingsScreen extends StatelessWidget {
                       backgroundColor: AppColors.primary,
                       child: Text(
                         username.isNotEmpty ? username[0].toUpperCase() : 'U',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                    title: Text(username, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    title: Text(
+                      username,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     subtitle: Text('Role: $role'),
                     trailing: IconButton(
                       icon: const Icon(Icons.logout, color: Colors.red),
@@ -159,7 +167,9 @@ class SettingsScreen extends StatelessWidget {
               children: [
                 SwitchListTile(
                   title: const Text('Show Waiter Assignment'),
-                  subtitle: const Text('Display waiter selection during order creation'),
+                  subtitle: const Text(
+                    'Display waiter selection during order creation',
+                  ),
                   value: showWaiter,
                   onChanged: (val) async {
                     await prefs.setBool('show_waiter_assignment', val);
@@ -168,7 +178,9 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 SwitchListTile(
                   title: const Text('Show Chef Assignment'),
-                  subtitle: const Text('Display chef selection during order creation'),
+                  subtitle: const Text(
+                    'Display chef selection during order creation',
+                  ),
                   value: showChef,
                   onChanged: (val) async {
                     await prefs.setBool('show_chef_assignment', val);
@@ -189,14 +201,22 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSettingsTile(BuildContext context, IconData icon, String title, String subtitle, VoidCallback onTap) {
+  Widget _buildSettingsTile(
+    BuildContext context,
+    IconData icon,
+    String title,
+    String subtitle,
+    VoidCallback onTap,
+  ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Card(
       elevation: 0,
       color: isDark ? Colors.grey.shade900 : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+        side: BorderSide(
+          color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+        ),
       ),
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -206,7 +226,11 @@ class SettingsScreen extends StatelessWidget {
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(subtitle),
-        trailing: Icon(Icons.arrow_forward_ios, size: 16, color: isDark ? Colors.white60 : Colors.black45),
+        trailing: Icon(
+          Icons.arrow_forward_ios,
+          size: 16,
+          color: isDark ? Colors.white60 : Colors.black45,
+        ),
         onTap: onTap,
       ),
     );
@@ -223,7 +247,9 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Theme Settings'),
-        content: const Text('Dine Master is configured with the Clean Light Theme for maximum clarity and visibility.'),
+        content: const Text(
+          'Dine Master is configured with the Clean Light Theme for maximum clarity and visibility.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -237,7 +263,7 @@ class SettingsScreen extends StatelessWidget {
   void _showGstScaleDialog(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final rawScale = prefs.getString('gst_scale') ?? '0.0,5.0,12.0,18.0,28.0';
-    
+
     // Parse to list
     List<double> scale = rawScale
         .split(',')
@@ -285,13 +311,17 @@ class SettingsScreen extends StatelessWidget {
                               isDense: true,
                               border: OutlineInputBorder(),
                             ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
                           onPressed: () {
-                            final val = double.tryParse(rateController.text.trim());
+                            final val = double.tryParse(
+                              rateController.text.trim(),
+                            );
                             if (val != null && val >= 0.0 && val <= 100.0) {
                               if (!scale.contains(val)) {
                                 setStateDialog(() {
@@ -300,14 +330,15 @@ class SettingsScreen extends StatelessWidget {
                                 });
                               }
                               rateController.clear();
-                            } else {
-
-                            }
+                            } else {}
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                              horizontal: 16,
+                            ),
                           ),
                           child: const Text('Add'),
                         ),
@@ -344,19 +375,19 @@ class SettingsScreen extends StatelessWidget {
                 ElevatedButton(
                   onPressed: () async {
                     if (scale.isEmpty) {
-
                       return;
                     }
-                    
+
                     final serialized = scale.join(',');
                     await prefs.setString('gst_scale', serialized);
-                    
+
                     if (context.mounted) {
                       Navigator.pop(context);
-
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                  ),
                   child: const Text('Save Slabs'),
                 ),
               ],
@@ -392,20 +423,33 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void _showBackupRestoreDialog(BuildContext context) async {
-    final String homeDir = Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '.';
-    final backupDir = Directory(join(homeDir, 'Downloads', 'DineMasterBackups'));
+    final String homeDir =
+        Platform.environment['USERPROFILE'] ??
+        Platform.environment['HOME'] ??
+        '.';
+    final backupDir = Directory(
+      join(homeDir, 'Downloads', 'DineMasterBackups'),
+    );
     final legacyDir = Directory(join(homeDir, 'Downloads', 'NexodineBackups'));
 
     List<File> fetchBackups() {
       final List<File> list = [];
       if (backupDir.existsSync()) {
         try {
-          list.addAll(backupDir.listSync().whereType<File>().where((file) => file.path.endsWith('.db')));
+          list.addAll(
+            backupDir.listSync().whereType<File>().where(
+              (file) => file.path.endsWith('.db'),
+            ),
+          );
         } catch (_) {}
       }
       if (legacyDir.existsSync()) {
         try {
-          list.addAll(legacyDir.listSync().whereType<File>().where((file) => file.path.endsWith('.db')));
+          list.addAll(
+            legacyDir.listSync().whereType<File>().where(
+              (file) => file.path.endsWith('.db'),
+            ),
+          );
         } catch (_) {}
       }
       list.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
@@ -435,7 +479,9 @@ class SettingsScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Save a copy of your database to Downloads/DineMasterBackups, or restore from a previous session.'),
+                    const Text(
+                      'Save a copy of your database to Downloads/DineMasterBackups, or restore from a previous session.',
+                    ),
                     const SizedBox(height: 16),
                     ElevatedButton.icon(
                       onPressed: () async {
@@ -444,13 +490,9 @@ class SettingsScreen extends StatelessWidget {
                           setStateDialog(() {
                             backups = fetchBackups();
                           });
-                          if (context.mounted) {
-
-                          }
+                          if (context.mounted) {}
                         } catch (e) {
-                          if (context.mounted) {
-
-                          }
+                          if (context.mounted) {}
                         }
                       },
                       icon: const Icon(Icons.cloud_upload),
@@ -462,12 +504,21 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    const Text('Restore Point History:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Restore Point History:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     const SizedBox(height: 8),
                     backups.isEmpty
                         ? const Padding(
                             padding: EdgeInsets.symmetric(vertical: 16.0),
-                            child: Text('No previous local backups found.', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+                            child: Text(
+                              'No previous local backups found.',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
                           )
                         : SizedBox(
                             height: 180,
@@ -484,22 +535,37 @@ class SettingsScreen extends StatelessWidget {
                                   elevation: 0,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
-                                    side: BorderSide(color: Colors.grey.shade200),
+                                    side: BorderSide(
+                                      color: Colors.grey.shade200,
+                                    ),
                                   ),
                                   child: ListTile(
-                                    title: Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                    title: Text(
+                                      name,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                     subtitle: Text(
                                       '${DateFormat('yyyy-MM-dd hh:mm a').format(modified)} | ${(size / 1024).toStringAsFixed(1)} KB',
                                       style: const TextStyle(fontSize: 11),
                                     ),
                                     trailing: ElevatedButton.icon(
-                                      onPressed: () => _confirmRestore(context, file.path),
+                                      onPressed: () =>
+                                          _confirmRestore(context, file.path),
                                       icon: const Icon(Icons.restore, size: 14),
-                                      label: const Text('Restore', style: TextStyle(fontSize: 11)),
+                                      label: const Text(
+                                        'Restore',
+                                        style: TextStyle(fontSize: 11),
+                                      ),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.orange.shade800,
                                         foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -542,13 +608,9 @@ class SettingsScreen extends StatelessWidget {
               Navigator.pop(context); // Close backup dialog
               try {
                 await DatabaseHelper.instance.restoreDatabase(path);
-                if (context.mounted) {
-
-                }
+                if (context.mounted) {}
               } catch (e) {
-                if (context.mounted) {
-
-                }
+                if (context.mounted) {}
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -562,8 +624,14 @@ class SettingsScreen extends StatelessWidget {
   void _showNetworkSettingsDialog(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     bool isServer = prefs.getBool('is_server') ?? true;
-    final ipController = TextEditingController(text: prefs.getString('server_ip') ?? '');
-    
+    final ipController = TextEditingController(
+      text: prefs.getString('server_ip') ?? '',
+    );
+    bool useBackendApi = prefs.getBool('use_backend_api') ?? false;
+    final backendApiController = TextEditingController(
+      text: prefs.getString('backend_api_url') ?? 'http://localhost:8081',
+    );
+
     String localIp = 'Detecting...';
     try {
       final interfaces = await NetworkInterface.list(
@@ -600,8 +668,13 @@ class SettingsScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SwitchListTile(
-                    title: const Text('Run as Server / Host', style: TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: const Text('Only ONE machine (usually cashier PC) should run as Server.'),
+                    title: const Text(
+                      'Run as Server / Host',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: const Text(
+                      'Only ONE machine (usually cashier PC) should run as Server.',
+                    ),
                     value: isServer,
                     activeColor: AppColors.primary,
                     onChanged: (val) {
@@ -619,12 +692,19 @@ class SettingsScreen extends StatelessWidget {
                         padding: const EdgeInsets.all(12.0),
                         child: Row(
                           children: [
-                            const Icon(Icons.info_outline, color: AppColors.primary),
+                            const Icon(
+                              Icons.info_outline,
+                              color: AppColors.primary,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 'This device is the master host. Other devices (waiter/chef) can connect using IP: $localIp',
-                                style: const TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  color: AppColors.primary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ],
@@ -646,30 +726,23 @@ class SettingsScreen extends StatelessWidget {
                       onPressed: () async {
                         final ip = ipController.text.trim();
                         if (ip.isEmpty) {
-
                           return;
                         }
-                        
 
-                        
                         final client = HttpClient();
                         client.connectionTimeout = const Duration(seconds: 3);
                         try {
-                          final request = await client.getUrl(Uri.parse('http://$ip:8082/'));
+                          final request = await client.getUrl(
+                            Uri.parse('http://$ip:8082/'),
+                          );
                           final response = await request.close();
                           if (response.statusCode == 200) {
-                            if (context.mounted) {
-
-                            }
+                            if (context.mounted) {}
                           } else {
-                            if (context.mounted) {
-
-                            }
+                            if (context.mounted) {}
                           }
                         } catch (e) {
-                          if (context.mounted) {
-
-                          }
+                          if (context.mounted) {}
                         } finally {
                           client.close();
                         }
@@ -679,6 +752,31 @@ class SettingsScreen extends StatelessWidget {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blueGrey,
                         foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Use Spring backend API'),
+                    subtitle: const Text(
+                      'Use REST API product reads; SQLite remains the default when disabled.',
+                    ),
+                    value: useBackendApi,
+                    activeColor: AppColors.primary,
+                    onChanged: (value) {
+                      setStateDialog(() => useBackendApi = value);
+                    },
+                  ),
+                  if (useBackendApi) ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: backendApiController,
+                      decoration: const InputDecoration(
+                        labelText: 'Backend API URL',
+                        hintText: 'http://192.168.1.100:8081',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.api),
                       ),
                     ),
                   ],
@@ -693,18 +791,27 @@ class SettingsScreen extends StatelessWidget {
                   onPressed: () async {
                     await prefs.setBool('is_server', isServer);
                     if (!isServer) {
-                      await prefs.setString('server_ip', ipController.text.trim());
+                      await prefs.setString(
+                        'server_ip',
+                        ipController.text.trim(),
+                      );
                     }
-                    
+                    await prefs.setBool('use_backend_api', useBackendApi);
+                    await prefs.setString(
+                      'backend_api_url',
+                      backendApiController.text.trim(),
+                    );
+
                     // Reinitialize connection
                     await SyncService.instance.initConnection();
-                    
+
                     if (context.mounted) {
                       Navigator.pop(context);
-
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                  ),
                   child: const Text('Save & Apply'),
                 ),
               ],

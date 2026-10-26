@@ -1,11 +1,22 @@
+import '../core/api/api_mode.dart';
 import '../core/database/database_helper.dart';
 import '../models/table_model.dart';
+import '../services/backend_api_client.dart';
 import '../services/sync_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TableRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  final BackendApiClient _apiClient = const BackendApiClient();
 
   Future<List<TableModel>> getTables() async {
+    if (await _useBackendApi()) {
+      final response = await _apiClient.getJson(
+        '/api/tables?restaurantId=${DatabaseHelper.currentRestaurantId ?? 1}',
+      );
+      return _parseTables(response);
+    }
+
     final db = await _dbHelper.database;
     final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
@@ -19,6 +30,11 @@ class TableRepository {
   }
 
   Future<int> addTable(TableModel table) async {
+    if (await _useBackendApi()) {
+      final response = await _apiClient.postJson('/api/tables', _toApiMap(table));
+      return (response['id'] as num).toInt();
+    }
+
     final db = await _dbHelper.database;
     final map = table.toMap();
     map.remove('waiter_name');
@@ -32,6 +48,13 @@ class TableRepository {
   }
 
   Future<int> updateTable(TableModel table) async {
+    if (await _useBackendApi()) {
+      final id = table.id;
+      if (id == null) throw ArgumentError('Table ID is required for update');
+      await _apiClient.putJson('/api/tables/$id', _toApiMap(table));
+      return 1;
+    }
+
     final db = await _dbHelper.database;
     final map = table.toMap();
     map.remove('waiter_name');
@@ -47,6 +70,11 @@ class TableRepository {
   }
 
   Future<int> deleteTable(int id) async {
+    if (await _useBackendApi()) {
+      await _apiClient.delete('/api/tables/$id');
+      return 1;
+    }
+
     final db = await _dbHelper.database;
     final count = await db.delete(
       'tables',
@@ -230,5 +258,34 @@ class TableRepository {
     } catch (e) {
       print('Error in syncAllTableStatuses: $e');
     }
+  }
+
+  Future<bool> _useBackendApi() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('use_backend_api') ?? ApiMode.defaultUseBackendApi;
+  }
+
+  List<TableModel> _parseTables(dynamic response) {
+    if (response is! List) {
+      throw const FormatException('Expected a table list from the backend');
+    }
+    return response
+        .map((item) => TableModel.fromMap(Map<String, dynamic>.from(item as Map)))
+        .toList();
+  }
+
+  Map<String, dynamic> _toApiMap(TableModel table) {
+    return {
+      'tableNumber': table.tableNumber,
+      'name': table.name,
+      'capacity': table.capacity,
+      'status': table.status,
+      'section': table.section,
+      'tableType': table.tableType,
+      'restaurantId': table.restaurantId ?? DatabaseHelper.currentRestaurantId,
+      'active': table.isActive,
+      'reservable': table.isReservable,
+      'notes': table.notes,
+    };
   }
 }

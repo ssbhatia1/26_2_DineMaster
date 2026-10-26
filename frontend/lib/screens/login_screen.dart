@@ -1,3 +1,4 @@
+﻿import 'package:flutter/foundation.dart';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:dine_master/core/theme/app_colors.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/database_helper.dart';
+import '../repositories/user_repository.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -40,7 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-          
+
           // Decorative Circles
           Positioned(
             top: -100,
@@ -85,7 +87,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         Image.asset(
                           'assets/images/logo.jpg',
                           height: 120,
-                        ).animate().scale(delay: 200.ms, duration: 500.ms, curve: Curves.easeOutBack),
+                        ).animate().scale(
+                          delay: 200.ms,
+                          duration: 500.ms,
+                          curve: Curves.easeOutBack,
+                        ),
                         const SizedBox(height: 16),
                         const Text(
                           'DINE MASTER',
@@ -100,10 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const Text(
                           'Enterprise ERP & POS',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white70,
-                          ),
+                          style: TextStyle(fontSize: 14, color: Colors.white70),
                         ).animate().fadeIn(delay: 600.ms),
                         const SizedBox(height: 40),
 
@@ -114,16 +117,24 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'Username',
                             labelStyle: const TextStyle(color: Colors.white70),
-                            prefixIcon: const Icon(Icons.person, color: Colors.white70),
+                            prefixIcon: const Icon(
+                              Icons.person,
+                              color: Colors.white70,
+                            ),
                             filled: true,
                             fillColor: Colors.white.withAlpha(40),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.white.withAlpha(70)),
+                              borderSide: BorderSide(
+                                color: Colors.white.withAlpha(70),
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                              borderSide: const BorderSide(
+                                color: Colors.white,
+                                width: 1.5,
+                              ),
                             ),
                           ),
                         ).animate().fadeIn(delay: 800.ms).slideX(begin: -0.1),
@@ -137,10 +148,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'Password',
                             labelStyle: const TextStyle(color: Colors.white70),
-                            prefixIcon: const Icon(Icons.lock, color: Colors.white70),
+                            prefixIcon: const Icon(
+                              Icons.lock,
+                              color: Colors.white70,
+                            ),
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                _obscurePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility,
                                 color: Colors.white70,
                               ),
                               onPressed: () {
@@ -153,11 +169,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             fillColor: Colors.white.withAlpha(40),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.white.withAlpha(70)),
+                              borderSide: BorderSide(
+                                color: Colors.white.withAlpha(70),
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                              borderSide: const BorderSide(
+                                color: Colors.white,
+                                width: 1.5,
+                              ),
                             ),
                           ),
                         ).animate().fadeIn(delay: 1000.ms).slideX(begin: 0.1),
@@ -166,23 +187,43 @@ class _LoginScreenState extends State<LoginScreen> {
                           value: _selectedRole,
                           dropdownColor: AppColors.primaryMaterialColor[800]!,
                           style: const TextStyle(color: Colors.white),
-                          items: ['Owner', 'Manager', 'Cashier', 'Waiter', 'Chef']
-                              .map((r) => DropdownMenuItem(value: r, child: Text(r, style: const TextStyle(color: Colors.white))))
-                              .toList(),
-                          onChanged: (val) => setState(() => _selectedRole = val!),
+                          items:
+                              ['Owner', 'Manager', 'Cashier', 'Waiter', 'Chef']
+                                  .map(
+                                    (r) => DropdownMenuItem(
+                                      value: r,
+                                      child: Text(
+                                        r,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged: (val) =>
+                              setState(() => _selectedRole = val!),
                           decoration: InputDecoration(
                             labelText: 'Role',
                             labelStyle: const TextStyle(color: Colors.white70),
-                            prefixIcon: const Icon(Icons.badge, color: Colors.white70),
+                            prefixIcon: const Icon(
+                              Icons.badge,
+                              color: Colors.white70,
+                            ),
                             filled: true,
                             fillColor: Colors.white.withAlpha(40),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.white.withAlpha(70)),
+                              borderSide: BorderSide(
+                                color: Colors.white.withAlpha(70),
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Colors.white, width: 1.5),
+                              borderSide: const BorderSide(
+                                color: Colors.white,
+                                width: 1.5,
+                              ),
                             ),
                           ),
                         ).animate().fadeIn(delay: 1100.ms).slideX(begin: -0.1),
@@ -196,7 +237,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               activeColor: Colors.white,
                               checkColor: AppColors.primary,
                               side: const BorderSide(color: Colors.white70),
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
                               visualDensity: VisualDensity.compact,
                               onChanged: (val) {
                                 setState(() {
@@ -213,7 +255,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               },
                               child: const Text(
                                 'Keep me signed in',
-                                style: TextStyle(color: Colors.white70, fontSize: 13),
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
                           ],
@@ -222,52 +267,94 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         // Login Button
                         ElevatedButton(
-                          onPressed: () async {
-                            final username = _usernameController.text.trim();
-                            final password = _passwordController.text.trim();
+                              onPressed: () async {
+                                final username = _usernameController.text
+                                    .trim();
+                                final password = _passwordController.text
+                                    .trim();
 
-                            if (username.isEmpty || password.isEmpty) {
+                                if (username.isEmpty || password.isEmpty) {
+                                  return;
+                                }
 
-                              return;
-                            }
+                                final prefs =
+                                    await SharedPreferences.getInstance();
+                                final useBackendApi =
+                                    kIsWeb || (prefs.getBool('use_backend_api') ?? true);
+                                if (useBackendApi) {
+                                  final user = await UserRepository().login(
+                                    username,
+                                    password,
+                                  );
+                                  if (user == null ||
+                                      user.role.toLowerCase() !=
+                                          _selectedRole.toLowerCase()) {
+                                    return;
+                                  }
+                                  await prefs.setBool(
+                                    'remember_me',
+                                    _rememberMe,
+                                  );
+                                  if (context.mounted)
+                                    context.go('/branch_selection');
+                                  return;
+                                }
 
-                            final db = await DatabaseHelper.instance.database;
-                            final users = await db.query(
-                              'users',
-                              where: 'username = ? AND password = ? AND role = ?',
-                              whereArgs: [username, DatabaseHelper.hashPassword(password), _selectedRole],
-                            );
+                                final db =
+                                    await DatabaseHelper.instance.database;
+                                final users = await db.query(
+                                  'users',
+                                  where:
+                                      'username = ? AND password = ? AND role = ?',
+                                  whereArgs: [
+                                    username,
+                                    DatabaseHelper.hashPassword(password),
+                                    _selectedRole,
+                                  ],
+                                );
 
-                            if (users.isNotEmpty) {
-                              final prefs = await SharedPreferences.getInstance();
-                              final sessionToken = base64Url.encode(utf8.encode('$username:${DateTime.now().millisecondsSinceEpoch}'));
-                              await prefs.setString('token', sessionToken);
-                              await prefs.setString('username', username);
-                              await prefs.setString('role', _selectedRole);
-                              await prefs.setBool('remember_me', _rememberMe);
-                              context.go('/branch_selection');
-                            } else {
-
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: AppColors.primaryMaterialColor[900]!,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 5,
-                          ),
-                          child: const Text(
-                            'LOGIN',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                        ).animate().fadeIn(delay: 1400.ms).scale(begin: const Offset(0.9, 0.9)),
+                                if (users.isNotEmpty) {
+                                  final prefs =
+                                      await SharedPreferences.getInstance();
+                                  final sessionToken = base64Url.encode(
+                                    utf8.encode(
+                                      '$username:${DateTime.now().millisecondsSinceEpoch}',
+                                    ),
+                                  );
+                                  await prefs.setString('token', sessionToken);
+                                  await prefs.setString('username', username);
+                                  await prefs.setString('role', _selectedRole);
+                                  await prefs.setBool(
+                                    'remember_me',
+                                    _rememberMe,
+                                  );
+                                  context.go('/branch_selection');
+                                } else {}
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor:
+                                    AppColors.primaryMaterialColor[900]!,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 5,
+                              ),
+                              child: const Text(
+                                'LOGIN',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            )
+                            .animate()
+                            .fadeIn(delay: 1400.ms)
+                            .scale(begin: const Offset(0.9, 0.9)),
                         const SizedBox(height: 16),
 
                         // Register Option
@@ -275,10 +362,19 @@ class _LoginScreenState extends State<LoginScreen> {
                           alignment: WrapAlignment.center,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            const Text("Don't have an account? ", style: TextStyle(color: Colors.white70)),
+                            const Text(
+                              "Don't have an account? ",
+                              style: TextStyle(color: Colors.white70),
+                            ),
                             TextButton(
                               onPressed: () => _showRegisterDialog(),
-                              child: const Text('Register', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              child: const Text(
+                                'Register',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ],
                         ).animate().fadeIn(delay: 1500.ms),
@@ -289,11 +385,18 @@ class _LoginScreenState extends State<LoginScreen> {
                           alignment: WrapAlignment.center,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Icon(Icons.info_outline, color: Colors.white60, size: 16),
+                            Icon(
+                              Icons.info_outline,
+                              color: Colors.white60,
+                              size: 16,
+                            ),
                             SizedBox(width: 4),
                             Text(
                               'Default: owner/owner123',
-                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ).animate().fadeIn(delay: 1600.ms),
@@ -361,7 +464,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 final password = passwordController.text.trim();
 
                 if (name.isEmpty || username.isEmpty || password.isEmpty) {
-
                   return;
                 }
 
@@ -376,10 +478,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     'created_at': DateTime.now().toIso8601String(),
                   });
                   Navigator.pop(context);
-
-                } catch (e) {
-
-                }
+                } catch (e) {}
               },
               child: const Text('Register'),
             ),
@@ -389,3 +488,4 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+

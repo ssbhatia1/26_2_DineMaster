@@ -1,10 +1,13 @@
-import 'dart:io';
+﻿import 'package:flutter/foundation.dart';
+import '../core/platform/io.dart';
+import '../core/platform/video_file_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:file_picker/file_picker.dart' as fp;
 import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/database/database_helper.dart';
+import '../services/backend_api_client.dart';
 
 class RecipeManagementScreen extends StatefulWidget {
   final Map<String, dynamic> product;
@@ -46,57 +49,144 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
   }
 
   Future<void> _loadRecipeData() async {
-    final db = await DatabaseHelper.instance.database;
-    final productId = widget.product['id'];
+    try {
+      final productId = widget.product['id'];
 
-    // 1. Fetch raw ingredients list for dropdown
-    _allIngredients = await db.query('inventory', orderBy: 'item_name ASC');
+      if (kIsWeb) {
+        const api = BackendApiClient();
+        final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
 
-    // 2. Fetch existing product record to get prep details and video path
-    final productList = await db.query('products', where: 'id = ?', whereArgs: [productId]);
-    if (productList.isNotEmpty) {
-      final productData = productList.first;
-      _prepTimeController.text = (productData['prep_time'] ?? '').toString();
-      _cookTimeController.text = (productData['cook_time'] ?? '').toString();
-      _servingsController.text = (productData['servings'] ?? '').toString();
-      _difficulty = productData['difficulty'] as String? ?? 'Easy';
-      _videoPath = productData['video_path'] as String?;
+        final inventoryResponse =
+            await api.getJson('/api/inventory?restaurantId=$restaurantId');
+        final inventoryItems = inventoryResponse is List
+            ? inventoryResponse
+            : <dynamic>[];
 
-      final stepsStr = productData['recipe_steps'] as String? ?? '';
-      _steps = stepsStr.split('\n').where((s) => s.trim().isNotEmpty).toList();
+        _allIngredients = inventoryItems.map<Map<String, dynamic>>((item) {
+          final map = Map<String, dynamic>.from(item as Map);
+          return {
+            'id': map['id'],
+            'name': map['itemName'] ?? map['item_name'] ?? 'Unnamed ingredient',
+            'unit': map['unit'] ?? '',
+          };
+        }).toList();
+
+        final productResponse =
+            await api.getJson('/api/products/$productId');
+
+        if (productResponse is Map) {
+          final productData = Map<String, dynamic>.from(productResponse);
+          _prepTimeController.text =
+              (productData['prepTime'] ?? productData['prep_time'] ?? '').toString();
+          _cookTimeController.text =
+              (productData['cookTime'] ?? productData['cook_time'] ?? '').toString();
+          _servingsController.text =
+              (productData['servings'] ?? '').toString();
+          _difficulty = productData['difficulty']?.toString() ?? 'Easy';
+          _videoPath =
+              (productData['videoPath'] ?? productData['video_path'])?.toString();
+
+          final stepsStr =
+              (productData['recipeSteps'] ?? productData['recipe_steps'] ?? '').toString();
+          _steps = stepsStr.split('\n').where((s) => s.trim().isNotEmpty).toList();
+        }
+
+        final recipeResponse =
+            await api.getJson('/api/recipes?productId=$productId');
+        final recipeItems = recipeResponse is List ? recipeResponse : <dynamic>[];
+
+        _localRecipe = recipeItems.map<Map<String, dynamic>>((item) {
+          final map = Map<String, dynamic>.from(item as Map);
+          final ingredientValue = map['ingredient'];
+          final ingredient = ingredientValue is Map
+              ? Map<String, dynamic>.from(ingredientValue)
+              : <String, dynamic>{};
+          final ingredientId = ingredient['id'] ?? map['ingredientId'];
+
+          final matchingInventory = _allIngredients.where(
+            (ing) => ing['id'].toString() == ingredientId?.toString(),
+          );
+          final inventoryItem =
+              matchingInventory.isEmpty ? <String, dynamic>{} : matchingInventory.first;
+
+          return {
+            'recipe_id': map['id'],
+            'ingredient_id': ingredientId,
+            'ingredient_name': ingredient['itemName'] ??
+                ingredient['name'] ??
+                inventoryItem['name'] ??
+                'Ingredient $ingredientId',
+            'quantity_used': map['quantityUsed'] ?? map['quantity_used'] ?? 0,
+            'unit': ingredient['unit'] ?? inventoryItem['unit'] ?? '',
+          };
+        }).toList();
+      } else {
+        final db = await DatabaseHelper.instance.database;
+
+        _allIngredients =
+            await db.query('inventory', orderBy: 'item_name ASC');
+
+        final productList = await db.query(
+          'products',
+          where: 'id = ?',
+          whereArgs: [productId],
+        );
+
+        if (productList.isNotEmpty) {
+          final productData = productList.first;
+          _prepTimeController.text =
+              (productData['prep_time'] ?? '').toString();
+          _cookTimeController.text =
+              (productData['cook_time'] ?? '').toString();
+          _servingsController.text =
+              (productData['servings'] ?? '').toString();
+          _difficulty = productData['difficulty'] as String? ?? 'Easy';
+          _videoPath = productData['video_path'] as String?;
+
+          final stepsStr = productData['recipe_steps'] as String? ?? '';
+          _steps = stepsStr.split('\n').where((s) => s.trim().isNotEmpty).toList();
+        }
+
+        final recipeItems = await db.rawQuery('''
+          SELECT recipes.*, inventory.item_name as ingredient_name, inventory.unit
+          FROM recipes
+          JOIN inventory ON recipes.ingredient_id = inventory.id
+          WHERE recipes.product_id = ?
+        ''', [productId]);
+
+        _localRecipe = recipeItems.map((item) => {
+          'ingredient_id': item['ingredient_id'],
+          'ingredient_name': item['ingredient_name'],
+          'quantity_used': item['quantity_used'],
+          'unit': item['unit'] ?? '',
+        }).toList();
+      }
+
+      if (_videoPath != null && _videoPath!.isNotEmpty) {
+        _initializeVideoPlayer();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load recipe: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-
-    // 3. Fetch linked ingredients from recipes table
-    final recipeItems = await db.rawQuery('''
-      SELECT recipes.*, inventory.item_name as ingredient_name, inventory.unit 
-      FROM recipes 
-      JOIN inventory ON recipes.ingredient_id = inventory.id 
-      WHERE recipes.product_id = ?
-    ''', [productId]);
-
-    _localRecipe = recipeItems.map((item) => {
-      'ingredient_id': item['ingredient_id'],
-      'ingredient_name': item['ingredient_name'],
-      'quantity_used': item['quantity_used'],
-      'unit': item['unit'] ?? '',
-    }).toList();
-
-    // 4. Initialize video player if path exists
-    if (_videoPath != null && _videoPath!.isNotEmpty) {
-      _initializeVideoPlayer();
-    }
-
-    setState(() => _isLoading = false);
   }
 
   void _initializeVideoPlayer() {
     if (_videoPath == null) return;
-    final file = File(_videoPath!);
-    if (!file.existsSync()) return;
+    final controller = createVideoControllerFromPath(_videoPath!);
+    if (controller == null) return;
 
     _videoPlayerController?.dispose();
-    _videoPlayerController = VideoPlayerController.file(file)
+    _videoPlayerController = controller
       ..initialize().then((_) {
+        if (!mounted) return;
         setState(() {
           _isPlayerInitialized = true;
         });
@@ -758,3 +848,7 @@ class _VideoControlsOverlayState extends State<_VideoControlsOverlay> {
     );
   }
 }
+
+
+
+

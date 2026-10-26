@@ -30,14 +30,15 @@
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
+    final active = map['is_active'] ?? map['active'];
     return UserModel(
       id: map['id'],
-      name: map['name'],
-      username: map['username'],
-      password: map['password'],
-      role: map['role'],
-      isActive: map['is_active'] == 1,
-      createdAt: map['created_at'],
+      name: map['name'] ?? '',
+      username: map['username'] ?? '',
+      password: map['password'] ?? '',
+      role: map['role'] ?? '',
+      isActive: active == 1 || active == true,
+      createdAt: map['created_at'] ?? map['createdAt'] ?? '',
     );
   }
 }

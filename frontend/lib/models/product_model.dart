@@ -20,8 +20,9 @@ class ProductModel {
 
   // Individual Food-Level Preferences & Attributes
   final List<String> dietaryPreferences; // e.g. ['Pure Jain', 'Semi Jain']
-  final List<String> tastePreferences;   // e.g. ['Sweet', 'Spicy', 'Extra Spicy']
-  final List<String> attributes;         // e.g. ["Chef's Special", "Bestseller", "Recommended", "New", "Popular", "Healthy", "Vegan", "Gluten-Free", "Contains Dairy", "Contains Nuts"]
+  final List<String> tastePreferences; // e.g. ['Sweet', 'Spicy', 'Extra Spicy']
+  final List<String>
+  attributes; // e.g. ["Chef's Special", "Bestseller", "Recommended", "New", "Popular", "Healthy", "Vegan", "Gluten-Free", "Contains Dairy", "Contains Nuts"]
   final String? customDietaryNotes;
 
   ProductModel({
@@ -58,8 +59,11 @@ class ProductModel {
   bool get isHealthy => attributes.contains('Healthy');
   bool get isVegan => attributes.contains('Vegan');
   bool get isGlutenFree => attributes.contains('Gluten-Free');
-  bool get hasPreferences => dietaryPreferences.isNotEmpty || tastePreferences.isNotEmpty;
-  bool get hasAttributes => attributes.isNotEmpty || (customDietaryNotes != null && customDietaryNotes!.trim().isNotEmpty);
+  bool get hasPreferences =>
+      dietaryPreferences.isNotEmpty || tastePreferences.isNotEmpty;
+  bool get hasAttributes =>
+      attributes.isNotEmpty ||
+      (customDietaryNotes != null && customDietaryNotes!.trim().isNotEmpty);
 
   ProductModel copyWith({
     int? id,
@@ -142,34 +146,50 @@ class ProductModel {
           return decoded.map((e) => e.toString()).toList();
         }
       } catch (_) {
-        return value.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        return value
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
       }
     }
     return [];
   }
 
   factory ProductModel.fromMap(Map<String, dynamic> map) {
+    final vegValue = map['is_veg'] ?? map['veg'];
+    final availableValue = map['is_available'] ?? map['available'];
+
     return ProductModel(
-      id: map['id'],
+      id: (map['id'] as num?)?.toInt(),
       name: map['name'] ?? '',
       description: map['description'],
       ingredients: map['ingredients'],
       price: (map['price'] as num?)?.toDouble() ?? 0.0,
       category: map['category'] ?? 'General',
-      isVeg: map['is_veg'] ?? 1,
-      imagePath: map['image_path'],
-      isAvailable: map['is_available'] == 1 || map['is_available'] == true,
-      recipeSteps: map['recipe_steps'],
-      prepTime: map['prep_time'],
-      cookTime: map['cook_time'],
+      isVeg: vegValue is bool
+          ? (vegValue ? 1 : 0)
+          : (vegValue as num?)?.toInt() ?? 1,
+      imagePath: map['image_path'] ?? map['imagePath'],
+      isAvailable: availableValue == 1 || availableValue == true,
+      recipeSteps: map['recipe_steps'] ?? map['recipeSteps'],
+      prepTime: (map['prep_time'] ?? map['prepTime']) as int?,
+      cookTime: (map['cook_time'] ?? map['cookTime']) as int?,
       servings: map['servings'],
       difficulty: map['difficulty'],
-      videoPath: map['video_path'],
-      gstPercentage: (map['gst_percentage'] as num?)?.toDouble() ?? 5.0,
-      dietaryPreferences: _parseStringList(map['dietary_preferences']),
-      tastePreferences: _parseStringList(map['taste_preferences']),
+      videoPath: map['video_path'] ?? map['videoPath'],
+      gstPercentage: (map['gst_percentage'] ?? map['gstPercentage']) is num
+          ? ((map['gst_percentage'] ?? map['gstPercentage']) as num).toDouble()
+          : 5.0,
+      dietaryPreferences: _parseStringList(
+        map['dietary_preferences'] ?? map['dietaryPreferences'],
+      ),
+      tastePreferences: _parseStringList(
+        map['taste_preferences'] ?? map['tastePreferences'],
+      ),
       attributes: _parseStringList(map['attributes']),
-      customDietaryNotes: map['custom_dietary_notes'],
+      customDietaryNotes:
+          map['custom_dietary_notes'] ?? map['customDietaryNotes'],
     );
   }
 }

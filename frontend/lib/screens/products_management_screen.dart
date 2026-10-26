@@ -1,8 +1,10 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/database_helper.dart';
+import '../services/backend_api_client.dart';
 import '../models/product_model.dart';
 import '../widgets/food_attributes_badge.dart';
 import 'recipe_management_screen.dart';
@@ -29,43 +31,100 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
   }
 
   Future<void> _loadCategories() async {
-    final db = await DatabaseHelper.instance.database;
-    final cats = await db.query('categories');
-    if (!mounted) return;
-    setState(() {
-      final dbCats = cats.map((c) => c['name'] as String).toList();
-      if (dbCats.isEmpty) {
-        _categories = ['All', 'Starters', 'Main Course', 'Breads', 'Beverages', 'Desserts'];
+    try {
+      List<Map<String, dynamic>> cats;
+
+      if (kIsWeb) {
+        final response =
+            await const BackendApiClient().getJson('/api/categories');
+        if (response is! List) {
+          throw const FormatException('Unexpected categories response');
+        }
+        cats = response
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
       } else {
-        _categories = ['All', ...dbCats];
+        final db = await DatabaseHelper.instance.database;
+        cats = await db.query('categories');
       }
-    });
-  }
 
+      if (!mounted) return;
+      setState(() {
+        final dbCats = cats.map((c) => c['name'].toString()).toList();
+        _categories = dbCats.isEmpty
+            ? ['All', 'Starters', 'Main Course', 'Breads', 'Beverages', 'Desserts']
+            : ['All', ...dbCats];
+      });
+    } catch (e) {
+      debugPrint('Could not load categories: $e');
+    }
+  }
   Future<void> _loadProducts() async {
-    final db = await DatabaseHelper.instance.database;
-    final restId = DatabaseHelper.currentRestaurantId ?? 1;
-    final whereClause = _selectedCategory == 'All'
-        ? '(restaurant_id = ? OR restaurant_id IS NULL)'
-        : '(restaurant_id = ? OR restaurant_id IS NULL) AND category = ?';
-    final whereArgs = _selectedCategory == 'All'
-        ? [restId]
-        : [restId, _selectedCategory];
+    try {
+      List<Map<String, dynamic>> productMaps;
 
-    final productMaps = await db.query(
-      'products',
-      where: whereClause,
-      whereArgs: whereArgs,
-      orderBy: 'name ASC',
-    );
+      if (kIsWeb) {
+        final response =
+            await const BackendApiClient().getJson('/api/products/all');
 
-    if (!mounted) return;
-    setState(() {
-      _products = productMaps.map((m) => ProductModel.fromMap(m)).toList();
-      _isLoading = false;
-    });
+        if (response is! List) {
+          throw const FormatException('Unexpected products response');
+        }
+
+        productMaps = response
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .where((item) {
+              final restaurantId = item['restaurantId'] ??
+                  (item['restaurant'] is Map
+                      ? item['restaurant']['id']
+                      : null);
+              final selectedRestaurant =
+                  DatabaseHelper.currentRestaurantId ?? 1;
+
+              return restaurantId == null ||
+                  restaurantId.toString() == selectedRestaurant.toString();
+            })
+            .where((item) =>
+                _selectedCategory == 'All' ||
+                item['category']?.toString() == _selectedCategory)
+            .toList()
+          ..sort((a, b) => (a['name'] ?? '')
+              .toString()
+              .compareTo((b['name'] ?? '').toString()));
+      } else {
+        final db = await DatabaseHelper.instance.database;
+        final restId = DatabaseHelper.currentRestaurantId ?? 1;
+        final whereClause = _selectedCategory == 'All'
+            ? '(restaurant_id = ? OR restaurant_id IS NULL)'
+            : '(restaurant_id = ? OR restaurant_id IS NULL) AND category = ?';
+        final whereArgs = _selectedCategory == 'All'
+            ? [restId]
+            : [restId, _selectedCategory];
+
+        productMaps = await db.query(
+          'products',
+          where: whereClause,
+          whereArgs: whereArgs,
+          orderBy: 'name ASC',
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _products = productMaps.map((m) => ProductModel.fromMap(m)).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Could not load products: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load products: $e')),
+      );
+    }
   }
-
   List<ProductModel> get _filteredProducts {
     if (_searchQuery.trim().isEmpty) return _products;
     final q = _searchQuery.toLowerCase();
@@ -81,18 +140,20 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
 
   Future<void> _showProductDialog([ProductModel? existingProduct]) async {
     final isEditing = existingProduct != null;
-    final db = await DatabaseHelper.instance.database;
+    final db = kIsWeb ? null : await DatabaseHelper.instance.database;
 
-    // Load raw ingredients for recipe management
-    List<Map<String, dynamic>> ingredients = await db.query('inventory', orderBy: 'item_name ASC');
-
-    // Load recipe items if editing
+    // Load raw ingredients for recipe management.
+    // Web uses backend integration; local SQLite remains for desktop/mobile.
+    List<Map<String, dynamic>> ingredients = kIsWeb
+        ? <Map<String, dynamic>>[]
+        : await db!.query('inventory', orderBy: 'item_name ASC');
+    // Load local recipe items only on desktop/mobile.
     List<Map<String, dynamic>> localRecipe = [];
-    if (isEditing && existingProduct.id != null) {
-      final recipeItems = await db.rawQuery('''
-        SELECT recipes.*, inventory.item_name as ingredient_name, inventory.unit 
-        FROM recipes 
-        JOIN inventory ON recipes.ingredient_id = inventory.id 
+    if (!kIsWeb && isEditing && existingProduct.id != null) {
+      final recipeItems = await db!.rawQuery('''
+        SELECT recipes.*, inventory.item_name as ingredient_name, inventory.unit
+        FROM recipes
+        JOIN inventory ON recipes.ingredient_id = inventory.id
         WHERE recipes.product_id = ?
       ''', [existingProduct.id]);
       localRecipe = recipeItems.map((item) => {
@@ -102,7 +163,6 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
         'unit': item['unit'],
       }).toList();
     }
-
     final nameController = TextEditingController(text: existingProduct?.name ?? '');
     final priceController = TextEditingController(text: existingProduct != null ? existingProduct.price.toString() : '');
     final descController = TextEditingController(text: existingProduct?.description ?? '');
@@ -244,8 +304,8 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                                       controller: priceController,
                                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                       decoration: const InputDecoration(
-                                        labelText: 'Price (₹) *',
-                                        prefixText: '₹ ',
+                                        labelText: 'Price (â‚¹) *',
+                                        prefixText: 'â‚¹ ',
                                         border: OutlineInputBorder(),
                                       ),
                                     ),
@@ -783,43 +843,83 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                             allIngredientsList.add(rItem['ingredient_name'] as String);
                           }
 
-                          final data = {
-                            'name': name,
-                            'price': price,
-                            'description': desc,
-                            'ingredients': allIngredientsList.join(','),
-                            'category': category,
-                            'is_veg': productType,
-                            'is_available': isAvailable ? 1 : 0,
-                            'restaurant_id': DatabaseHelper.currentRestaurantId,
-                            'recipe_steps': localSteps.join('\n'),
-                            'prep_time': int.tryParse(prepTimeController.text.trim()) ?? 5,
-                            'cook_time': int.tryParse(cookTimeController.text.trim()) ?? 10,
-                            'gst_percentage': gstPercentage,
-                            'dietary_preferences': jsonEncode(dietaryPreferences.toList()),
-                            'taste_preferences': jsonEncode(tastePreferences.toList()),
-                            'attributes': jsonEncode(attributes.toList()),
-                            'custom_dietary_notes': customNotesController.text.trim(),
-                          };
+                          if (kIsWeb) {
+                            final apiData = <String, dynamic>{
+                              'name': name,
+                              'price': price,
+                              'description': desc,
+                              'ingredients': allIngredientsList.join(','),
+                              'category': category,
+                              'is_veg': productType,
+                              'is_available': isAvailable,
+                              'restaurantId': DatabaseHelper.currentRestaurantId,
+                              'recipeSteps': localSteps.join('\n'),
+                              'prepTime': int.tryParse(prepTimeController.text.trim()) ?? 5,
+                              'cookTime': int.tryParse(cookTimeController.text.trim()) ?? 10,
+                              'gstPercentage': gstPercentage,
+                              'dietaryPreferences': jsonEncode(dietaryPreferences.toList()),
+                              'tastePreferences': jsonEncode(tastePreferences.toList()),
+                              'attributes': jsonEncode(attributes.toList()),
+                              'customDietaryNotes': customNotesController.text.trim(),
+                            };
 
-                          int productId;
-                          if (isEditing && existingProduct.id != null) {
-                            productId = existingProduct.id!;
-                            await db.update('products', data, where: 'id = ?', whereArgs: [productId]);
+                            final api = const BackendApiClient();
+                            if (isEditing && existingProduct.id != null) {
+                              await api.putJson(
+                                '/api/products/${existingProduct.id}',
+                                apiData,
+                              );
+                            } else {
+                              await api.postJson('/api/products', apiData);
+                            }
                           } else {
-                            productId = await db.insert('products', data);
-                          }
+                            final localData = <String, dynamic>{
+                              'name': name,
+                              'price': price,
+                              'description': desc,
+                              'ingredients': allIngredientsList.join(','),
+                              'category': category,
+                              'is_veg': productType,
+                              'is_available': isAvailable ? 1 : 0,
+                              'restaurant_id': DatabaseHelper.currentRestaurantId,
+                              'recipe_steps': localSteps.join('\n'),
+                              'prep_time': int.tryParse(prepTimeController.text.trim()) ?? 5,
+                              'cook_time': int.tryParse(cookTimeController.text.trim()) ?? 10,
+                              'gst_percentage': gstPercentage,
+                              'dietary_preferences': jsonEncode(dietaryPreferences.toList()),
+                              'taste_preferences': jsonEncode(tastePreferences.toList()),
+                              'attributes': jsonEncode(attributes.toList()),
+                              'custom_dietary_notes': customNotesController.text.trim(),
+                            };
 
-                          // Sync recipe ingredients table
-                          await db.delete('recipes', where: 'product_id = ?', whereArgs: [productId]);
-                          for (var rItem in localRecipe) {
-                            await db.insert('recipes', {
-                              'product_id': productId,
-                              'ingredient_id': rItem['ingredient_id'],
-                              'quantity_used': rItem['quantity_used'],
-                            });
-                          }
+                            final localDb = db!;
+                            int productId;
+                            if (isEditing && existingProduct.id != null) {
+                              productId = existingProduct.id!;
+                              await localDb.update(
+                                'products',
+                                localData,
+                                where: 'id = ?',
+                                whereArgs: [productId],
+                              );
+                            } else {
+                              productId = await localDb.insert('products', localData);
+                            }
 
+                            await localDb.delete(
+                              'recipes',
+                              where: 'product_id = ?',
+                              whereArgs: [productId],
+                            );
+
+                            for (var rItem in localRecipe) {
+                              await localDb.insert('recipes', {
+                                'product_id': productId,
+                                'ingredient_id': rItem['ingredient_id'],
+                                'quantity_used': rItem['quantity_used'],
+                              });
+                            }
+                          }
                           Navigator.pop(context);
                           _loadProducts();
 
@@ -1051,22 +1151,45 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
 
   void _confirmDelete(int? id, String name) {
     if (id == null) return;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Confirm Delete'),
         content: Text('Are you sure you want to delete product "$name"?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
-              final db = await DatabaseHelper.instance.database;
-              await db.delete('products', where: 'id = ?', whereArgs: [id]);
-              Navigator.pop(context);
-              _loadProducts();
+              try {
+                if (kIsWeb) {
+                  await const BackendApiClient().delete('/api/products/$id');
+                } else {
+                  final db = await DatabaseHelper.instance.database;
+                  await db.delete(
+                    'products',
+                    where: 'id = ?',
+                    whereArgs: [id],
+                  );
+                }
+
+                if (!mounted) return;
+                Navigator.pop(dialogContext);
+                await _loadProducts();
+
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('"$name" deleted successfully')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Could not delete "$name": $e')),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Delete'),
@@ -1075,28 +1198,50 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
       ),
     );
   }
-
   Future<void> _toggleProductAvailability(ProductModel product) async {
     if (product.id == null) return;
-    final db = await DatabaseHelper.instance.database;
-    final newStatus = !product.isAvailable;
-    await db.update(
-      'products',
-      {'is_available': newStatus ? 1 : 0},
-      where: 'id = ?',
-      whereArgs: [product.id],
-    );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(newStatus ? '${product.name} is now In Stock' : '${product.name} is now Out of Stock'),
-        backgroundColor: newStatus ? const Color(0xFF2E7D32) : Colors.amber.shade800,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-    _loadProducts();
-  }
 
+    final newStatus = !product.isAvailable;
+
+    try {
+      if (kIsWeb) {
+        await const BackendApiClient().patchJson(
+          '/api/products/${product.id}/availability',
+          {
+            'is_available': newStatus,
+          },
+        );
+      } else {
+        final db = await DatabaseHelper.instance.database;
+        await db.update(
+          'products',
+          {'is_available': newStatus ? 1 : 0},
+          where: 'id = ?',
+          whereArgs: [product.id],
+        );
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            newStatus
+                ? '${product.name} is now In Stock'
+                : '${product.name} is now Sold Out',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      await _loadProducts();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update availability: $e')),
+      );
+    }
+  }
   void _showProductDetails(ProductModel product) {
     Color typeColor = Colors.red;
     String typeLabel = 'Non-Veg';
@@ -1147,7 +1292,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '₹${product.price.toStringAsFixed(2)}',
+                    'â‚¹${product.price.toStringAsFixed(2)}',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary),
                   ),
                   Container(
@@ -1417,7 +1562,7 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              '₹${product.price.toStringAsFixed(2)}',
+                              'â‚¹${product.price.toStringAsFixed(2)}',
                               style: const TextStyle(
                                 color: AppColors.primary,
                                 fontWeight: FontWeight.bold,
@@ -1575,3 +1720,14 @@ class _ProductsManagementScreenState extends State<ProductsManagementScreen> {
     );
   }
 }
+
+
+
+
+
+
+
+
+
+
+

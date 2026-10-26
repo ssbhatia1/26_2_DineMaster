@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:go_router/go_router.dart';
 import 'screens/splash_screen.dart';
@@ -29,20 +30,23 @@ final themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.light);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ServerService.instance.startServer();
-  await SyncService.instance.initConnection();
-  
-  final prefs = await SharedPreferences.getInstance();
-  final rememberMe = prefs.getBool('remember_me') ?? false;
-  if (!rememberMe) {
-    await prefs.remove('token');
-  }
-  final hasToken = (prefs.getString('token') != null) && rememberMe;
 
-  // Always enforce clean light theme
+  // Start the local server only on non-web platforms.
+  // Browsers do not support Dart's InternetAddress.anyIPv4 server.
+  if (!kIsWeb) {
+    await ServerService.instance.startServer();
+  }
+
+  await SyncService.instance.initConnection();
+
+  final prefs = await SharedPreferences.getInstance();
+
+  final hasToken = prefs.getString('token') != null;
+
+  // Always enforce clean light theme.
   themeNotifier.value = ThemeMode.light;
   await prefs.setString('theme_mode', 'light');
-  
+
   runApp(MyApp(hasToken: hasToken));
 }
 
@@ -54,10 +58,7 @@ GoRouter _buildRouter(bool hasToken, [String? initialLocation]) {
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
       ),
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/branch_selection',
         builder: (context, state) => const BranchSelectionScreen(),
@@ -76,6 +77,7 @@ GoRouter _buildRouter(bool hasToken, [String? initialLocation]) {
             builder: (context, state) {
               final orderId = state.uri.queryParameters['orderId'];
               final tableId = state.uri.queryParameters['tableId'];
+
               return PosScreen(
                 reopenOrderId: orderId != null ? int.tryParse(orderId) : null,
                 selectedTableId: tableId != null ? int.tryParse(tableId) : null,
@@ -147,6 +149,7 @@ GoRouter _buildRouter(bool hasToken, [String? initialLocation]) {
 class MyApp extends StatefulWidget {
   final bool hasToken;
   final String? initialLocation;
+
   const MyApp({super.key, required this.hasToken, this.initialLocation});
 
   @override

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../core/database/database_helper.dart';
+import '../services/backend_api_client.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 
 class InventoryScreen extends StatefulWidget {
@@ -25,18 +27,53 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _loadInventory() async {
-    setState(() => _isLoading = true);
-    final db = await _dbHelper.database;
-    final restaurantId = DatabaseHelper.currentRestaurantId;
-    _inventoryItems = await db.query(
-      'inventory',
-      where: 'restaurant_id = ?',
-      whereArgs: [restaurantId],
-      orderBy: 'item_name ASC',
-    );
+  setState(() => _isLoading = true);
 
-    setState(() => _isLoading = false);
+  try {
+    if (kIsWeb) {
+      final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
+      final response = await BackendApiClient().getJson(
+        '/api/inventory?restaurantId=$restaurantId',
+      );
+
+      final List<dynamic> items = response is List
+          ? response
+          : (response['content'] as List<dynamic>? ?? []);
+
+      _inventoryItems = items.map<Map<String, dynamic>>((raw) {
+        final item = Map<String, dynamic>.from(raw as Map);
+        return {
+          ...item,
+          'id': item['id'],
+          'item_name': item['itemName'] ?? item['item_name'] ?? '',
+          'current_stock': item['currentStock'] ?? item['current_stock'] ?? 0,
+          'low_stock_threshold':
+              item['lowStockThreshold'] ?? item['low_stock_threshold'] ?? 0,
+          'unit': item['unit'] ?? '',
+          'restaurant_id': item['restaurantId'] ?? item['restaurant_id'],
+          'expiry_date': item['expiryDate'] ?? item['expiry_date'],
+        };
+      }).toList();
+    } else {
+      final db = await _dbHelper.database;
+      final restaurantId = DatabaseHelper.currentRestaurantId;
+      _inventoryItems = await db.query(
+        'inventory',
+        where: 'restaurant_id = ?',
+        whereArgs: [restaurantId],
+        orderBy: 'item_name ASC',
+      );
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load inventory: $e')),
+      );
+    }
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
   }
+}
 
   List<Map<String, dynamic>> get _filteredItems {
     return _inventoryItems.where((item) {
@@ -118,20 +155,45 @@ class _InventoryScreenState extends State<InventoryScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
             onPressed: () async {
-              if (nameController.text.isNotEmpty &&
-                  stockController.text.isNotEmpty &&
-                  unitController.text.isNotEmpty &&
-                  thresholdController.text.isNotEmpty) {
-                final db = await _dbHelper.database;
-                await db.insert('inventory', {
-                  'item_name': nameController.text,
-                  'current_stock': double.tryParse(stockController.text) ?? 0.0,
-                  'unit': unitController.text,
-                  'low_stock_threshold': double.tryParse(thresholdController.text) ?? 0.0,
-                  'restaurant_id': DatabaseHelper.currentRestaurantId,
+              if (nameController.text.trim().isEmpty ||
+                  stockController.text.isEmpty ||
+                  unitController.text.trim().isEmpty ||
+                  thresholdController.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please fill in all fields.')),
+                );
+                return;
+              }
+
+              try {
+                final stock = double.tryParse(stockController.text);
+                final threshold = double.tryParse(thresholdController.text);
+
+                if (stock == null || threshold == null || stock < 0 || threshold < 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Enter valid non-negative stock values.')),
+                  );
+                  return;
+                }
+
+                await BackendApiClient().postJson('/api/inventory', {
+                  'itemName': nameController.text.trim(),
+                  'currentStock': stock,
+                  'unit': unitController.text.trim(),
+                  'lowStockThreshold': threshold,
+                  'expiryDate': null,
+                  'restaurantId': DatabaseHelper.currentRestaurantId ?? 1,
                 });
+
+                if (!mounted) return;
                 Navigator.pop(context);
-                _loadInventory();
+                await _loadInventory();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to add item: $e')),
+                  );
+                }
               }
             },
             child: const Text('Add Item'),
@@ -190,20 +252,23 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 onPressed: () async {
                   final val = double.tryParse(qtyController.text);
                   if (val != null) {
-                    double current = (item['current_stock'] as num).toDouble();
-                    double updated = current;
-                    
-                    if (mode == 'Add') updated += val;
-                    if (mode == 'Deduct') updated = (current - val).clamp(0.0, double.infinity);
-                    if (mode == 'Set') updated = val.clamp(0.0, double.infinity);
 
-                    final db = await _dbHelper.database;
-                    await db.update(
-                      'inventory',
-                      {'current_stock': updated},
-                      where: 'id = ?',
-                      whereArgs: [item['id']],
-                    );
+                    try {
+                      await BackendApiClient().patchJson(
+                        '/api/inventory/${item['id']}/stock',
+                        {
+                          'mode': mode.toLowerCase(),
+                          'quantity': val,
+                        },
+                      );
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to adjust stock: $e')),
+                        );
+                      }
+                      return;
+                    }
                     Navigator.pop(context);
                     _loadInventory();
                   }
@@ -240,19 +305,30 @@ class _InventoryScreenState extends State<InventoryScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
             onPressed: () async {
               if (nameController.text.isNotEmpty && unitController.text.isNotEmpty && thresholdController.text.isNotEmpty) {
-                final db = await _dbHelper.database;
-                await db.update(
-                  'inventory',
+                try {
+                await BackendApiClient().putJson(
+                  '/api/inventory/${item['id']}',
                   {
-                    'item_name': nameController.text,
-                    'unit': unitController.text,
-                    'low_stock_threshold': double.tryParse(thresholdController.text) ?? 0.0,
+                    'itemName': nameController.text.trim(),
+                    'currentStock': (item['current_stock'] as num).toDouble(),
+                    'unit': unitController.text.trim(),
+                    'lowStockThreshold':
+                        double.tryParse(thresholdController.text) ?? 0.0,
+                    'expiryDate': item['expiry_date'],
+                    'restaurantId': item['restaurant_id'] ??
+                        DatabaseHelper.currentRestaurantId ?? 1,
                   },
-                  where: 'id = ?',
-                  whereArgs: [item['id']],
                 );
+                if (!mounted) return;
                 Navigator.pop(context);
                 _loadInventory();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to update item: $e')),
+                  );
+                }
+              }
               }
             },
             child: const Text('Save'),
@@ -702,3 +778,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 }
+
+
+
+
+

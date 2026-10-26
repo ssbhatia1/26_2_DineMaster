@@ -1,10 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
-import 'dart:io';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../platform/io.dart';
+import '../platform/sqlite_ffi.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'network_database.dart';
@@ -19,6 +20,11 @@ class DatabaseHelper {
   static String databaseName = 'dinemaster_restaurant.db';
 
   Future<Database> get database async {
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'SQLite is not available on Flutter Web. Use the Spring Boot REST API.',
+      );
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
       final isServer = prefs.getBool('is_server') ?? true;
@@ -35,9 +41,8 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDB(String filePath) async {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      initSqliteFfiIfDesktop();
     }
 
     final dbPath = await getDatabasesPath();
@@ -65,6 +70,7 @@ class DatabaseHelper {
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
+    await db.execute('PRAGMA foreign_keys = ON;');
     await _ensureTablesExist(db);
     await _sanitizeTableStatuses(db);
     // Only remove dummy data on fresh setup, never on subsequent launches
@@ -964,9 +970,11 @@ CREATE TABLE suppliers (
 
   /// Checks whether previous application data exists (legacy nexodine db or existing dinemaster db).
   Future<bool> checkPreviousDataExists() async {
+    if (kIsWeb) {
+      return false;
+    }
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
+      initSqliteFfiIfDesktop();
     }
     final dbPath = await getDatabasesPath();
     final dbDir = Directory(dbPath);
@@ -1130,3 +1138,5 @@ CREATE TABLE suppliers (
     }
   }
 }
+
+

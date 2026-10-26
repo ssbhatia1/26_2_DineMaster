@@ -1,19 +1,21 @@
-import 'dart:async';
-import 'dart:io';
+﻿import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import '../core/platform/io.dart';
 import 'package:logger/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SyncService {
   static final SyncService instance = SyncService._init();
   final Logger _logger = Logger();
-  
+
   WebSocket? _socket;
   Timer? _reconnectTimer;
   bool _isConnecting = false;
   String? _currentIp;
 
-  final StreamController<String> _syncController = StreamController<String>.broadcast();
+  final StreamController<String> _syncController =
+      StreamController<String>.broadcast();
   Stream<String> get syncEvents => _syncController.stream;
 
   final ValueNotifier<bool> connectionState = ValueNotifier<bool>(false);
@@ -21,31 +23,38 @@ class SyncService {
   SyncService._init();
 
   Future<void> initConnection() async {
+    if (kIsWeb) {
+      _logger.i('SyncService: WebSocket sync is disabled on Flutter Web.');
+      await closeConnection();
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     final isServer = prefs.getBool('is_server') ?? true;
     final serverIp = prefs.getString('server_ip') ?? 'localhost';
-    
+
     _currentIp = isServer ? 'localhost' : serverIp;
-    
+
     // Stop any existing connection or reconnect timers
     await closeConnection();
-    
+
     _connect();
   }
 
   void _connect() async {
     if (_isConnecting || _currentIp == null) return;
     _isConnecting = true;
-    
-    final url = 'ws://$_currentIp:8081';
+
+    final url = 'ws://$_currentIp:8083';
     _logger.i('SyncService: Connecting to $url...');
-    
+
     try {
-      _socket = await WebSocket.connect(url).timeout(const Duration(seconds: 5));
+      _socket = await WebSocket.connect(
+        url,
+      ).timeout(const Duration(seconds: 5));
       connectionState.value = true;
       _isConnecting = false;
       _logger.i('SyncService: Connected to WebSocket server at $url');
-      
+
       _reconnectTimer?.cancel();
       _reconnectTimer = null;
 
@@ -76,7 +85,7 @@ class SyncService {
   void _handleDisconnect() {
     connectionState.value = false;
     _socket = null;
-    
+
     // Attempt reconnection every 5 seconds
     if (_reconnectTimer == null || !_reconnectTimer!.isActive) {
       _reconnectTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
@@ -89,15 +98,21 @@ class SyncService {
   void broadcastEvent(String eventType, [Map<String, dynamic>? data]) {
     // If we are the client, send the event to the server to broadcast to everyone else
     // For simplicity, we just format as JSON
-    final jsonStr = '{"event": "$eventType", "timestamp": "${DateTime.now().toIso8601String()}"}';
-    
+    final jsonStr = jsonEncode({
+      'event': eventType,
+      'timestamp': DateTime.now().toIso8601String(),
+      if (data != null) 'data': data,
+    });
+
     // Immediately notify all local screen listeners so the active UI updates instantly
     _syncController.add(jsonStr);
-    
+
     if (_socket != null && connectionState.value) {
       _socket!.add(jsonStr);
     } else {
-      _logger.i('SyncService: Local broadcast dispatched (socket not connected)');
+      _logger.i(
+        'SyncService: Local broadcast dispatched (socket not connected)',
+      );
     }
   }
 
@@ -110,3 +125,4 @@ class SyncService {
     connectionState.value = false;
   }
 }
+

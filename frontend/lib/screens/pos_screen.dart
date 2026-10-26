@@ -1,21 +1,35 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
+import '../core/platform/io.dart';
+import '../core/platform/video_file_controller.dart';
+import '../core/api/api_mode.dart';
+
 import 'package:dine_master/core/theme/app_colors.dart';
+
 import 'dart:async';
+import 'dart:async' as async;
+
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../repositories/product_repository.dart';
 import '../models/product_model.dart';
 import '../core/database/database_helper.dart';
 import '../repositories/table_repository.dart';
+import '../repositories/order_api_repository.dart';
+import '../models/order_model.dart';
 import '../models/table_model.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../services/sync_service.dart';
 import '../widgets/searchable_dropdown.dart';
+
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+
 import 'pdf_preview_screen.dart';
 import '../widgets/pos_item_card.dart';
 
@@ -28,29 +42,49 @@ class PosScreen extends StatefulWidget {
   State<PosScreen> createState() => _PosScreenState();
 }
 
-class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMixin {
+class _PosScreenState extends State<PosScreen>
+    with SingleTickerProviderStateMixin {
   final ProductRepository _productRepository = ProductRepository();
   final TableRepository _tableRepository = TableRepository();
-  final List<String> _categories = ['All', 'Starters', 'Main Course', 'Breads', 'Beverages', 'Desserts'];
+  final OrderApiRepository _orderApiRepository = const OrderApiRepository();
+  final List<String> _categories = [
+    'All',
+    'Starters',
+    'Main Course',
+    'Breads',
+    'Beverages',
+    'Desserts',
+  ];
   String _selectedCategory = 'All';
-  
+
   List<ProductModel> _products = [];
   List<ProductModel> _filteredProducts = [];
   List<TableModel> _tables = [];
-  List<Map<String, dynamic>> _cartItems = []; // [{ 'product': ProductModel, 'quantity': int }]
+  List<Map<String, dynamic>> _cartItems =
+      []; // [{ 'product': ProductModel, 'quantity': int }]
   bool _isLoading = true;
   String _selectedOrderType = 'Walk-in Customer';
   int? _selectedTableId;
-  final List<String> _orderTypes = ['Dine-In', 'Table Order', 'Delivery', 'Takeaway', 'Online Order', 'Walk-in Customer'];
+  final List<String> _orderTypes = [
+    'Dine-In',
+    'Table Order',
+    'Delivery',
+    'Takeaway',
+    'Online Order',
+    'Walk-in Customer',
+  ];
   String _selectedPaymentType = 'Cash';
   double _discountAmount = 0.0;
   String _discountType = 'Flat'; // Flat or Percentage
   int? _editingOrderId;
-  StreamSubscription? _syncSubscription;
+  async.StreamSubscription<String>? _syncSubscription;
   late TabController _posTabController;
   List<Map<String, dynamic>> _activeOrders = [];
-  final TextEditingController _customerNameController = TextEditingController(text: 'Walking Customer');
-  final TextEditingController _customerPhoneController = TextEditingController();
+  final TextEditingController _customerNameController = TextEditingController(
+    text: 'Walking Customer',
+  );
+  final TextEditingController _customerPhoneController =
+      TextEditingController();
 
   @override
   void initState() {
@@ -71,7 +105,8 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         final db = await DatabaseHelper.instance.database;
         final activeOrders = await db.query(
           'orders',
-          where: 'table_id = ? AND status IN (\'Held\', \'Received\', \'Sent to Kitchen\', \'Preparing\', \'Ready\', \'Served\', \'Billing Pending\')',
+          where:
+              'table_id = ? AND status IN (\'Held\', \'Received\', \'Sent to Kitchen\', \'Preparing\', \'Ready\', \'Served\', \'Billing Pending\')',
           whereArgs: [widget.selectedTableId],
           orderBy: 'order_time DESC',
           limit: 1,
@@ -113,12 +148,15 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       if (orderDetails.isEmpty) return;
       final order = orderDetails.first;
 
-      final items = await db.rawQuery('''
+      final items = await db.rawQuery(
+        '''
         SELECT oi.*, p.name as product_name 
         FROM order_items oi
         JOIN products p ON oi.product_id = p.id
         WHERE oi.order_id = ?
-      ''', [orderId]);
+      ''',
+        [orderId],
+      );
 
       setState(() {
         _cartItems.clear();
@@ -134,7 +172,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
               isAvailable: true,
             ),
           );
-          
+
           _cartItems.add({
             'product': product,
             'quantity': item['quantity'] as int,
@@ -153,13 +191,12 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         _selectedTableId = order['table_id'] as int?;
         _discountAmount = (order['discount_amount'] ?? 0.0) as double;
         _customerNameController.text = order['customer_name'] as String? ?? '';
-        _customerPhoneController.text = order['customer_phone'] as String? ?? '';
+        _customerPhoneController.text =
+            order['customer_phone'] as String? ?? '';
         _editingOrderId = orderId;
       });
-      
-      _posTabController.animateTo(0);
-      
 
+      _posTabController.animateTo(0);
     } catch (e) {
       print('Error reopening order: $e');
     }
@@ -167,7 +204,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Future<void> _loadTables() async {
     try {
-      await _tableRepository.syncAllTableStatuses(DatabaseHelper.currentRestaurantId);
+      await _tableRepository.syncAllTableStatuses(
+        DatabaseHelper.currentRestaurantId,
+      );
       final tables = await _tableRepository.getTables();
       setState(() {
         _tables = tables;
@@ -181,7 +220,8 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
     try {
       final db = await DatabaseHelper.instance.database;
       final restaurantId = DatabaseHelper.currentRestaurantId;
-      final List<Map<String, dynamic>> orders = await db.rawQuery('''
+      final List<Map<String, dynamic>> orders = await db.rawQuery(
+        '''
         SELECT o.*, t.table_number,
                (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as item_count,
                (SELECT SUM(amount) FROM payments WHERE order_id = o.id) as paid_amount
@@ -189,7 +229,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         LEFT JOIN tables t ON o.table_id = t.id
         WHERE o.status IN ('Held', 'Received', 'Sent to Kitchen', 'Preparing', 'Ready', 'Served', 'Billing Pending') AND o.restaurant_id = ?
         ORDER BY o.order_time DESC
-      ''', [restaurantId]);
+      ''',
+        [restaurantId],
+      );
 
       setState(() {
         _activeOrders = orders;
@@ -203,23 +245,26 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
     setState(() => _isLoading = true);
     try {
       _products = await _productRepository.getProducts();
-      
+
       // Integration with Recipes & Ingredients
       final db = await DatabaseHelper.instance.database;
-      
+
       List<ProductModel> updatedProducts = [];
       for (var product in _products) {
         bool isStockAvailable = true;
-        
+
         // Fetch recipe for this product
-        final recipeItems = await db.rawQuery('''
+        final recipeItems = await db.rawQuery(
+          '''
           SELECT recipes.*, COALESCE(inv.current_stock, ing.stock_quantity, 0) as available_stock 
           FROM recipes 
           LEFT JOIN inventory inv ON recipes.ingredient_id = inv.id
           LEFT JOIN ingredients ing ON recipes.ingredient_id = ing.id
           WHERE recipes.product_id = ?
-        ''', [product.id]);
-        
+        ''',
+          [product.id],
+        );
+
         for (var item in recipeItems) {
           final stock = (item['available_stock'] as num?)?.toDouble() ?? 0.0;
           final qtyNeeded = (item['quantity_used'] as num?)?.toDouble() ?? 0.0;
@@ -228,13 +273,13 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             break;
           }
         }
-        
+
         // Combine DB availability and recipe availability
         final finalAvailability = product.isAvailable && isStockAvailable;
         updatedProducts.add(product.copyWith(isAvailable: finalAvailability));
       }
       _products = updatedProducts;
-      
+
       _filterProducts();
     } catch (e) {
       print('Error loading products: $e');
@@ -247,7 +292,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       if (_selectedCategory == 'All') {
         _filteredProducts = _products;
       } else {
-        _filteredProducts = _products.where((p) => p.category == _selectedCategory).toList();
+        _filteredProducts = _products
+            .where((p) => p.category == _selectedCategory)
+            .toList();
       }
     });
   }
@@ -269,7 +316,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDlgState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               const Icon(Icons.tune, color: AppColors.primary),
@@ -277,7 +326,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
               Expanded(
                 child: Text(
                   'Customize: ${product.name}',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -288,7 +340,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (product.dietaryPreferences.isNotEmpty) ...[
-                  const Text('Dietary Preference', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const Text(
+                    'Dietary Preference',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
@@ -296,14 +351,17 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                       ChoiceChip(
                         label: const Text('Regular'),
                         selected: selectedDietary == null,
-                        onSelected: (val) => setDlgState(() => selectedDietary = null),
+                        onSelected: (val) =>
+                            setDlgState(() => selectedDietary = null),
                       ),
                       ...product.dietaryPreferences.map((pref) {
                         return ChoiceChip(
                           label: Text(pref),
                           selected: selectedDietary == pref,
                           selectedColor: Colors.green.shade100,
-                          onSelected: (val) => setDlgState(() => selectedDietary = val ? pref : null),
+                          onSelected: (val) => setDlgState(
+                            () => selectedDietary = val ? pref : null,
+                          ),
                         );
                       }),
                     ],
@@ -311,7 +369,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   const SizedBox(height: 12),
                 ],
                 if (product.tastePreferences.isNotEmpty) ...[
-                  const Text('Taste Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const Text(
+                    'Taste Profile',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
@@ -319,21 +380,25 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                       ChoiceChip(
                         label: const Text('Default'),
                         selected: selectedTaste == null,
-                        onSelected: (val) => setDlgState(() => selectedTaste = null),
+                        onSelected: (val) =>
+                            setDlgState(() => selectedTaste = null),
                       ),
                       ...product.tastePreferences.map((taste) {
                         return ChoiceChip(
                           label: Text(taste),
                           selected: selectedTaste == taste,
                           selectedColor: Colors.deepOrange.shade100,
-                          onSelected: (val) => setDlgState(() => selectedTaste = val ? taste : null),
+                          onSelected: (val) => setDlgState(
+                            () => selectedTaste = val ? taste : null,
+                          ),
                         );
                       }),
                     ],
                   ),
                   const SizedBox(height: 12),
                 ],
-                if (product.customDietaryNotes != null && product.customDietaryNotes!.trim().isNotEmpty) ...[
+                if (product.customDietaryNotes != null &&
+                    product.customDietaryNotes!.trim().isNotEmpty) ...[
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -342,12 +407,19 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.info_outline, size: 16, color: Colors.purple),
+                        const Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: Colors.purple,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             product.customDietaryNotes!,
-                            style: const TextStyle(fontSize: 12, color: Colors.purple),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.purple,
+                            ),
                           ),
                         ),
                       ],
@@ -381,7 +453,8 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 final List<String> parts = [];
                 if (selectedDietary != null) parts.add(selectedDietary!);
                 if (selectedTaste != null) parts.add(selectedTaste!);
-                if (notesCtrl.text.trim().isNotEmpty) parts.add(notesCtrl.text.trim());
+                if (notesCtrl.text.trim().isNotEmpty)
+                  parts.add(notesCtrl.text.trim());
                 final customNote = parts.isNotEmpty ? parts.join(', ') : null;
 
                 Navigator.pop(context);
@@ -418,16 +491,19 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
   }
 
   double _getSubtotal() {
-    return _cartItems.fold(0.0, (sum, item) => sum + (item['product'].price * item['quantity']));
+    return _cartItems.fold(
+      0.0,
+      (sum, item) => sum + (item['product'].price * item['quantity']),
+    );
   }
 
   double _getTax() {
     final subtotal = _getSubtotal();
     if (subtotal == 0) return 0.0;
-    
+
     final discount = _getDiscount();
     final ratio = (subtotal - discount) / subtotal;
-    
+
     double totalTax = 0.0;
     for (var item in _cartItems) {
       final product = item['product'] as ProductModel;
@@ -445,7 +521,11 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Future<void> _processBilling() async {
     if (_cartItems.isEmpty) {
+      return;
+    }
 
+    if (await _useBackendApi()) {
+      await _processOnlineOrder();
       return;
     }
 
@@ -472,16 +552,28 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         );
         for (var item in existingItems) {
           productToKotId[item['product_id'] as int] = item['kot_id'] as int?;
-          productToStatus[item['product_id'] as int] = item['status'] as String? ?? 'Pending';
+          productToStatus[item['product_id'] as int] =
+              item['status'] as String? ?? 'Pending';
         }
 
         // Check if order already has an order taker
-        final existingOrder = await db.query('orders', columns: ['order_taker_name'], where: 'id = ?', whereArgs: [orderId]);
-        final bool hasTaker = existingOrder.isNotEmpty && existingOrder.first['order_taker_name'] != null;
+        final existingOrder = await db.query(
+          'orders',
+          columns: ['order_taker_name'],
+          where: 'id = ?',
+          whereArgs: [orderId],
+        );
+        final bool hasTaker =
+            existingOrder.isNotEmpty &&
+            existingOrder.first['order_taker_name'] != null;
 
         final prefs = await SharedPreferences.getInstance();
         final username = prefs.getString('username') ?? 'Cashier';
-        final userList = await db.query('users', where: 'username = ?', whereArgs: [username]);
+        final userList = await db.query(
+          'users',
+          where: 'username = ?',
+          whereArgs: [username],
+        );
         String orderTakerName = username;
         int? orderTakerId;
         if (userList.isNotEmpty) {
@@ -489,26 +581,42 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
           orderTakerId = userList.first['id'] as int?;
         }
 
-        await db.update('orders', {
-          'total_amount': total,
-          'status': isSplit ? 'Billing Pending' : 'Completed',
-          'type': _selectedOrderType,
-          'order_time': now,
-          'restaurant_id': DatabaseHelper.currentRestaurantId,
-          'payment_status': isSplit ? 'Unpaid' : 'Paid',
-          'payment_method': _selectedPaymentType,
-          'discount_amount': discount,
-          'customer_name': _customerNameController.text.trim().isNotEmpty ? _customerNameController.text.trim() : 'Guest',
-          'customer_phone': _customerPhoneController.text.trim().isNotEmpty ? _customerPhoneController.text.trim() : null,
-          if (!hasTaker) 'order_taker_name': orderTakerName,
-          if (!hasTaker) 'order_taker_id': orderTakerId,
-          if (_selectedOrderType == 'Table Order' && _selectedTableId != null) 'table_id': _selectedTableId,
-        }, where: 'id = ?', whereArgs: [orderId]);
+        await db.update(
+          'orders',
+          {
+            'total_amount': total,
+            'status': isSplit ? 'Billing Pending' : 'Completed',
+            'type': _selectedOrderType,
+            'order_time': now,
+            'restaurant_id': DatabaseHelper.currentRestaurantId,
+            'payment_status': isSplit ? 'Unpaid' : 'Paid',
+            'payment_method': _selectedPaymentType,
+            'discount_amount': discount,
+            'customer_name': _customerNameController.text.trim().isNotEmpty
+                ? _customerNameController.text.trim()
+                : 'Guest',
+            'customer_phone': _customerPhoneController.text.trim().isNotEmpty
+                ? _customerPhoneController.text.trim()
+                : null,
+            if (!hasTaker) 'order_taker_name': orderTakerName,
+            if (!hasTaker) 'order_taker_id': orderTakerId,
+            if (_selectedOrderType == 'Table Order' && _selectedTableId != null)
+              'table_id': _selectedTableId,
+          },
+          where: 'id = ?',
+          whereArgs: [orderId],
+        );
 
-        await db.delete('order_items', where: 'order_id = ?', whereArgs: [orderId]);
+        await db.delete(
+          'order_items',
+          where: 'order_id = ?',
+          whereArgs: [orderId],
+        );
       } else {
         // Calculate next sequential order ID
-        final maxIdResult = await db.rawQuery('SELECT MAX(id) as max_id FROM orders');
+        final maxIdResult = await db.rawQuery(
+          'SELECT MAX(id) as max_id FROM orders',
+        );
         int nextOrderId = 1;
         if (maxIdResult.isNotEmpty && maxIdResult.first['max_id'] != null) {
           nextOrderId = (maxIdResult.first['max_id'] as int) + 1;
@@ -517,7 +625,11 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
         final prefs = await SharedPreferences.getInstance();
         final username = prefs.getString('username') ?? 'Cashier';
-        final userList = await db.query('users', where: 'username = ?', whereArgs: [username]);
+        final userList = await db.query(
+          'users',
+          where: 'username = ?',
+          whereArgs: [username],
+        );
         String orderTakerName = username;
         int? orderTakerId;
         if (userList.isNotEmpty) {
@@ -535,11 +647,16 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
           'payment_status': isSplit ? 'Unpaid' : 'Paid',
           'payment_method': _selectedPaymentType,
           'discount_amount': discount,
-          'customer_name': _customerNameController.text.trim().isNotEmpty ? _customerNameController.text.trim() : 'Guest',
-          'customer_phone': _customerPhoneController.text.trim().isNotEmpty ? _customerPhoneController.text.trim() : null,
+          'customer_name': _customerNameController.text.trim().isNotEmpty
+              ? _customerNameController.text.trim()
+              : 'Guest',
+          'customer_phone': _customerPhoneController.text.trim().isNotEmpty
+              ? _customerPhoneController.text.trim()
+              : null,
           'order_taker_name': orderTakerName,
           'order_taker_id': orderTakerId,
-          if (_selectedOrderType == 'Table Order' && _selectedTableId != null) 'table_id': _selectedTableId,
+          if (_selectedOrderType == 'Table Order' && _selectedTableId != null)
+            'table_id': _selectedTableId,
         });
       }
 
@@ -565,12 +682,14 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
           where: 'restaurant_id = ?',
           whereArgs: [DatabaseHelper.currentRestaurantId],
         );
-        
+
         for (var invItem in inventory) {
           final itemName = (invItem['item_name'] as String?) ?? '';
-          final currentStock = (invItem['current_stock'] as num?)?.toDouble() ?? 0.0;
-          
-          if (itemName.isNotEmpty && product.name.toLowerCase().contains(itemName.toLowerCase())) {
+          final currentStock =
+              (invItem['current_stock'] as num?)?.toDouble() ?? 0.0;
+
+          if (itemName.isNotEmpty &&
+              product.name.toLowerCase().contains(itemName.toLowerCase())) {
             final newStock = currentStock - item['quantity'];
             await db.update(
               'inventory',
@@ -597,7 +716,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
       }
 
       // Clear Table Status if Dine-in or Table Order
-      if ((_selectedOrderType == 'Table Order' || _selectedOrderType == 'Dine-In') && _selectedTableId != null) {
+      if ((_selectedOrderType == 'Table Order' ||
+              _selectedOrderType == 'Dine-In') &&
+          _selectedTableId != null) {
         if (!isSplit) {
           await _tableRepository.releaseTableIfPaid(_selectedTableId!);
         } else {
@@ -619,20 +740,24 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
       if (isSplit) {
         _showSplitPaymentCheckoutDialog(orderId, total);
-      } else {
-
-      }
+      } else {}
 
       _loadTables();
       _loadActiveOrders();
-    } catch (e) {
-
-    }
+    } catch (e) {}
   }
 
   Future<void> _holdOrder(String customerName, String customerPhone) async {
     if (_cartItems.isEmpty) {
+      return;
+    }
 
+    if (await _useBackendApi()) {
+      await _processOnlineOrder(
+        hold: true,
+        customerName: customerName,
+        customerPhone: customerPhone,
+      );
       return;
     }
 
@@ -657,15 +782,27 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         );
         for (var item in existingItems) {
           productToKotId[item['product_id'] as int] = item['kot_id'] as int?;
-          productToStatus[item['product_id'] as int] = item['status'] as String? ?? 'Pending';
+          productToStatus[item['product_id'] as int] =
+              item['status'] as String? ?? 'Pending';
         }
 
-        final existingOrder = await db.query('orders', columns: ['order_taker_name'], where: 'id = ?', whereArgs: [orderId]);
-        final bool hasTaker = existingOrder.isNotEmpty && existingOrder.first['order_taker_name'] != null;
+        final existingOrder = await db.query(
+          'orders',
+          columns: ['order_taker_name'],
+          where: 'id = ?',
+          whereArgs: [orderId],
+        );
+        final bool hasTaker =
+            existingOrder.isNotEmpty &&
+            existingOrder.first['order_taker_name'] != null;
 
         final prefs = await SharedPreferences.getInstance();
         final username = prefs.getString('username') ?? 'Cashier';
-        final userList = await db.query('users', where: 'username = ?', whereArgs: [username]);
+        final userList = await db.query(
+          'users',
+          where: 'username = ?',
+          whereArgs: [username],
+        );
         String orderTakerName = username;
         int? orderTakerId;
         if (userList.isNotEmpty) {
@@ -673,25 +810,37 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
           orderTakerId = userList.first['id'] as int?;
         }
 
-        await db.update('orders', {
-          'total_amount': total,
-          'status': 'Held',
-          'type': _selectedOrderType,
-          'order_time': now,
-          'restaurant_id': DatabaseHelper.currentRestaurantId,
-          'payment_status': 'Unpaid',
-          'discount_amount': discount,
-          'customer_name': customerName.isNotEmpty ? customerName : null,
-          'customer_phone': customerPhone.isNotEmpty ? customerPhone : null,
-          if (!hasTaker) 'order_taker_name': orderTakerName,
-          if (!hasTaker) 'order_taker_id': orderTakerId,
-          if (_selectedOrderType == 'Table Order' && _selectedTableId != null) 'table_id': _selectedTableId,
-        }, where: 'id = ?', whereArgs: [orderId]);
+        await db.update(
+          'orders',
+          {
+            'total_amount': total,
+            'status': 'Held',
+            'type': _selectedOrderType,
+            'order_time': now,
+            'restaurant_id': DatabaseHelper.currentRestaurantId,
+            'payment_status': 'Unpaid',
+            'discount_amount': discount,
+            'customer_name': customerName.isNotEmpty ? customerName : null,
+            'customer_phone': customerPhone.isNotEmpty ? customerPhone : null,
+            if (!hasTaker) 'order_taker_name': orderTakerName,
+            if (!hasTaker) 'order_taker_id': orderTakerId,
+            if (_selectedOrderType == 'Table Order' && _selectedTableId != null)
+              'table_id': _selectedTableId,
+          },
+          where: 'id = ?',
+          whereArgs: [orderId],
+        );
 
-        await db.delete('order_items', where: 'order_id = ?', whereArgs: [orderId]);
+        await db.delete(
+          'order_items',
+          where: 'order_id = ?',
+          whereArgs: [orderId],
+        );
       } else {
         // Calculate next sequential order ID
-        final maxIdResult = await db.rawQuery('SELECT MAX(id) as max_id FROM orders');
+        final maxIdResult = await db.rawQuery(
+          'SELECT MAX(id) as max_id FROM orders',
+        );
         int nextOrderId = 1;
         if (maxIdResult.isNotEmpty && maxIdResult.first['max_id'] != null) {
           nextOrderId = (maxIdResult.first['max_id'] as int) + 1;
@@ -700,7 +849,11 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
         final prefs = await SharedPreferences.getInstance();
         final username = prefs.getString('username') ?? 'Cashier';
-        final userList = await db.query('users', where: 'username = ?', whereArgs: [username]);
+        final userList = await db.query(
+          'users',
+          where: 'username = ?',
+          whereArgs: [username],
+        );
         String orderTakerName = username;
         int? orderTakerId;
         if (userList.isNotEmpty) {
@@ -721,7 +874,8 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
           'customer_phone': customerPhone.isNotEmpty ? customerPhone : null,
           'order_taker_name': orderTakerName,
           'order_taker_id': orderTakerId,
-          if (_selectedOrderType == 'Table Order' && _selectedTableId != null) 'table_id': _selectedTableId,
+          if (_selectedOrderType == 'Table Order' && _selectedTableId != null)
+            'table_id': _selectedTableId,
         });
       }
 
@@ -757,19 +911,74 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         _customerPhoneController.clear();
       });
 
-
       _loadTables();
-    } catch (e) {
-
-    }
+    } catch (e) {}
   }
 
-  Future<void> _confirmDeleteHoldOrder(int orderId, int? tableId, VoidCallback onSuccess) async {
+  Future<void> _processOnlineOrder({
+    bool hold = false,
+    String? customerName,
+    String? customerPhone,
+  }) async {
+    if (_editingOrderId != null) {
+      throw StateError('Editing existing online orders is not supported yet');
+    }
+
+    final items = _cartItems.map((item) {
+      final product = item['product'] as ProductModel;
+      return OrderItemModel(
+        productId: product.id ?? 0,
+        quantity: item['quantity'] as int,
+        price: product.price,
+        notes: item['notes']?.toString(),
+      );
+    }).toList();
+
+    final order = await _orderApiRepository.createOrder(
+      restaurantId: DatabaseHelper.currentRestaurantId ?? 1,
+      items: items,
+      tableId: _selectedTableId,
+      type: _selectedOrderType,
+      notes: customerName ?? _customerNameController.text.trim(),
+      discountAmount: _getDiscount(),
+    );
+
+    if (order.id == null)
+      throw StateError('Backend did not return an order ID');
+    if (hold) {
+      await _orderApiRepository.hold(order.id!);
+    } else if (_selectedPaymentType != 'Split') {
+      await _orderApiRepository.recordPayment(order.id!, _selectedPaymentType);
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _cartItems.clear();
+      _selectedTableId = null;
+      _customerNameController.text = 'Walking Customer';
+      _customerPhoneController.clear();
+    });
+    await _loadTables();
+    await _loadActiveOrders();
+  }
+
+  Future<bool> _useBackendApi() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('use_backend_api') ?? false;
+  }
+
+  Future<void> _confirmDeleteHoldOrder(
+    int orderId,
+    int? tableId,
+    VoidCallback onSuccess,
+  ) async {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancel Hold Order'),
-        content: Text('Are you sure you want to cancel and delete hold order #$orderId?'),
+        content: Text(
+          'Are you sure you want to cancel and delete hold order #$orderId?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -780,8 +989,16 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             onPressed: () async {
               final db = await DatabaseHelper.instance.database;
               await db.transaction((txn) async {
-                await txn.delete('order_items', where: 'order_id = ?', whereArgs: [orderId]);
-                await txn.delete('orders', where: 'id = ?', whereArgs: [orderId]);
+                await txn.delete(
+                  'order_items',
+                  where: 'order_id = ?',
+                  whereArgs: [orderId],
+                );
+                await txn.delete(
+                  'orders',
+                  where: 'id = ?',
+                  whereArgs: [orderId],
+                );
                 if (tableId != null) {
                   await txn.update(
                     'tables',
@@ -816,7 +1033,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             Future<void> reloadData() async {
               try {
                 final db = await DatabaseHelper.instance.database;
-                
+
                 // Fetch KOTs
                 final kotMaps = await db.query(
                   'kot',
@@ -828,17 +1045,17 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 List<Map<String, dynamic>> fetchedKots = [];
                 for (var kot in kotMaps) {
                   final kotId = kot['id'] as int;
-                  final itemMaps = await db.rawQuery('''
+                  final itemMaps = await db.rawQuery(
+                    '''
                     SELECT oi.quantity, p.name as product_name, p.prep_time, p.cook_time
                     FROM order_items oi
                     JOIN products p ON oi.product_id = p.id
                     WHERE oi.kot_id = ?
-                  ''', [kotId]);
+                  ''',
+                    [kotId],
+                  );
 
-                  fetchedKots.add({
-                    ...kot,
-                    'items': itemMaps,
-                  });
+                  fetchedKots.add({...kot, 'items': itemMaps});
                 }
 
                 // Fetch Logs
@@ -864,7 +1081,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             if (loading) {
               reloadData();
               // Setup periodic refresh inside the dialog
-              dialogTimer = Timer.periodic(const Duration(seconds: 3), (_) => reloadData());
+              dialogTimer = Timer.periodic(
+                const Duration(seconds: 3),
+                (_) => reloadData(),
+              );
             }
 
             return PopScope(
@@ -877,7 +1097,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 title: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Order #$orderId - Live History', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                      'Order #$orderId - Live History',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.refresh, color: AppColors.primary),
                       onPressed: () => reloadData(),
@@ -885,7 +1108,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   ],
                 ),
                 content: loading
-                    ? const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()))
+                    ? const SizedBox(
+                        height: 200,
+                        child: Center(child: CircularProgressIndicator()),
+                      )
                     : SizedBox(
                         width: 600,
                         height: 450,
@@ -898,8 +1124,14 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                                 unselectedLabelColor: Colors.grey,
                                 indicatorColor: AppColors.primary,
                                 tabs: [
-                                  Tab(icon: Icon(Icons.restaurant_menu), text: 'KOT History'),
-                                  Tab(icon: Icon(Icons.history_toggle_off), text: 'Status Timeline'),
+                                  Tab(
+                                    icon: Icon(Icons.restaurant_menu),
+                                    text: 'KOT History',
+                                  ),
+                                  Tab(
+                                    icon: Icon(Icons.history_toggle_off),
+                                    text: 'Status Timeline',
+                                  ),
                                 ],
                               ),
                               Expanded(
@@ -907,41 +1139,86 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                                   children: [
                                     // Tab 1: KOTs History List
                                     kots.isEmpty
-                                        ? const Center(child: Text('No KOTs generated for this order yet.'))
+                                        ? const Center(
+                                            child: Text(
+                                              'No KOTs generated for this order yet.',
+                                            ),
+                                          )
                                         : ListView.builder(
-                                            padding: const EdgeInsets.only(top: 12),
+                                            padding: const EdgeInsets.only(
+                                              top: 12,
+                                            ),
                                             itemCount: kots.length,
                                             itemBuilder: (context, index) {
                                               final kot = kots[index];
-                                              final status = kot['status'] as String? ?? 'Pending';
-                                              final kotItems = kot['items'] as List<Map<String, dynamic>>? ?? [];
+                                              final status =
+                                                  kot['status'] as String? ??
+                                                  'Pending';
+                                              final kotItems =
+                                                  kot['items']
+                                                      as List<
+                                                        Map<String, dynamic>
+                                                      >? ??
+                                                  [];
 
                                               return Card(
-                                                margin: const EdgeInsets.only(bottom: 12),
+                                                margin: const EdgeInsets.only(
+                                                  bottom: 12,
+                                                ),
                                                 child: ExpansionTile(
                                                   title: Row(
-                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .spaceBetween,
                                                     children: [
                                                       Text(
                                                         'KOT #${kot['id']} (${kot['kot_number'] ?? ''})',
-                                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                                        style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
                                                       ),
                                                       Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 4,
+                                                            ),
                                                         decoration: BoxDecoration(
-                                                          color: status == 'Served'
-                                                              ? Colors.green.shade50
-                                                              : (status == 'Ready' ? Colors.blue.shade50 : Colors.orange.shade50),
-                                                          borderRadius: BorderRadius.circular(8),
+                                                          color:
+                                                              status == 'Served'
+                                                              ? Colors
+                                                                    .green
+                                                                    .shade50
+                                                              : (status ==
+                                                                        'Ready'
+                                                                    ? Colors
+                                                                          .blue
+                                                                          .shade50
+                                                                    : Colors
+                                                                          .orange
+                                                                          .shade50),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
                                                         ),
                                                         child: Text(
                                                           status,
                                                           style: TextStyle(
                                                             fontSize: 11,
-                                                            fontWeight: FontWeight.bold,
-                                                            color: status == 'Served'
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color:
+                                                                status ==
+                                                                    'Served'
                                                                 ? Colors.green
-                                                                : (status == 'Ready' ? Colors.blue : Colors.orange),
+                                                                : (status ==
+                                                                          'Ready'
+                                                                      ? Colors
+                                                                            .blue
+                                                                      : Colors
+                                                                            .orange),
                                                           ),
                                                         ),
                                                       ),
@@ -949,27 +1226,70 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                                                   ),
                                                   subtitle: Text(
                                                     'Chef: ${kot['chef_name'] ?? 'Unassigned'} • Est: ${kot['estimated_time'] ?? 15} mins' +
-                                                        (kot['delay_reason'] != null ? '\nDelay: ${kot['delay_reason']}' : ''),
-                                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                                        (kot['delay_reason'] !=
+                                                                null
+                                                            ? '\nDelay: ${kot['delay_reason']}'
+                                                            : ''),
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey,
+                                                    ),
                                                   ),
                                                   children: [
                                                     Padding(
-                                                      padding: const EdgeInsets.all(12.0),
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                            12.0,
+                                                          ),
                                                       child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
                                                         children: [
-                                                          const Text('Items in KOT:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                                          const SizedBox(height: 6),
-                                                          ...kotItems.map((item) => Padding(
-                                                                padding: const EdgeInsets.symmetric(vertical: 2.0),
-                                                                child: Row(
-                                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                                  children: [
-                                                                    Text('${item['quantity']}x ${item['product_name']}', style: const TextStyle(fontSize: 13)),
-                                                                    Text('${(item['prep_time'] ?? 5) + (item['cook_time'] ?? 10)} min', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                                                                  ],
-                                                                ),
-                                                              )),
+                                                          const Text(
+                                                            'Items in KOT:',
+                                                            style: TextStyle(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                            height: 6,
+                                                          ),
+                                                          ...kotItems.map(
+                                                            (item) => Padding(
+                                                              padding:
+                                                                  const EdgeInsets.symmetric(
+                                                                    vertical:
+                                                                        2.0,
+                                                                  ),
+                                                              child: Row(
+                                                                mainAxisAlignment:
+                                                                    MainAxisAlignment
+                                                                        .spaceBetween,
+                                                                children: [
+                                                                  Text(
+                                                                    '${item['quantity']}x ${item['product_name']}',
+                                                                    style: const TextStyle(
+                                                                      fontSize:
+                                                                          13,
+                                                                    ),
+                                                                  ),
+                                                                  Text(
+                                                                    '${(item['prep_time'] ?? 5) + (item['cook_time'] ?? 10)} min',
+                                                                    style: const TextStyle(
+                                                                      color: Colors
+                                                                          .grey,
+                                                                      fontSize:
+                                                                          12,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
                                                         ],
                                                       ),
                                                     ),
@@ -981,50 +1301,103 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
                                     // Tab 2: Logs stepper
                                     logs.isEmpty
-                                        ? const Center(child: Text('No status transitions logged yet.'))
+                                        ? const Center(
+                                            child: Text(
+                                              'No status transitions logged yet.',
+                                            ),
+                                          )
                                         : ListView.builder(
-                                            padding: const EdgeInsets.only(top: 12),
+                                            padding: const EdgeInsets.only(
+                                              top: 12,
+                                            ),
                                             itemCount: logs.length,
                                             itemBuilder: (context, index) {
                                               final log = logs[index];
-                                              final timeStr = log['changed_at'] as String? ?? '';
-                                              final time = DateTime.tryParse(timeStr) ?? DateTime.now();
+                                              final timeStr =
+                                                  log['changed_at']
+                                                      as String? ??
+                                                  '';
+                                              final time =
+                                                  DateTime.tryParse(timeStr) ??
+                                                  DateTime.now();
 
                                               return Padding(
-                                                padding: const EdgeInsets.only(bottom: 12.0),
+                                                padding: const EdgeInsets.only(
+                                                  bottom: 12.0,
+                                                ),
                                                 child: Row(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
                                                     const Padding(
-                                                      padding: EdgeInsets.only(top: 4.0),
-                                                      child: Icon(Icons.circle, size: 12, color: AppColors.primary),
+                                                      padding: EdgeInsets.only(
+                                                        top: 4.0,
+                                                      ),
+                                                      child: Icon(
+                                                        Icons.circle,
+                                                        size: 12,
+                                                        color:
+                                                            AppColors.primary,
+                                                      ),
                                                     ),
                                                     const SizedBox(width: 12),
                                                     Expanded(
                                                       child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
                                                         children: [
                                                           Row(
-                                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                            mainAxisAlignment:
+                                                                MainAxisAlignment
+                                                                    .spaceBetween,
                                                             children: [
                                                               Text(
                                                                 'Status: ${log['status']}',
-                                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                                style: const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  fontSize: 13,
+                                                                ),
                                                               ),
                                                               Text(
-                                                                DateFormat('hh:mm a').format(time),
-                                                                style: const TextStyle(color: Colors.grey, fontSize: 11),
+                                                                DateFormat(
+                                                                  'hh:mm a',
+                                                                ).format(time),
+                                                                style: const TextStyle(
+                                                                  color: Colors
+                                                                      .grey,
+                                                                  fontSize: 11,
+                                                                ),
                                                               ),
                                                             ],
                                                           ),
                                                           Text(
                                                             'By: ${log['changed_by'] ?? 'System'}',
-                                                            style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 11,
+                                                                  color: Colors
+                                                                      .blueGrey,
+                                                                ),
                                                           ),
-                                                          if (log['notes'] != null && log['notes'].toString().isNotEmpty)
+                                                          if (log['notes'] !=
+                                                                  null &&
+                                                              log['notes']
+                                                                  .toString()
+                                                                  .isNotEmpty)
                                                             Text(
                                                               'Notes: ${log['notes']}',
-                                                              style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+                                                              style: TextStyle(
+                                                                fontSize: 12,
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade700,
+                                                                fontStyle:
+                                                                    FontStyle
+                                                                        .italic,
+                                                              ),
                                                             ),
                                                         ],
                                                       ),
@@ -1060,15 +1433,18 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   void _showResumeDialog() async {
     final db = await DatabaseHelper.instance.database;
-    
+
     // Load held and active kitchen orders with table numbers
-    final List<Map<String, dynamic>> heldOrders = await db.rawQuery('''
+    final List<Map<String, dynamic>> heldOrders = await db.rawQuery(
+      '''
       SELECT o.*, t.table_number 
       FROM orders o
       LEFT JOIN tables t ON o.table_id = t.id
       WHERE o.status IN ('Held', 'Received', 'Sent to Kitchen', 'Preparing', 'Ready', 'Served', 'Billing Pending') AND o.restaurant_id = ?
       ORDER BY o.order_time DESC
-    ''', [DatabaseHelper.currentRestaurantId]);
+    ''',
+      [DatabaseHelper.currentRestaurantId],
+    );
 
     final searchController = TextEditingController();
 
@@ -1087,10 +1463,19 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   final q = query.toLowerCase();
                   filteredOrders = heldOrders.where((order) {
                     final orderId = order['id'].toString();
-                    final tableNum = (order['table_number'] ?? '').toString().toLowerCase();
-                    final custName = (order['customer_name'] ?? '').toString().toLowerCase();
-                    final orderTime = (order['order_time'] ?? '').toString().toLowerCase();
-                    return orderId.contains(q) || tableNum.contains(q) || custName.contains(q) || orderTime.contains(q);
+                    final tableNum = (order['table_number'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    final custName = (order['customer_name'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    final orderTime = (order['order_time'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                    return orderId.contains(q) ||
+                        tableNum.contains(q) ||
+                        custName.contains(q) ||
+                        orderTime.contains(q);
                   }).toList();
                 }
               });
@@ -1108,7 +1493,8 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                       controller: searchController,
                       onChanged: filter,
                       decoration: const InputDecoration(
-                        labelText: 'Search by Bill #, Table, Customer Name or Date',
+                        labelText:
+                            'Search by Bill #, Table, Customer Name or Date',
                         prefixIcon: Icon(Icons.search),
                         border: OutlineInputBorder(),
                       ),
@@ -1116,16 +1502,22 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                     const SizedBox(height: 12),
                     Expanded(
                       child: filteredOrders.isEmpty
-                          ? const Center(child: Text('No matching held orders found'))
+                          ? const Center(
+                              child: Text('No matching held orders found'),
+                            )
                           : ListView.builder(
                               itemCount: filteredOrders.length,
                               itemBuilder: (context, index) {
                                 final order = filteredOrders[index];
                                 final hasTable = order['table_id'] != null;
                                 return Card(
-                                  margin: const EdgeInsets.symmetric(vertical: 4),
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
                                   child: ListTile(
-                                    title: Text('Bill #${order['id']} - ${hasTable ? 'Table ${order['table_number']}' : 'Walk-in'}'),
+                                    title: Text(
+                                      'Bill #${order['id']} - ${hasTable ? 'Table ${order['table_number']}' : 'Walk-in'}',
+                                    ),
                                     subtitle: Text(
                                       'Customer: ${order['customer_name'] ?? 'N/A'}\n'
                                       'Amount: ₹${order['total_amount'].toStringAsFixed(2)} | ${order['order_time'].toString().substring(0, 16).replaceFirst('T', ' ')}',
@@ -1135,48 +1527,76 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         IconButton(
-                                          icon: const Icon(Icons.track_changes, color: AppColors.primary),
+                                          icon: const Icon(
+                                            Icons.track_changes,
+                                            color: AppColors.primary,
+                                          ),
                                           // tooltip disabled,
                                           onPressed: () {
                                             Navigator.pop(context);
-                                            _showOrderHistoryAndKotDialog(order['id']);
+                                            _showOrderHistoryAndKotDialog(
+                                              order['id'],
+                                            );
                                           },
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.delete, color: Colors.red),
-                                          onPressed: () => _confirmDeleteHoldOrder(order['id'], order['table_id'], () {
-                                            Navigator.pop(context);
-                                            _showResumeDialog(); // Refresh
-                                          }),
+                                          icon: const Icon(
+                                            Icons.delete,
+                                            color: Colors.red,
+                                          ),
+                                          onPressed: () =>
+                                              _confirmDeleteHoldOrder(
+                                                order['id'],
+                                                order['table_id'],
+                                                () {
+                                                  Navigator.pop(context);
+                                                  _showResumeDialog(); // Refresh
+                                                },
+                                              ),
                                         ),
                                         ElevatedButton(
                                           onPressed: () async {
                                             // Load items into cart
-                                            final List<Map<String, dynamic>> items = await db.query(
+                                            final List<Map<String, dynamic>>
+                                            items = await db.query(
                                               'order_items',
                                               where: 'order_id = ?',
                                               whereArgs: [order['id']],
                                             );
-                                            
+
                                             this.setState(() {
                                               _cartItems.clear();
                                               for (final item in items) {
-                                                final product = _products.firstWhere(
-                                                  (p) => p.id == item['product_id'],
-                                                  orElse: () => ProductModel(
-                                                    id: item['product_id'] as int,
-                                                    name: 'Unknown Item',
-                                                    price: item['price'] as double,
-                                                    category: '',
-                                                    isVeg: 1,
-                                                    isAvailable: true,
-                                                  ),
-                                                );
-                                                _cartItems.add({'product': product, 'quantity': item['quantity']});
+                                                final product = _products
+                                                    .firstWhere(
+                                                      (p) =>
+                                                          p.id ==
+                                                          item['product_id'],
+                                                      orElse: () => ProductModel(
+                                                        id:
+                                                            item['product_id']
+                                                                as int,
+                                                        name: 'Unknown Item',
+                                                        price:
+                                                            item['price']
+                                                                as double,
+                                                        category: '',
+                                                        isVeg: 1,
+                                                        isAvailable: true,
+                                                      ),
+                                                    );
+                                                _cartItems.add({
+                                                  'product': product,
+                                                  'quantity': item['quantity'],
+                                                });
                                               }
-                                              _selectedOrderType = order['type'] as String? ?? 'Walk-in Customer';
-                                              _selectedTableId = order['table_id'] as int?;
-                                              _editingOrderId = order['id'] as int?;
+                                              _selectedOrderType =
+                                                  order['type'] as String? ??
+                                                  'Walk-in Customer';
+                                              _selectedTableId =
+                                                  order['table_id'] as int?;
+                                              _editingOrderId =
+                                                  order['id'] as int?;
                                             });
                                             Navigator.pop(context);
                                           },
@@ -1235,8 +1655,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
               double enteredCash = double.tryParse(cashController.text) ?? 0.0;
               double enteredUpi = double.tryParse(upiController.text) ?? 0.0;
               double enteredCard = double.tryParse(cardController.text) ?? 0.0;
-              double enteredWallet = double.tryParse(walletController.text) ?? 0.0;
-              double totalEntered = enteredCash + enteredUpi + enteredCard + enteredWallet;
+              double enteredWallet =
+                  double.tryParse(walletController.text) ?? 0.0;
+              double totalEntered =
+                  enteredCash + enteredUpi + enteredCard + enteredWallet;
               double diff = totalEntered - remainingBalance;
 
               Widget statusWidget;
@@ -1250,11 +1672,19 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
               } else if (diff.abs() < 0.01) {
                 statusWidget = Row(
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                    const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 18,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       'Exact Balance Covered! (₹${totalEntered.toStringAsFixed(2)})',
-                      style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13),
+                      style: const TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ],
                 );
@@ -1266,7 +1696,11 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                     const SizedBox(width: 6),
                     Text(
                       'Partial Payment: ₹${totalEntered.toStringAsFixed(2)} (Due: ₹${(remainingBalance - totalEntered).toStringAsFixed(2)})',
-                      style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13),
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ],
                 );
@@ -1278,7 +1712,11 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                     const SizedBox(width: 6),
                     Text(
                       'Overpaid: Change Due ₹${diff.toStringAsFixed(2)}',
-                      style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 13),
+                      style: const TextStyle(
+                        color: Colors.amber,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ],
                 );
@@ -1290,10 +1728,16 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
               }
 
               return AlertDialog(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 title: Row(
                   children: [
-                    const Icon(Icons.call_split, color: AppColors.primary, size: 28),
+                    const Icon(
+                      Icons.call_split,
+                      color: AppColors.primary,
+                      size: 28,
+                    ),
                     const SizedBox(width: 8),
                     Text('Split / Partial Checkout (#$orderId)'),
                   ],
@@ -1307,34 +1751,74 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                         Card(
                           color: AppColors.primaryLight,
                           elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           child: Padding(
                             padding: const EdgeInsets.all(12.0),
                             child: Column(
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Text('Total Bill:', style: TextStyle(fontSize: 14)),
-                                    Text('₹${totalBill.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                                    const Text(
+                                      'Total Bill:',
+                                      style: TextStyle(fontSize: 14),
+                                    ),
+                                    Text(
+                                      '₹${totalBill.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                   ],
                                 ),
                                 if (alreadyPaid > 0) ...[
                                   const SizedBox(height: 4),
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
-                                      const Text('Already Paid:', style: TextStyle(fontSize: 14, color: Colors.green)),
-                                      Text('-₹${alreadyPaid.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, color: Colors.green, fontWeight: FontWeight.bold)),
+                                      const Text(
+                                        'Already Paid:',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.green,
+                                        ),
+                                      ),
+                                      Text(
+                                        '-₹${alreadyPaid.toStringAsFixed(2)}',
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.green,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ],
                                 const Divider(),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Text('Remaining Balance:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                                    Text('₹${remainingBalance.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                    const Text(
+                                      'Remaining Balance:',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      '₹${remainingBalance.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ],
@@ -1342,11 +1826,19 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                           ),
                         ),
                         const SizedBox(height: 16),
-                        const Text('Split breakdown by payment mode:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const Text(
+                          'Split breakdown by payment mode:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: cashController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           decoration: const InputDecoration(
                             prefixIcon: Icon(Icons.money, color: Colors.green),
                             labelText: 'Cash Amount',
@@ -1357,7 +1849,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                         const SizedBox(height: 10),
                         TextField(
                           controller: upiController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           decoration: const InputDecoration(
                             prefixIcon: Icon(Icons.qr_code, color: Colors.blue),
                             labelText: 'UPI / QR Amount',
@@ -1368,9 +1862,14 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                         const SizedBox(height: 10),
                         TextField(
                           controller: cardController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.credit_card, color: Colors.orange),
+                            prefixIcon: Icon(
+                              Icons.credit_card,
+                              color: Colors.orange,
+                            ),
                             labelText: 'Card Amount',
                             border: OutlineInputBorder(),
                           ),
@@ -1379,9 +1878,14 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                         const SizedBox(height: 10),
                         TextField(
                           controller: walletController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.account_balance_wallet, color: Colors.purple),
+                            prefixIcon: Icon(
+                              Icons.account_balance_wallet,
+                              color: Colors.purple,
+                            ),
                             labelText: 'Wallet Amount',
                             border: OutlineInputBorder(),
                           ),
@@ -1389,7 +1893,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                         ),
                         const SizedBox(height: 16),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(8),
@@ -1412,11 +1919,28 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                             final now = DateTime.now().toIso8601String();
 
                             // Record all payment items
-                            final List<Map<String, dynamic>> paymentsToInsert = [];
-                            if (enteredCash > 0) paymentsToInsert.add({'mode': 'Cash', 'val': enteredCash});
-                            if (enteredUpi > 0) paymentsToInsert.add({'mode': 'UPI', 'val': enteredUpi});
-                            if (enteredCard > 0) paymentsToInsert.add({'mode': 'Card', 'val': enteredCard});
-                            if (enteredWallet > 0) paymentsToInsert.add({'mode': 'Wallet', 'val': enteredWallet});
+                            final List<Map<String, dynamic>> paymentsToInsert =
+                                [];
+                            if (enteredCash > 0)
+                              paymentsToInsert.add({
+                                'mode': 'Cash',
+                                'val': enteredCash,
+                              });
+                            if (enteredUpi > 0)
+                              paymentsToInsert.add({
+                                'mode': 'UPI',
+                                'val': enteredUpi,
+                              });
+                            if (enteredCard > 0)
+                              paymentsToInsert.add({
+                                'mode': 'Card',
+                                'val': enteredCard,
+                              });
+                            if (enteredWallet > 0)
+                              paymentsToInsert.add({
+                                'mode': 'Wallet',
+                                'val': enteredWallet,
+                              });
 
                             for (var pay in paymentsToInsert) {
                               await db.insert('payments', {
@@ -1433,49 +1957,75 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                               [orderId],
                             );
                             double totalPaid = 0.0;
-                            if (updatedPayments.isNotEmpty && updatedPayments.first['paid'] != null) {
-                              totalPaid = (updatedPayments.first['paid'] as num).toDouble();
+                            if (updatedPayments.isNotEmpty &&
+                                updatedPayments.first['paid'] != null) {
+                              totalPaid = (updatedPayments.first['paid'] as num)
+                                  .toDouble();
                             }
 
-                            final bool fullyPaid = (totalPaid - totalBill).abs() < 0.01 || totalPaid >= totalBill;
+                            final bool fullyPaid =
+                                (totalPaid - totalBill).abs() < 0.01 ||
+                                totalPaid >= totalBill;
 
-                            String finalStatus = fullyPaid ? 'Completed' : 'Billing Pending';
-                            String finalPaymentStatus = fullyPaid ? 'Paid' : 'Partial';
+                            String finalStatus = fullyPaid
+                                ? 'Completed'
+                                : 'Billing Pending';
+                            String finalPaymentStatus = fullyPaid
+                                ? 'Paid'
+                                : 'Partial';
 
                             // Update order
-                            await db.update('orders', {
-                              'payment_status': finalPaymentStatus,
-                              'status': finalStatus,
-                              'payment_method': fullyPaid ? 'Split' : 'Partial',
-                            }, where: 'id = ?', whereArgs: [orderId]);
+                            await db.update(
+                              'orders',
+                              {
+                                'payment_status': finalPaymentStatus,
+                                'status': finalStatus,
+                                'payment_method': fullyPaid
+                                    ? 'Split'
+                                    : 'Partial',
+                              },
+                              where: 'id = ?',
+                              whereArgs: [orderId],
+                            );
 
                             // Fetch table associated with order
-                            final orderInfo = await db.query('orders', columns: ['table_id'], where: 'id = ?', whereArgs: [orderId]);
+                            final orderInfo = await db.query(
+                              'orders',
+                              columns: ['table_id'],
+                              where: 'id = ?',
+                              whereArgs: [orderId],
+                            );
                             int? tableId;
                             if (orderInfo.isNotEmpty) {
                               tableId = orderInfo.first['table_id'] as int?;
                               if (tableId != null) {
                                 if (fullyPaid) {
-                                  await _tableRepository.releaseTableIfPaid(tableId);
+                                  await _tableRepository.releaseTableIfPaid(
+                                    tableId,
+                                  );
                                 } else {
-                                  await _tableRepository.markTableOccupied(tableId);
+                                  await _tableRepository.markTableOccupied(
+                                    tableId,
+                                  );
                                 }
                               }
                             }
 
                             // Log status history
                             await DatabaseHelper.instance.logOrderStatus(
-                              orderId, 
+                              orderId,
                               finalStatus,
-                              notes: 'Split / Partial payment processed. Paid: ₹${totalPaid.toStringAsFixed(2)} / ₹${totalBill.toStringAsFixed(2)}.',
+                              notes:
+                                  'Split / Partial payment processed. Paid: ₹${totalPaid.toStringAsFixed(2)} / ₹${totalBill.toStringAsFixed(2)}.',
                             );
 
                             Navigator.pop(context);
-                            
+
                             // Broadcast the change instantly via WebSocket
-                            SyncService.instance.broadcastEvent('database_update', {});
-
-
+                            SyncService.instance.broadcastEvent(
+                              'database_update',
+                              {},
+                            );
 
                             _loadTables();
                             _loadActiveOrders();
@@ -1505,7 +2055,11 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             SizedBox(height: 16),
             Text(
               'No active tables or orders running.',
-              style: TextStyle(fontSize: 16, color: Colors.grey, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
@@ -1532,7 +2086,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             final paid = order['paid_amount'] as double? ?? 0.0;
             final due = total - paid;
             final hasPaidPartial = paid > 0;
-            
+
             Color badgeColor;
             Color textColor;
             switch (status) {
@@ -1577,8 +2131,12 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 side: BorderSide(
                   color: status == 'Billing Pending'
                       ? Colors.red.shade200
-                      : (status == 'Ready' ? Colors.green.shade200 : Colors.grey.shade200),
-                  width: status == 'Billing Pending' || status == 'Ready' ? 1.5 : 1,
+                      : (status == 'Ready'
+                            ? Colors.green.shade200
+                            : Colors.grey.shade200),
+                  width: status == 'Billing Pending' || status == 'Ready'
+                      ? 1.5
+                      : 1,
                 ),
               ),
               child: Padding(
@@ -1592,12 +2150,18 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                         Expanded(
                           child: Text(
                             title,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: badgeColor,
                             borderRadius: BorderRadius.circular(8),
@@ -1616,7 +2180,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                     const SizedBox(height: 6),
                     Text(
                       'Waiter: ${order['order_taker_name'] ?? 'None'}',
-                      style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.blueGrey,
+                      ),
                     ),
                     Text(
                       'Time: ${order['order_time'].toString().substring(11, 16)} | Items: ${order['item_count']}',
@@ -1634,17 +2201,26 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                               'Total: ₹${total.toStringAsFixed(2)}',
                               style: TextStyle(
                                 fontSize: 13,
-                                fontWeight: hasPaidPartial ? FontWeight.normal : FontWeight.bold,
+                                fontWeight: hasPaidPartial
+                                    ? FontWeight.normal
+                                    : FontWeight.bold,
                               ),
                             ),
                             if (hasPaidPartial) ...[
                               Text(
                                 'Paid: ₹${paid.toStringAsFixed(2)}',
-                                style: const TextStyle(fontSize: 11, color: Colors.green),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green,
+                                ),
                               ),
                               Text(
                                 'Due: ₹${due.toStringAsFixed(2)}',
-                                style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ],
                           ],
@@ -1656,7 +2232,8 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                               icon: const Icon(Icons.track_changes, size: 20),
                               color: AppColors.primary,
                               // tooltip disabled,
-                              onPressed: () => _showOrderHistoryAndKotDialog(orderId),
+                              onPressed: () =>
+                                  _showOrderHistoryAndKotDialog(orderId),
                             ),
                             IconButton(
                               icon: const Icon(Icons.payment, size: 20),
@@ -1671,13 +2248,19 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                                 await _reopenOrder(orderId);
                               },
                               style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
                                 minimumSize: Size.zero,
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
                               ),
-                              child: const Text('Checkout', style: TextStyle(fontSize: 11)),
+                              child: const Text(
+                                'Checkout',
+                                style: TextStyle(fontSize: 11),
+                              ),
                             ),
                           ],
                         ),
@@ -1778,12 +2361,18 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Widget _buildMobileLayout() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final totalQty = _cartItems.fold<int>(0, (sum, item) => sum + (item['quantity'] as int));
+    final totalQty = _cartItems.fold<int>(
+      0,
+      (sum, item) => sum + (item['quantity'] as int),
+    );
     return DefaultTabController(
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('POS Terminal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          title: const Text(
+            'POS Terminal',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
           elevation: 0,
           backgroundColor: isDark ? const Color(0xFF1E1E24) : Colors.white,
           foregroundColor: isDark ? Colors.white : Colors.black87,
@@ -1792,8 +2381,14 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             unselectedLabelColor: Colors.grey,
             indicatorColor: AppColors.primary,
             tabs: [
-              const Tab(icon: Icon(Icons.restaurant_menu, size: 20), text: 'Menu'),
-              const Tab(icon: Icon(Icons.table_restaurant, size: 20), text: 'Floor'),
+              const Tab(
+                icon: Icon(Icons.restaurant_menu, size: 20),
+                text: 'Menu',
+              ),
+              const Tab(
+                icon: Icon(Icons.table_restaurant, size: 20),
+                text: 'Floor',
+              ),
               Tab(
                 icon: Badge(
                   label: Text('$totalQty'),
@@ -1811,9 +2406,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             children: [
               _buildMenuAndOrderingTab(context, isDark),
               _buildActiveOrdersTracker(),
-              SafeArea(
-                child: _buildCartPanel(context, isDark, isMobile: true),
-              ),
+              SafeArea(child: _buildCartPanel(context, isDark, isMobile: true)),
             ],
           ),
         ),
@@ -1834,7 +2427,12 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 if (value.isEmpty) {
                   _filterProducts();
                 } else {
-                  _filteredProducts = _products.where((p) => p.name.toLowerCase().contains(value.toLowerCase())).toList();
+                  _filteredProducts = _products
+                      .where(
+                        (p) =>
+                            p.name.toLowerCase().contains(value.toLowerCase()),
+                      )
+                      .toList();
                 }
               });
             },
@@ -1846,11 +2444,15 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
               fillColor: isDark ? Colors.grey.shade900 : Colors.white,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: isDark ? Colors.grey.shade800 : Colors.grey.shade300),
+                borderSide: BorderSide(
+                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+                borderSide: BorderSide(
+                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                ),
               ),
             ),
           ),
@@ -1878,8 +2480,12 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                     },
                     selectedColor: AppColors.primary,
                     labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected
+                          ? Colors.white
+                          : (isDark ? Colors.white70 : Colors.black87),
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                     ),
                   ),
                 );
@@ -1893,27 +2499,32 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _filteredProducts.isEmpty
-                    ? const Center(child: Text('No products found'))
-                    : GridView.builder(
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                ? const Center(child: Text('No products found'))
+                : GridView.builder(
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
                           maxCrossAxisExtent: 220,
                           crossAxisSpacing: 10,
                           mainAxisSpacing: 10,
                           childAspectRatio: 0.85,
                         ),
-                        itemCount: _filteredProducts.length,
-                        itemBuilder: (context, index) {
-                          final product = _filteredProducts[index];
-                          return _buildProductCard(product);
-                        },
-                      ),
+                    itemCount: _filteredProducts.length,
+                    itemBuilder: (context, index) {
+                      final product = _filteredProducts[index];
+                      return _buildProductCard(product);
+                    },
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCartPanel(BuildContext context, bool isDark, {bool isMobile = false}) {
+  Widget _buildCartPanel(
+    BuildContext context,
+    bool isDark, {
+    bool isMobile = false,
+  }) {
     final subtotal = _getSubtotal();
     final tax = _getTax();
     final total = _getTotal();
@@ -1929,11 +2540,19 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             children: [
               Row(
                 children: [
-                  Icon(Icons.shopping_cart_outlined, color: AppColors.primaryMaterialColor[400]!),
+                  Icon(
+                    Icons.shopping_cart_outlined,
+                    color: AppColors.primaryMaterialColor[400]!,
+                  ),
                   const SizedBox(width: 8),
                   Text(
-                    _editingOrderId != null ? 'Edit Order #${_editingOrderId}' : 'New Check-out',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    _editingOrderId != null
+                        ? 'Edit Order #${_editingOrderId}'
+                        : 'New Check-out',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -1941,21 +2560,34 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 children: [
                   if (_editingOrderId != null)
                     IconButton(
-                      icon: const Icon(Icons.track_changes, color: AppColors.primary, size: 20),
+                      icon: const Icon(
+                        Icons.track_changes,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
                       // tooltip disabled,
-                      onPressed: () => _showOrderHistoryAndKotDialog(_editingOrderId!),
+                      onPressed: () =>
+                          _showOrderHistoryAndKotDialog(_editingOrderId!),
                       constraints: const BoxConstraints(),
                       padding: const EdgeInsets.all(4),
                     ),
                   IconButton(
-                    icon: const Icon(Icons.restore, color: Colors.blue, size: 20),
+                    icon: const Icon(
+                      Icons.restore,
+                      color: Colors.blue,
+                      size: 20,
+                    ),
                     // tooltip disabled,
                     onPressed: _showResumeDialog,
                     constraints: const BoxConstraints(),
                     padding: const EdgeInsets.all(4),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.delete_sweep_outlined, color: Colors.red, size: 20),
+                    icon: const Icon(
+                      Icons.delete_sweep_outlined,
+                      color: Colors.red,
+                      size: 20,
+                    ),
                     // tooltip disabled,
                     onPressed: () {
                       setState(() {
@@ -1987,8 +2619,13 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   decoration: InputDecoration(
                     labelText: 'Customer Name',
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     prefixIcon: const Icon(Icons.person_outline, size: 16),
                   ),
                 ),
@@ -2002,8 +2639,13 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   decoration: InputDecoration(
                     labelText: 'Contact Phone',
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     prefixIcon: const Icon(Icons.phone_outlined, size: 16),
                   ),
                 ),
@@ -2018,18 +2660,23 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
           padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
           child: DropdownButtonFormField<String>(
             value: _selectedOrderType,
-            style: TextStyle(fontSize: 13, color: isDark ? Colors.white : Colors.black87),
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
             decoration: InputDecoration(
               labelText: 'Order Type',
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             items: _orderTypes.map((type) {
-              return DropdownMenuItem(
-                value: type,
-                child: Text(type),
-              );
+              return DropdownMenuItem(value: type, child: Text(type));
             }).toList(),
             onChanged: (value) {
               setState(() {
@@ -2042,28 +2689,41 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         // Table Selection (Dine In)
         if (_selectedOrderType == 'Table Order') ...[
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 4.0,
+            ),
             child: Row(
               children: [
                 Expanded(
                   child: SearchableDropdown<TableModel>(
                     // Only show merged group anchors so a merged group is selected
                     // as a single entity (members are hidden).
-                    items: _tables.where((t) => t.mergedWithId == null).toList(),
-                    value: _selectedTableId != null && _tables.any((t) => t.id == _selectedTableId)
+                    items: _tables
+                        .where((t) => t.mergedWithId == null)
+                        .toList(),
+                    value:
+                        _selectedTableId != null &&
+                            _tables.any((t) => t.id == _selectedTableId)
                         ? _tables.firstWhere((t) => t.id == _selectedTableId)
                         : null,
                     labelText: 'Select Table',
                     hintText: 'Search table...',
                     itemToString: (t) {
-                      final members = _tables.where((m) => m.mergedWithId == t.id).toList();
-                      final cap = t.capacity + members.fold<int>(0, (sum, m) => sum + m.capacity);
+                      final members = _tables
+                          .where((m) => m.mergedWithId == t.id)
+                          .toList();
+                      final cap =
+                          t.capacity +
+                          members.fold<int>(0, (sum, m) => sum + m.capacity);
                       final label = members.isEmpty
                           ? 'Table ${t.tableNumber}'
                           : '${[t, ...members].map((m) => m.tableNumber).join(' + ')} (Merged)';
                       return '$label (Cap: $cap)';
                     },
-                    filterFn: (t, query) => t.tableNumber.toLowerCase().contains(query.toLowerCase()),
+                    filterFn: (t, query) => t.tableNumber
+                        .toLowerCase()
+                        .contains(query.toLowerCase()),
                     onChanged: (val) async {
                       setState(() {
                         _selectedTableId = val?.id;
@@ -2072,7 +2732,8 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                         final db = await DatabaseHelper.instance.database;
                         final activeOrders = await db.query(
                           'orders',
-                          where: 'table_id = ? AND status IN (\'Held\', \'Received\', \'Sent to Kitchen\', \'Preparing\', \'Ready\', \'Served\', \'Billing Pending\')',
+                          where:
+                              'table_id = ? AND status IN (\'Held\', \'Received\', \'Sent to Kitchen\', \'Preparing\', \'Ready\', \'Served\', \'Billing Pending\')',
                           whereArgs: [val.id],
                           orderBy: 'order_time DESC',
                           limit: 1,
@@ -2093,7 +2754,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 ),
                 const SizedBox(width: 6),
                 IconButton(
-                  icon: const Icon(Icons.bookmark_add_outlined, color: AppColors.primary),
+                  icon: const Icon(
+                    Icons.bookmark_add_outlined,
+                    color: AppColors.primary,
+                  ),
                   onPressed: _showAdvancedBookingDialog,
                   // tooltip disabled,
                   constraints: const BoxConstraints(),
@@ -2112,14 +2776,24 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.shopping_basket_outlined, size: 48, color: Colors.grey.shade400),
+                      Icon(
+                        Icons.shopping_basket_outlined,
+                        size: 48,
+                        color: Colors.grey.shade400,
+                      ),
                       const SizedBox(height: 8),
-                      const Text('Cart is empty', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                      const Text(
+                        'Cart is empty',
+                        style: TextStyle(color: Colors.grey, fontSize: 13),
+                      ),
                     ],
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   itemCount: _cartItems.length,
                   itemBuilder: (context, index) {
                     final item = _cartItems[index];
@@ -2132,9 +2806,15 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                       margin: const EdgeInsets.only(bottom: 8),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(color: isDark ? Colors.grey.shade800 : Colors.grey.shade100),
+                        side: BorderSide(
+                          color: isDark
+                              ? Colors.grey.shade800
+                              : Colors.grey.shade100,
+                        ),
                       ),
-                      color: isDark ? const Color(0xFF1E1E24) : Colors.grey.shade50,
+                      color: isDark
+                          ? const Color(0xFF1E1E24)
+                          : Colors.grey.shade50,
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: Row(
@@ -2151,28 +2831,43 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                                 children: [
                                   Text(
                                     product.name,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   Text(
                                     '₹${product.price} each',
-                                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600,
+                                    ),
                                   ),
-                                  if (item['notes'] != null && item['notes'].toString().isNotEmpty) ...[
+                                  if (item['notes'] != null &&
+                                      item['notes'].toString().isNotEmpty) ...[
                                     const SizedBox(height: 2),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 1.5,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: AppColors.primaryLight,
                                         borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(color: AppColors.primaryMaterialColor[200]!, width: 0.6),
+                                        border: Border.all(
+                                          color: AppColors
+                                              .primaryMaterialColor[200]!,
+                                          width: 0.6,
+                                        ),
                                       ),
                                       child: Text(
                                         '📝 ${item['notes']}',
                                         style: TextStyle(
                                           fontSize: 10,
-                                          color: AppColors.primaryMaterialColor[700]!,
+                                          color: AppColors
+                                              .primaryMaterialColor[700]!,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -2184,14 +2879,26 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                             Row(
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.remove_circle_outline, size: 18),
+                                  icon: const Icon(
+                                    Icons.remove_circle_outline,
+                                    size: 18,
+                                  ),
                                   onPressed: () => _updateQuantity(index, -1),
                                   constraints: const BoxConstraints(),
                                   padding: const EdgeInsets.all(4),
                                 ),
-                                Text('$qty', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                Text(
+                                  '$qty',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                                 IconButton(
-                                  icon: const Icon(Icons.add_circle_outline, size: 18),
+                                  icon: const Icon(
+                                    Icons.add_circle_outline,
+                                    size: 18,
+                                  ),
                                   onPressed: () => _updateQuantity(index, 1),
                                   constraints: const BoxConstraints(),
                                   padding: const EdgeInsets.all(4),
@@ -2201,7 +2908,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                             const SizedBox(width: 8),
                             Text(
                               '₹${(product.price * qty).toStringAsFixed(0)}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),
@@ -2230,7 +2940,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                     label: const Text('Adjust', style: TextStyle(fontSize: 12)),
                     onPressed: _showDiscountDialog,
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -2239,33 +2952,60 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
               ),
               _buildBillRow('GST', '₹${tax.toStringAsFixed(2)}'),
               const Divider(height: 8),
-              _buildBillRow('Total Amount', '₹${total.toStringAsFixed(2)}', isTotal: true),
+              _buildBillRow(
+                'Total Amount',
+                '₹${total.toStringAsFixed(2)}',
+                isTotal: true,
+              ),
               const SizedBox(height: 12),
-              
+
               DropdownButtonFormField<String>(
                 value: _selectedPaymentType,
-                items: ['Cash', 'UPI', 'Card', 'Net Banking', 'Wallet', 'Split'].map((type) => DropdownMenuItem(value: type, child: Text(type, style: const TextStyle(fontSize: 13)))).toList(),
+                items: ['Cash', 'UPI', 'Card', 'Net Banking', 'Wallet', 'Split']
+                    .map(
+                      (type) => DropdownMenuItem(
+                        value: type,
+                        child: Text(type, style: const TextStyle(fontSize: 13)),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (val) => setState(() => _selectedPaymentType = val!),
-                style: TextStyle(fontSize: 13, color: isDark ? Colors.white : Colors.black87),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
                 decoration: InputDecoration(
                   labelText: 'Payment Method',
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
-              
+
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.print, size: 16),
-                      label: const Text('PRINT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        'PRINT',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       onPressed: _generateCartPdf,
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -2273,11 +3013,19 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   Expanded(
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                      label: const Text('PREVIEW', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        'PREVIEW',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       onPressed: _previewCartPdf,
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -2289,13 +3037,26 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   Expanded(
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.save_outlined, size: 16),
-                      label: const Text('SAVE DRAFT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      onPressed: () => _holdOrder(_customerNameController.text, _customerPhoneController.text),
+                      label: const Text(
+                        'SAVE DRAFT',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      onPressed: () => _holdOrder(
+                        _customerNameController.text,
+                        _customerPhoneController.text,
+                      ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                        backgroundColor: isDark
+                            ? Colors.grey.shade800
+                            : Colors.grey.shade200,
                         foregroundColor: isDark ? Colors.white : Colors.black87,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -2303,13 +3064,21 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   Expanded(
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.check_circle_outline, size: 16),
-                      label: const Text('PAY & SETTLE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        'PAY & SETTLE',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       onPressed: _processBilling,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -2343,13 +3112,17 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             children: [
               DropdownButtonFormField<String>(
                 value: type,
-                items: ['Flat', 'Percentage'].map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                items: ['Flat', 'Percentage']
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .toList(),
                 onChanged: (val) => setState(() => type = val!),
                 decoration: const InputDecoration(labelText: 'Discount Type'),
               ),
               TextField(
                 controller: controller,
-                decoration: const InputDecoration(labelText: 'Amount / Percentage'),
+                decoration: const InputDecoration(
+                  labelText: 'Amount / Percentage',
+                ),
                 keyboardType: TextInputType.number,
               ),
             ],
@@ -2384,9 +3157,18 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Category: ${product.category}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              'Category: ${product.category}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
-            Text('Price: ₹${product.price}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+            Text(
+              'Price: ₹${product.price}',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -2394,83 +3176,139 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   product.isVeg == 1
                       ? Icons.eco
                       : (product.isVeg == 2
-                          ? Icons.egg
-                          : (product.isVeg == 3
-                              ? Icons.spa
-                              : Icons.restaurant)),
+                            ? Icons.egg
+                            : (product.isVeg == 3
+                                  ? Icons.spa
+                                  : Icons.restaurant)),
                   color: product.isVeg == 1
                       ? Colors.green
                       : (product.isVeg == 2
-                          ? Colors.orange
-                          : (product.isVeg == 3
-                              ? Colors.blue
-                              : Colors.red)),
+                            ? Colors.orange
+                            : (product.isVeg == 3 ? Colors.blue : Colors.red)),
                   size: 16,
                 ),
                 const SizedBox(width: 4),
-                Text(product.isVeg == 1
-                    ? 'Veg'
-                    : (product.isVeg == 2
-                        ? 'Egg'
-                        : (product.isVeg == 3
-                            ? 'Jain'
-                            : 'Non-Veg'))),
+                Text(
+                  product.isVeg == 1
+                      ? 'Veg'
+                      : (product.isVeg == 2
+                            ? 'Egg'
+                            : (product.isVeg == 3 ? 'Jain' : 'Non-Veg')),
+                ),
               ],
             ),
             const SizedBox(height: 8),
-            Text('Status: ${product.isAvailable ? 'Available' : 'Out of Stock'}'),
+            Text(
+              'Status: ${product.isAvailable ? 'Available' : 'Out of Stock'}',
+            ),
             const SizedBox(height: 16),
-            const Text('Description:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Description:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 4),
             Text(product.description ?? 'No description available.'),
-            if (product.ingredients != null && product.ingredients!.isNotEmpty) ...[
+            if (product.ingredients != null &&
+                product.ingredients!.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const Text('Ingredients:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Ingredients:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
-                children: product.ingredients!.split(',').where((s) => s.trim().isNotEmpty).map((ing) => Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(ing.trim(), style: const TextStyle(fontSize: 12, color: AppColors.primary)),
-                )).toList(),
+                children: product.ingredients!
+                    .split(',')
+                    .where((s) => s.trim().isNotEmpty)
+                    .map(
+                      (ing) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryLight,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          ing.trim(),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
               ),
             ],
-            if (product.recipeSteps != null && product.recipeSteps!.isNotEmpty) ...[
+            if (product.recipeSteps != null &&
+                product.recipeSteps!.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const Text('Recipe Steps / Instructions:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Recipe Steps / Instructions:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
-              ...product.recipeSteps!.split('\n').where((s) => s.trim().isNotEmpty).map((step) => Padding(
-                padding: const EdgeInsets.only(bottom: 6.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('• ', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-                    Expanded(child: Text(step)),
-                  ],
-                ),
-              )).toList(),
+              ...product.recipeSteps!
+                  .split('\n')
+                  .where((s) => s.trim().isNotEmpty)
+                  .map(
+                    (step) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '• ',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          Expanded(child: Text(step)),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
             ],
-            if (product.prepTime != null || product.cookTime != null || product.servings != null || product.difficulty != null) ...[
+            if (product.prepTime != null ||
+                product.cookTime != null ||
+                product.servings != null ||
+                product.difficulty != null) ...[
               const SizedBox(height: 16),
-              const Text('Preparation Info:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Preparation Info:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
                   if (product.prepTime != null)
-                    _buildPrepChip(Icons.timer_outlined, 'Prep: ${product.prepTime} mins'),
+                    _buildPrepChip(
+                      Icons.timer_outlined,
+                      'Prep: ${product.prepTime} mins',
+                    ),
                   if (product.cookTime != null)
-                    _buildPrepChip(Icons.dinner_dining_outlined, 'Cook: ${product.cookTime} mins'),
+                    _buildPrepChip(
+                      Icons.dinner_dining_outlined,
+                      'Cook: ${product.cookTime} mins',
+                    ),
                   if (product.servings != null)
-                    _buildPrepChip(Icons.people_outline, 'Servings: ${product.servings}'),
+                    _buildPrepChip(
+                      Icons.people_outline,
+                      'Servings: ${product.servings}',
+                    ),
                   if (product.difficulty != null)
-                    _buildPrepChip(Icons.assignment_outlined, 'Difficulty: ${product.difficulty}'),
+                    _buildPrepChip(
+                      Icons.assignment_outlined,
+                      'Difficulty: ${product.difficulty}',
+                    ),
                 ],
               ),
             ],
@@ -2478,8 +3316,13 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 icon: const Icon(Icons.play_circle_fill, color: Colors.white),
-                label: const Text('Watch Tutorial Video', style: TextStyle(color: Colors.white)),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800),
+                label: const Text(
+                  'Watch Tutorial Video',
+                  style: TextStyle(color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade800,
+                ),
                 onPressed: () {
                   _showVideoTutorialDialog(product.videoPath!, product.name);
                 },
@@ -2517,20 +3360,25 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
         children: [
           Icon(icon, size: 14, color: AppColors.primary),
           const SizedBox(width: 4),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          ),
         ],
       ),
     );
   }
 
   void _showVideoTutorialDialog(String path, String productName) {
-    final file = File(path);
-    if (!file.existsSync()) {
-
+    final controller = createVideoControllerFromPath(path);
+    if (controller == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Local video playback is unavailable on Web.'),
+        ),
+      );
       return;
     }
-
-    final controller = VideoPlayerController.file(file);
     bool isInitialized = false;
 
     showDialog(
@@ -2557,15 +3405,16 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                         children: [
                           VideoPlayer(controller),
                           _VideoOverlay(controller: controller),
-                          VideoProgressIndicator(controller, allowScrubbing: true),
+                          VideoProgressIndicator(
+                            controller,
+                            allowScrubbing: true,
+                          ),
                         ],
                       ),
                     )
                   : const SizedBox(
                       height: 200,
-                      child: Center(
-                        child: CircularProgressIndicator(),
-                      ),
+                      child: Center(child: CircularProgressIndicator()),
                     ),
             ),
             actions: [
@@ -2621,14 +3470,18 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Date: ${selectedDate.toLocal().toString().split(' ')[0]}'),
+                    Text(
+                      'Date: ${selectedDate.toLocal().toString().split(' ')[0]}',
+                    ),
                     TextButton(
                       onPressed: () async {
                         final DateTime? picked = await showDatePicker(
                           context: context,
                           initialDate: selectedDate,
                           firstDate: DateTime.now(),
-                          lastDate: DateTime.now().add(const Duration(days: 30)),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 30),
+                          ),
                         );
                         if (picked != null && picked != selectedDate) {
                           setState(() {
@@ -2674,7 +3527,8 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             ),
             ElevatedButton(
               onPressed: () async {
-                if (nameController.text.isNotEmpty && _selectedTableId != null) {
+                if (nameController.text.isNotEmpty &&
+                    _selectedTableId != null) {
                   final db = await DatabaseHelper.instance.database;
                   final bookingTime = DateTime(
                     selectedDate.year,
@@ -2701,10 +3555,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                   );
 
                   Navigator.pop(context);
-
-                } else {
-
-                }
+                } else {}
               },
               child: const Text('Book'),
             ),
@@ -2716,17 +3567,16 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Future<pw.Document?> _createCartPdfDocument() async {
     if (_cartItems.isEmpty) {
-
       return null;
     }
-    
+
     final pdf = pw.Document();
     final now = DateTime.now();
     final subtotal = _getSubtotal();
     final discount = _getDiscount();
     final tax = _getTax();
     final total = _getTotal();
-    
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.roll80,
@@ -2736,16 +3586,31 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Center(
-                child: pw.Text('RESTOPRO ERP', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                child: pw.Text(
+                  'RESTOPRO ERP',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
               ),
               pw.Center(
-                child: pw.Text('Order Receipt Draft', style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic)),
+                child: pw.Text(
+                  'Order Receipt Draft',
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    fontStyle: pw.FontStyle.italic,
+                  ),
+                ),
               ),
               pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
               pw.Text('Date: ${DateFormat('yyyy-MM-dd HH:mm').format(now)}'),
               pw.Text('Type: $_selectedOrderType'),
-              if (_selectedOrderType == 'Table Order' && _selectedTableId != null)
-                pw.Text('Table: ${_tables.firstWhere((t) => t.id == _selectedTableId).tableNumber}'),
+              if (_selectedOrderType == 'Table Order' &&
+                  _selectedTableId != null)
+                pw.Text(
+                  'Table: ${_tables.firstWhere((t) => t.id == _selectedTableId).tableNumber}',
+                ),
               pw.SizedBox(height: 8),
               pw.Divider(thickness: 1, borderStyle: pw.BorderStyle.dashed),
               ..._cartItems.map((item) {
@@ -2757,7 +3622,9 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
                       pw.Expanded(child: pw.Text('${product.name} x$qty')),
-                      pw.Text('Rs. ${(product.price * qty).toStringAsFixed(2)}'),
+                      pw.Text(
+                        'Rs. ${(product.price * qty).toStringAsFixed(2)}',
+                      ),
                     ],
                   ),
                 );
@@ -2789,13 +3656,25 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Total Amount:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Rs. ${total.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text(
+                    'Total Amount:',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.Text(
+                    'Rs. ${total.toStringAsFixed(2)}',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  ),
                 ],
               ),
               pw.SizedBox(height: 15),
               pw.Center(
-                child: pw.Text('Thank you! Please pay at cashier.', style: pw.TextStyle(fontSize: 10, fontStyle: pw.FontStyle.italic)),
+                child: pw.Text(
+                  'Thank you! Please pay at cashier.',
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontStyle: pw.FontStyle.italic,
+                  ),
+                ),
               ),
             ],
           );
@@ -2810,10 +3689,10 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
     final pdf = await _createCartPdfDocument();
     if (pdf == null) return;
     try {
-      await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
-    } catch (e) {
-
-    }
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+      );
+    } catch (e) {}
   }
 
   Future<void> _previewCartPdf() async {
@@ -2896,7 +3775,11 @@ class _VideoOverlayState extends State<_VideoOverlay> {
                 : const CircleAvatar(
                     radius: 24,
                     backgroundColor: Colors.black54,
-                    child: Icon(Icons.play_arrow, color: Colors.white, size: 30),
+                    child: Icon(
+                      Icons.play_arrow,
+                      color: Colors.white,
+                      size: 30,
+                    ),
                   ),
           ),
         ),
@@ -2904,3 +3787,7 @@ class _VideoOverlayState extends State<_VideoOverlay> {
     );
   }
 }
+
+
+
+

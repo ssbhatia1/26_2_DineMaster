@@ -8,7 +8,10 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../core/database/database_helper.dart';
 import '../repositories/table_repository.dart';
+import '../repositories/order_api_repository.dart';
+import '../models/order_model.dart';
 import '../services/sync_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'pdf_preview_screen.dart';
 
 class OrdersHistoryScreen extends StatefulWidget {
@@ -22,6 +25,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
   List<Map<String, dynamic>> _orders = [];
   bool _isLoading = true;
   final TableRepository _tableRepository = TableRepository();
+  final OrderApiRepository _orderApiRepository = const OrderApiRepository();
   StreamSubscription? _syncSubscription;
 
   // Search & Filter state
@@ -56,6 +60,23 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
   Future<void> _loadOrders() async {
     setState(() => _isLoading = true);
     try {
+      if (await _useBackendApi()) {
+        final orders = await _orderApiRepository.getOrders(
+          DatabaseHelper.currentRestaurantId ?? 1,
+        );
+        final filtered = orders.where(_matchesOnlineFilters).map((order) {
+          final map = order.toMap();
+          map['id'] = order.id;
+          return map;
+        }).toList();
+        if (!mounted) return;
+        setState(() {
+          _orders = filtered;
+          _isLoading = false;
+        });
+        return;
+      }
+
       final db = await DatabaseHelper.instance.database;
       final restId = DatabaseHelper.currentRestaurantId;
 
@@ -76,7 +97,12 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
           o.customer_phone LIKE ? OR 
           t.table_number LIKE ?
         )''';
-        args.addAll(['%$searchVal%', '%$searchVal%', '%$searchVal%', '%$searchVal%']);
+        args.addAll([
+          '%$searchVal%',
+          '%$searchVal%',
+          '%$searchVal%',
+          '%$searchVal%',
+        ]);
       }
 
       // Order Type Filter
@@ -99,8 +125,12 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
 
       // Date Range Filter
       if (_selectedDateRange != null) {
-        String startStr = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.start) + "T00:00:00";
-        String endStr = DateFormat('yyyy-MM-dd').format(_selectedDateRange!.end) + "T23:59:59";
+        String startStr =
+            DateFormat('yyyy-MM-dd').format(_selectedDateRange!.start) +
+            "T00:00:00";
+        String endStr =
+            DateFormat('yyyy-MM-dd').format(_selectedDateRange!.end) +
+            "T23:59:59";
         query += ' AND o.order_time BETWEEN ? AND ?';
         args.addAll([startStr, endStr]);
       }
@@ -120,18 +150,30 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _getOrderItems(int orderId) async {
+    if (await _useBackendApi()) {
+      final items = await _orderApiRepository.getOrderItems(orderId);
+      return items.map((item) {
+        final map = item.toMap();
+        map['product_name'] = item.productName;
+        return map;
+      }).toList();
+    }
+
     final db = await DatabaseHelper.instance.database;
-    return await db.rawQuery('''
+    return await db.rawQuery(
+      '''
       SELECT oi.*, p.name as product_name 
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       WHERE oi.order_id = ?
-    ''', [orderId]);
+    ''',
+      [orderId],
+    );
   }
 
   void _showInvoice(Map<String, dynamic> order) async {
     final items = await _getOrderItems(order['id']);
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -139,19 +181,29 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Flexible(
-              child: Text('Invoice #${order['id']}', overflow: TextOverflow.ellipsis),
+              child: Text(
+                'Invoice #${order['id']}',
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: order['status'] == 'Served' || order['status'] == 'Completed' || order['status'] == 'Received'
+                color:
+                    order['status'] == 'Served' ||
+                        order['status'] == 'Completed' ||
+                        order['status'] == 'Received'
                     ? Colors.green
                     : Colors.orange,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 order['status'],
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -163,56 +215,97 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Date: ${DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(order['order_time']))}'),
+                Text(
+                  'Date: ${DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(order['order_time']))}',
+                ),
                 Text('Type: ${order['type']}'),
-                if (order['table_number'] != null) Text('Table: ${order['table_number']}'),
-                if (order['customer_name'] != null) Text('Customer: ${order['customer_name']}'),
-                if (order['customer_phone'] != null) Text('Phone: ${order['customer_phone']}'),
+                if (order['table_number'] != null)
+                  Text('Table: ${order['table_number']}'),
+                if (order['customer_name'] != null)
+                  Text('Customer: ${order['customer_name']}'),
+                if (order['customer_phone'] != null)
+                  Text('Phone: ${order['customer_phone']}'),
                 if (order['order_taker_name'] != null) ...[
                   const SizedBox(height: 4),
-                  Text('Order Taken By: ${order['order_taker_name']} (ID: ${order['order_taker_id'] ?? "N/A"})'),
+                  Text(
+                    'Order Taken By: ${order['order_taker_name']} (ID: ${order['order_taker_id'] ?? "N/A"})',
+                  ),
                 ],
                 if (order['delivered_by_name'] != null) ...[
                   const SizedBox(height: 4),
-                  Text('Delivered By: ${order['delivered_by_name']} (ID: ${order['delivered_by_id'] ?? "N/A"})'),
+                  Text(
+                    'Delivered By: ${order['delivered_by_name']} (ID: ${order['delivered_by_id'] ?? "N/A"})',
+                  ),
                 ],
                 if (order['delivery_timestamp'] != null) ...[
                   const SizedBox(height: 4),
-                  Text('Delivered At: ${DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(order['delivery_timestamp']))}'),
+                  Text(
+                    'Delivered At: ${DateFormat('yyyy-MM-dd hh:mm a').format(DateTime.parse(order['delivery_timestamp']))}',
+                  ),
                 ],
                 const Divider(height: 24),
                 const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(child: Text('Item', style: TextStyle(fontWeight: FontWeight.bold))),
+                    Expanded(
+                      child: Text(
+                        'Item',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
                     Text('Qty', style: TextStyle(fontWeight: FontWeight.bold)),
                     SizedBox(width: 16),
-                    Text('Price', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                      'Price',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     SizedBox(width: 16),
-                    Text('Total', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                      'Total',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                ...items.map((item) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text(item['product_name'])),
-                      Text('${item['quantity']}'),
-                      const SizedBox(width: 16),
-                      Text('₹${item['price']}'),
-                      const SizedBox(width: 16),
-                      Text('₹${((item['price'] as num) * (item['quantity'] as num)).toStringAsFixed(2)}'),
-                    ],
-                  ),
-                )).toList(),
+                ...items
+                    .map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: Text(item['product_name'])),
+                            Text('${item['quantity']}'),
+                            const SizedBox(width: 16),
+                            Text('₹${item['price']}'),
+                            const SizedBox(width: 16),
+                            Text(
+                              '₹${((item['price'] as num) * (item['quantity'] as num)).toStringAsFixed(2)}',
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                    .toList(),
                 const Divider(height: 24),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Total Amount:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text('₹${order['total_amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary)),
+                    const Text(
+                      'Total Amount:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      '₹${order['total_amount']}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: AppColors.primary,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -232,7 +325,10 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
             },
             icon: const Icon(Icons.track_changes),
             label: const Text('Track KOT'),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
           ),
           ElevatedButton.icon(
             onPressed: () => _printInvoice(order, items),
@@ -243,7 +339,10 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
             onPressed: () => _previewInvoice(order, items),
             icon: const Icon(Icons.preview),
             label: const Text('Preview Invoice'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
           ),
           ElevatedButton.icon(
             onPressed: () {
@@ -252,13 +351,19 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
             },
             icon: const Icon(Icons.open_in_new),
             label: const Text('Reopen'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
           ),
           ElevatedButton.icon(
             onPressed: () => _confirmDelete(order['id']),
             icon: const Icon(Icons.delete),
             label: const Text('Delete'),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
           ),
         ],
       ),
@@ -279,7 +384,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
             Future<void> reloadData() async {
               try {
                 final db = await DatabaseHelper.instance.database;
-                
+
                 // Fetch KOTs
                 final kotMaps = await db.query(
                   'kot',
@@ -291,17 +396,17 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                 List<Map<String, dynamic>> fetchedKots = [];
                 for (var kot in kotMaps) {
                   final kotId = kot['id'] as int;
-                  final itemMaps = await db.rawQuery('''
+                  final itemMaps = await db.rawQuery(
+                    '''
                     SELECT oi.quantity, p.name as product_name, p.prep_time, p.cook_time
                     FROM order_items oi
                     JOIN products p ON oi.product_id = p.id
                     WHERE oi.kot_id = ?
-                  ''', [kotId]);
+                  ''',
+                    [kotId],
+                  );
 
-                  fetchedKots.add({
-                    ...kot,
-                    'items': itemMaps,
-                  });
+                  fetchedKots.add({...kot, 'items': itemMaps});
                 }
 
                 // Fetch Logs
@@ -327,7 +432,10 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
             if (loading) {
               reloadData();
               // Setup periodic refresh inside the dialog
-              dialogTimer = Timer.periodic(const Duration(seconds: 3), (_) => reloadData());
+              dialogTimer = Timer.periodic(
+                const Duration(seconds: 3),
+                (_) => reloadData(),
+              );
             }
 
             return PopScope(
@@ -340,7 +448,10 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                 title: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Order #$orderId - Live History', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                      'Order #$orderId - Live History',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.refresh, color: AppColors.primary),
                       onPressed: () => reloadData(),
@@ -348,7 +459,10 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                   ],
                 ),
                 content: loading
-                    ? const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()))
+                    ? const SizedBox(
+                        height: 200,
+                        child: Center(child: CircularProgressIndicator()),
+                      )
                     : SizedBox(
                         width: 600,
                         height: 450,
@@ -361,8 +475,14 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                                 unselectedLabelColor: Colors.grey,
                                 indicatorColor: AppColors.primary,
                                 tabs: [
-                                  Tab(icon: Icon(Icons.restaurant_menu), text: 'KOT History'),
-                                  Tab(icon: Icon(Icons.history_toggle_off), text: 'Status Timeline'),
+                                  Tab(
+                                    icon: Icon(Icons.restaurant_menu),
+                                    text: 'KOT History',
+                                  ),
+                                  Tab(
+                                    icon: Icon(Icons.history_toggle_off),
+                                    text: 'Status Timeline',
+                                  ),
                                 ],
                               ),
                               Expanded(
@@ -370,41 +490,86 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                                   children: [
                                     // Tab 1: KOTs History List
                                     kots.isEmpty
-                                        ? const Center(child: Text('No KOTs generated for this order yet.'))
+                                        ? const Center(
+                                            child: Text(
+                                              'No KOTs generated for this order yet.',
+                                            ),
+                                          )
                                         : ListView.builder(
-                                            padding: const EdgeInsets.only(top: 12),
+                                            padding: const EdgeInsets.only(
+                                              top: 12,
+                                            ),
                                             itemCount: kots.length,
                                             itemBuilder: (context, index) {
                                               final kot = kots[index];
-                                              final status = kot['status'] as String? ?? 'Pending';
-                                              final kotItems = kot['items'] as List<Map<String, dynamic>>? ?? [];
+                                              final status =
+                                                  kot['status'] as String? ??
+                                                  'Pending';
+                                              final kotItems =
+                                                  kot['items']
+                                                      as List<
+                                                        Map<String, dynamic>
+                                                      >? ??
+                                                  [];
 
                                               return Card(
-                                                margin: const EdgeInsets.only(bottom: 12),
+                                                margin: const EdgeInsets.only(
+                                                  bottom: 12,
+                                                ),
                                                 child: ExpansionTile(
                                                   title: Row(
-                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .spaceBetween,
                                                     children: [
                                                       Text(
                                                         'KOT #${kot['id']} (${kot['kot_number'] ?? ''})',
-                                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                                        style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
                                                       ),
                                                       Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 8,
+                                                              vertical: 4,
+                                                            ),
                                                         decoration: BoxDecoration(
-                                                          color: status == 'Served'
-                                                              ? Colors.green.shade50
-                                                              : (status == 'Ready' ? Colors.blue.shade50 : Colors.orange.shade50),
-                                                          borderRadius: BorderRadius.circular(8),
+                                                          color:
+                                                              status == 'Served'
+                                                              ? Colors
+                                                                    .green
+                                                                    .shade50
+                                                              : (status ==
+                                                                        'Ready'
+                                                                    ? Colors
+                                                                          .blue
+                                                                          .shade50
+                                                                    : Colors
+                                                                          .orange
+                                                                          .shade50),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
                                                         ),
                                                         child: Text(
                                                           status,
                                                           style: TextStyle(
                                                             fontSize: 11,
-                                                            fontWeight: FontWeight.bold,
-                                                            color: status == 'Served'
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            color:
+                                                                status ==
+                                                                    'Served'
                                                                 ? Colors.green
-                                                                : (status == 'Ready' ? Colors.blue : Colors.orange),
+                                                                : (status ==
+                                                                          'Ready'
+                                                                      ? Colors
+                                                                            .blue
+                                                                      : Colors
+                                                                            .orange),
                                                           ),
                                                         ),
                                                       ),
@@ -412,27 +577,70 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                                                   ),
                                                   subtitle: Text(
                                                     'Chef: ${kot['chef_name'] ?? 'Unassigned'} • Est: ${kot['estimated_time'] ?? 15} mins' +
-                                                        (kot['delay_reason'] != null ? '\nDelay: ${kot['delay_reason']}' : ''),
-                                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                                        (kot['delay_reason'] !=
+                                                                null
+                                                            ? '\nDelay: ${kot['delay_reason']}'
+                                                            : ''),
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey,
+                                                    ),
                                                   ),
                                                   children: [
                                                     Padding(
-                                                      padding: const EdgeInsets.all(12.0),
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                            12.0,
+                                                          ),
                                                       child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
                                                         children: [
-                                                          const Text('Items in KOT:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                                          const SizedBox(height: 6),
-                                                          ...kotItems.map((item) => Padding(
-                                                                padding: const EdgeInsets.symmetric(vertical: 2.0),
-                                                                child: Row(
-                                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                                  children: [
-                                                                    Text('${item['quantity']}x ${item['product_name']}', style: const TextStyle(fontSize: 13)),
-                                                                    Text('${(item['prep_time'] ?? 5) + (item['cook_time'] ?? 10)} min', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                                                                  ],
-                                                                ),
-                                                              )),
+                                                          const Text(
+                                                            'Items in KOT:',
+                                                            style: TextStyle(
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                            height: 6,
+                                                          ),
+                                                          ...kotItems.map(
+                                                            (item) => Padding(
+                                                              padding:
+                                                                  const EdgeInsets.symmetric(
+                                                                    vertical:
+                                                                        2.0,
+                                                                  ),
+                                                              child: Row(
+                                                                mainAxisAlignment:
+                                                                    MainAxisAlignment
+                                                                        .spaceBetween,
+                                                                children: [
+                                                                  Text(
+                                                                    '${item['quantity']}x ${item['product_name']}',
+                                                                    style: const TextStyle(
+                                                                      fontSize:
+                                                                          13,
+                                                                    ),
+                                                                  ),
+                                                                  Text(
+                                                                    '${(item['prep_time'] ?? 5) + (item['cook_time'] ?? 10)} min',
+                                                                    style: const TextStyle(
+                                                                      color: Colors
+                                                                          .grey,
+                                                                      fontSize:
+                                                                          12,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
                                                         ],
                                                       ),
                                                     ),
@@ -444,50 +652,103 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
 
                                     // Tab 2: Logs stepper
                                     logs.isEmpty
-                                        ? const Center(child: Text('No status transitions logged yet.'))
+                                        ? const Center(
+                                            child: Text(
+                                              'No status transitions logged yet.',
+                                            ),
+                                          )
                                         : ListView.builder(
-                                            padding: const EdgeInsets.only(top: 12),
+                                            padding: const EdgeInsets.only(
+                                              top: 12,
+                                            ),
                                             itemCount: logs.length,
                                             itemBuilder: (context, index) {
                                               final log = logs[index];
-                                              final timeStr = log['changed_at'] as String? ?? '';
-                                              final time = DateTime.tryParse(timeStr) ?? DateTime.now();
+                                              final timeStr =
+                                                  log['changed_at']
+                                                      as String? ??
+                                                  '';
+                                              final time =
+                                                  DateTime.tryParse(timeStr) ??
+                                                  DateTime.now();
 
                                               return Padding(
-                                                padding: const EdgeInsets.only(bottom: 12.0),
+                                                padding: const EdgeInsets.only(
+                                                  bottom: 12.0,
+                                                ),
                                                 child: Row(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
                                                     const Padding(
-                                                      padding: EdgeInsets.only(top: 4.0),
-                                                      child: Icon(Icons.circle, size: 12, color: AppColors.primary),
+                                                      padding: EdgeInsets.only(
+                                                        top: 4.0,
+                                                      ),
+                                                      child: Icon(
+                                                        Icons.circle,
+                                                        size: 12,
+                                                        color:
+                                                            AppColors.primary,
+                                                      ),
                                                     ),
                                                     const SizedBox(width: 12),
                                                     Expanded(
                                                       child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
                                                         children: [
                                                           Row(
-                                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                            mainAxisAlignment:
+                                                                MainAxisAlignment
+                                                                    .spaceBetween,
                                                             children: [
                                                               Text(
                                                                 'Status: ${log['status']}',
-                                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                                style: const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  fontSize: 13,
+                                                                ),
                                                               ),
                                                               Text(
-                                                                DateFormat('hh:mm a').format(time),
-                                                                style: const TextStyle(color: Colors.grey, fontSize: 11),
+                                                                DateFormat(
+                                                                  'hh:mm a',
+                                                                ).format(time),
+                                                                style: const TextStyle(
+                                                                  color: Colors
+                                                                      .grey,
+                                                                  fontSize: 11,
+                                                                ),
                                                               ),
                                                             ],
                                                           ),
                                                           Text(
                                                             'By: ${log['changed_by'] ?? 'System'}',
-                                                            style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontSize: 11,
+                                                                  color: Colors
+                                                                      .blueGrey,
+                                                                ),
                                                           ),
-                                                          if (log['notes'] != null && log['notes'].toString().isNotEmpty)
+                                                          if (log['notes'] !=
+                                                                  null &&
+                                                              log['notes']
+                                                                  .toString()
+                                                                  .isNotEmpty)
                                                             Text(
                                                               'Notes: ${log['notes']}',
-                                                              style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+                                                              style: TextStyle(
+                                                                fontSize: 12,
+                                                                color: Colors
+                                                                    .grey
+                                                                    .shade700,
+                                                                fontStyle:
+                                                                    FontStyle
+                                                                        .italic,
+                                                              ),
                                                             ),
                                                         ],
                                                       ),
@@ -521,12 +782,20 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
     );
   }
 
-  Future<void> _printInvoice(Map<String, dynamic> order, List<Map<String, dynamic>> items) async {
+  Future<void> _printInvoice(
+    Map<String, dynamic> order,
+    List<Map<String, dynamic>> items,
+  ) async {
     final pdf = await _generatePdfDocument(order, items);
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+    );
   }
 
-  void _previewInvoice(Map<String, dynamic> order, List<Map<String, dynamic>> items) {
+  void _previewInvoice(
+    Map<String, dynamic> order,
+    List<Map<String, dynamic>> items,
+  ) {
     Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (context) => PdfPreviewScreen(
@@ -540,7 +809,10 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
     );
   }
 
-  Future<pw.Document> _generatePdfDocument(Map<String, dynamic> order, List<Map<String, dynamic>> items) async {
+  Future<pw.Document> _generatePdfDocument(
+    Map<String, dynamic> order,
+    List<Map<String, dynamic>> items,
+  ) async {
     final pdf = pw.Document();
 
     pdf.addPage(
@@ -549,26 +821,44 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('Invoice #${order['id']}', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+              pw.Text(
+                'Invoice #${order['id']}',
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
               pw.SizedBox(height: 10),
               pw.Text('Date: ${order['order_time']}'),
               pw.Text('Type: ${order['type']}'),
-              if (order['table_number'] != null) pw.Text('Table: ${order['table_number']}'),
-              if (order['customer_name'] != null) pw.Text('Customer: ${order['customer_name']}'),
+              if (order['table_number'] != null)
+                pw.Text('Table: ${order['table_number']}'),
+              if (order['customer_name'] != null)
+                pw.Text('Customer: ${order['customer_name']}'),
               pw.SizedBox(height: 20),
               pw.Table.fromTextArray(
                 headers: ['Item', 'Qty', 'Price', 'Total'],
-                data: items.map((item) => [
-                  item['product_name'],
-                  item['quantity'].toString(),
-                  'Rs. ${item['price']}',
-                  'Rs. ${(item['price'] * item['quantity']).toStringAsFixed(2)}'
-                ]).toList(),
+                data: items
+                    .map(
+                      (item) => [
+                        item['product_name'],
+                        item['quantity'].toString(),
+                        'Rs. ${item['price']}',
+                        'Rs. ${(item['price'] * item['quantity']).toStringAsFixed(2)}',
+                      ],
+                    )
+                    .toList(),
               ),
               pw.SizedBox(height: 20),
               pw.Align(
                 alignment: pw.Alignment.centerRight,
-                child: pw.Text('Total: Rs. ${order['total_amount']}', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                child: pw.Text(
+                  'Total: Rs. ${order['total_amount']}',
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
               ),
             ],
           );
@@ -580,15 +870,27 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
   }
 
   Future<void> _processPayment(int orderId, String method) async {
+    if (await _useBackendApi()) {
+      await _orderApiRepository.recordPayment(orderId, method);
+      await _loadOrders();
+      return;
+    }
+
     final db = await DatabaseHelper.instance.database;
-    await db.update('orders', {
-      'payment_status': 'Paid',
-      'payment_method': method,
-      'status': 'Paid',
-    }, where: 'id = ?', whereArgs: [orderId]);
-    
+    await db.update(
+      'orders',
+      {'payment_status': 'Paid', 'payment_method': method, 'status': 'Paid'},
+      where: 'id = ?',
+      whereArgs: [orderId],
+    );
+
     // Log payment to payments table
-    final orderMaps = await db.query('orders', columns: ['total_amount'], where: 'id = ?', whereArgs: [orderId]);
+    final orderMaps = await db.query(
+      'orders',
+      columns: ['total_amount'],
+      where: 'id = ?',
+      whereArgs: [orderId],
+    );
     if (orderMaps.isNotEmpty) {
       await db.insert('payments', {
         'order_id': orderId,
@@ -604,6 +906,38 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
     _loadOrders(); // Refresh list
   }
 
+  Future<bool> _useBackendApi() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('use_backend_api') ?? false;
+  }
+
+  bool _matchesOnlineFilters(OrderModel order) {
+    final search = _searchController.text.trim().toLowerCase();
+    final matchesSearch =
+        search.isEmpty ||
+        '${order.id}'.contains(search) ||
+        (order.customerName?.toLowerCase().contains(search) ?? false) ||
+        (order.customerPhone?.contains(search) ?? false);
+    final matchesType =
+        _selectedOrderType == 'All' || order.type == _selectedOrderType;
+    final matchesPayment =
+        _selectedPaymentStatus == 'All' ||
+        order.paymentStatus == _selectedPaymentStatus;
+    final matchesStatus =
+        _selectedOrderStatus == 'All' || order.status == _selectedOrderStatus;
+    final date = DateTime.tryParse(order.orderTime);
+    final matchesDate =
+        _selectedDateRange == null ||
+        date == null ||
+        (!date.isBefore(_selectedDateRange!.start) &&
+            !date.isAfter(_selectedDateRange!.end));
+    return matchesSearch &&
+        matchesType &&
+        matchesPayment &&
+        matchesStatus &&
+        matchesDate;
+  }
+
   void _showPaymentSelectionDialog(Map<String, dynamic> order) {
     showDialog(
       context: context,
@@ -613,7 +947,10 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Amount to Pay: ₹${order['total_amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(
+              'Amount to Pay: ₹${order['total_amount']}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
               icon: const Icon(Icons.money),
@@ -688,7 +1025,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
-          )
+          ),
         ],
       ),
     );
@@ -730,11 +1067,16 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
               final upi = double.tryParse(upiController.text) ?? 0;
               if (cash + upi == order['total_amount']) {
                 final db = await DatabaseHelper.instance.database;
-                await db.update('orders', {
-                  'payment_status': 'Paid',
-                  'payment_method': 'Split (Cash: $cash, UPI: $upi)',
-                  'status': 'Paid',
-                }, where: 'id = ?', whereArgs: [order['id']]);
+                await db.update(
+                  'orders',
+                  {
+                    'payment_status': 'Paid',
+                    'payment_method': 'Split (Cash: $cash, UPI: $upi)',
+                    'status': 'Paid',
+                  },
+                  where: 'id = ?',
+                  whereArgs: [order['id']],
+                );
 
                 // Log payment to payments table
                 await db.insert('payments', {
@@ -745,13 +1087,13 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                 });
 
                 // Automatically release table to Available once bill is fully paid
-                await _tableRepository.syncTableStatusForOrder(order['id'] as int);
+                await _tableRepository.syncTableStatusForOrder(
+                  order['id'] as int,
+                );
 
                 Navigator.pop(context);
                 _loadOrders();
-              } else {
-
-              }
+              } else {}
             },
             child: const Text('Pay'),
           ),
@@ -788,15 +1130,16 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
   Future<void> _deleteOrder(int orderId) async {
     try {
       final db = await DatabaseHelper.instance.database;
-      await db.delete('order_items', where: 'order_id = ?', whereArgs: [orderId]);
+      await db.delete(
+        'order_items',
+        where: 'order_id = ?',
+        whereArgs: [orderId],
+      );
       await db.delete('orders', where: 'id = ?', whereArgs: [orderId]);
       await db.delete('payments', where: 'order_id = ?', whereArgs: [orderId]);
-      
 
       _loadOrders(); // Refresh list
-    } catch (e) {
-
-    }
+    } catch (e) {}
   }
 
   @override
@@ -805,10 +1148,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
       appBar: AppBar(
         title: const Text('Order History Logs'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadOrders,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadOrders),
         ],
       ),
       body: Column(
@@ -822,18 +1162,21 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                 borderRadius: BorderRadius.circular(16),
                 side: BorderSide(color: Colors.grey.shade200),
               ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: LayoutBuilder(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: LayoutBuilder(
                   builder: (context, constraints) {
                     final isMobile = constraints.maxWidth < 600;
 
                     final searchBar = TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        hintText: 'Search by Order #, Customer, Phone, or Table...',
+                        hintText:
+                            'Search by Order #, Customer, Phone, or Table...',
                         prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       onChanged: (_) => _loadOrders(),
                     );
@@ -846,8 +1189,13 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                             : '${DateFormat('MMM dd').format(_selectedDateRange!.start)} - ${DateFormat('MMM dd').format(_selectedDateRange!.end)}',
                       ),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       onPressed: () async {
                         final picked = await showDateRangePicker(
@@ -865,10 +1213,17 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
 
                     final dropdownType = DropdownButtonFormField<String>(
                       value: _selectedOrderType,
-                      decoration: const InputDecoration(labelText: 'Order Type', border: InputBorder.none),
-                      items: ['All', 'Dine-in', 'Takeaway', 'Parcel', 'Delivery']
-                          .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                          .toList(),
+                      decoration: const InputDecoration(
+                        labelText: 'Order Type',
+                        border: InputBorder.none,
+                      ),
+                      items:
+                          ['All', 'Dine-in', 'Takeaway', 'Parcel', 'Delivery']
+                              .map(
+                                (t) =>
+                                    DropdownMenuItem(value: t, child: Text(t)),
+                              )
+                              .toList(),
                       onChanged: (val) {
                         if (val != null) {
                           setState(() => _selectedOrderType = val);
@@ -879,10 +1234,25 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
 
                     final dropdownStatus = DropdownButtonFormField<String>(
                       value: _selectedOrderStatus,
-                      decoration: const InputDecoration(labelText: 'Order Status', border: InputBorder.none),
-                      items: ['All', 'Received', 'Preparing', 'Ready', 'Served', 'Completed', 'Held']
-                          .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                          .toList(),
+                      decoration: const InputDecoration(
+                        labelText: 'Order Status',
+                        border: InputBorder.none,
+                      ),
+                      items:
+                          [
+                                'All',
+                                'Received',
+                                'Preparing',
+                                'Ready',
+                                'Served',
+                                'Completed',
+                                'Held',
+                              ]
+                              .map(
+                                (t) =>
+                                    DropdownMenuItem(value: t, child: Text(t)),
+                              )
+                              .toList(),
                       onChanged: (val) {
                         if (val != null) {
                           setState(() => _selectedOrderStatus = val);
@@ -893,9 +1263,14 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
 
                     final dropdownPayment = DropdownButtonFormField<String>(
                       value: _selectedPaymentStatus,
-                      decoration: const InputDecoration(labelText: 'Payment Status', border: InputBorder.none),
+                      decoration: const InputDecoration(
+                        labelText: 'Payment Status',
+                        border: InputBorder.none,
+                      ),
                       items: ['All', 'Paid', 'Unpaid']
-                          .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                          .map(
+                            (t) => DropdownMenuItem(value: t, child: Text(t)),
+                          )
                           .toList(),
                       onChanged: (val) {
                         if (val != null) {
@@ -945,141 +1320,193 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen> {
                     );
                   },
                 ),
-                ),
+              ),
             ),
           ),
-          
+
           // Orders List
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _orders.isEmpty
-                    ? const Center(child: Text('No orders found matching filters.'))
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _orders.length,
-                        itemBuilder: (context, index) {
-                          final order = _orders[index];
-                          final date = DateTime.parse(order['order_time']);
-                          final isCompleted = order['status'] == 'Served' || order['status'] == 'Completed' || order['status'] == 'Received';
-                          
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: Colors.grey.shade200),
-                            ),
-                            child: Column(
-                              children: [
-                                ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: AppColors.primary.withAlpha(25),
-                                    child: const Icon(Icons.receipt, color: AppColors.primary),
-                                  ),
-                                  title: Text(
-                                    'Order #${order['id']} - ₹${order['total_amount']}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                  subtitle: Text(
-                                    '${DateFormat('yyyy-MM-dd hh:mm a').format(date)} | Type: ${order['type']}'
-                                    '${order['table_number'] != null ? " | Table: ${order['table_number']}" : ""}'
-                                    '${order['customer_name'] != null ? " | Name: ${order['customer_name']}" : ""}',
-                                  ),
-                                  trailing: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: isCompleted ? Colors.green.withAlpha(25) : Colors.orange.withAlpha(25),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      order['status'],
-                                      style: TextStyle(
-                                        color: isCompleted ? Colors.green : Colors.orange,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  onTap: () => _showInvoice(order),
+                ? const Center(child: Text('No orders found matching filters.'))
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _orders.length,
+                    itemBuilder: (context, index) {
+                      final order = _orders[index];
+                      final date = DateTime.parse(order['order_time']);
+                      final isCompleted =
+                          order['status'] == 'Served' ||
+                          order['status'] == 'Completed' ||
+                          order['status'] == 'Received';
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          children: [
+                            ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: AppColors.primary.withAlpha(
+                                  25,
                                 ),
-                                if (order['status'] == 'Held' || order['status'] == 'Ready')
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
+                                child: const Icon(
+                                  Icons.receipt,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              title: Text(
+                                'Order #${order['id']} - ₹${order['total_amount']}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '${DateFormat('yyyy-MM-dd hh:mm a').format(date)} | Type: ${order['type']}'
+                                '${order['table_number'] != null ? " | Table: ${order['table_number']}" : ""}'
+                                '${order['customer_name'] != null ? " | Name: ${order['customer_name']}" : ""}',
+                              ),
+                              trailing: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isCompleted
+                                      ? Colors.green.withAlpha(25)
+                                      : Colors.orange.withAlpha(25),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  order['status'],
+                                  style: TextStyle(
+                                    color: isCompleted
+                                        ? Colors.green
+                                        : Colors.orange,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              onTap: () => _showInvoice(order),
+                            ),
+                            if (order['status'] == 'Held' ||
+                                order['status'] == 'Ready')
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: 12,
+                                  left: 16,
+                                  right: 16,
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    TextButton.icon(
+                                      icon: const Icon(Icons.edit_note),
+                                      label: const Text('Reopen & Edit'),
+                                      onPressed: () {
+                                        context.go(
+                                          '/dashboard/pos?orderId=${order['id']}&tableId=${order['table_id'] ?? ""}',
+                                        );
+                                      },
+                                    ),
+                                    const SizedBox(width: 8),
+                                    ElevatedButton.icon(
+                                      icon: const Icon(Icons.payment),
+                                      label: const Text('Proceed to Checkout'),
+                                      onPressed: () {
+                                        context.go(
+                                          '/dashboard/pos?orderId=${order['id']}&tableId=${order['table_id'] ?? ""}',
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            if (order['status'] == 'Served' ||
+                                order['status'] == 'Completed' ||
+                                order['status'] == 'Received' ||
+                                order['status'] == 'Paid')
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: 12,
+                                  left: 16,
+                                  right: 16,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Divider(),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
-                                        TextButton.icon(
-                                          icon: const Icon(Icons.edit_note),
-                                          label: const Text('Reopen & Edit'),
-                                          onPressed: () {
-                                            context.go('/dashboard/pos?orderId=${order['id']}&tableId=${order['table_id'] ?? ""}');
-                                          },
+                                        Flexible(
+                                          child: Text(
+                                            'Payment Status: ${order['payment_status'] ?? 'Unpaid'}' +
+                                                (order['payment_method'] != null
+                                                    ? ' (${order['payment_method']})'
+                                                    : ''),
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color:
+                                                  order['payment_status'] ==
+                                                      'Paid'
+                                                  ? Colors.green
+                                                  : Colors.red,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
                                         const SizedBox(width: 8),
-                                        ElevatedButton.icon(
-                                          icon: const Icon(Icons.payment),
-                                          label: const Text('Proceed to Checkout'),
-                                          onPressed: () {
-                                            context.go('/dashboard/pos?orderId=${order['id']}&tableId=${order['table_id'] ?? ""}');
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                if (order['status'] == 'Served' || order['status'] == 'Completed' || order['status'] == 'Received' || order['status'] == 'Paid')
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Divider(),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        Wrap(
+                                          spacing: 8,
                                           children: [
-                                            Flexible(
-                                              child: Text(
-                                                'Payment Status: ${order['payment_status'] ?? 'Unpaid'}' +
-                                                (order['payment_method'] != null ? ' (${order['payment_method']})' : ''),
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: order['payment_status'] == 'Paid' ? Colors.green : Colors.red,
+                                            if (order['payment_status'] !=
+                                                'Paid')
+                                              ElevatedButton.icon(
+                                                icon: const Icon(Icons.payment),
+                                                label: const Text(
+                                                  'Pay Bill Amount',
                                                 ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Wrap(
-                                              spacing: 8,
-                                              children: [
-                                                if (order['payment_status'] != 'Paid')
-                                                  ElevatedButton.icon(
-                                                    icon: const Icon(Icons.payment),
-                                                    label: const Text('Pay Bill Amount'),
-                                                    onPressed: () => _showPaymentSelectionDialog(order),
-                                                    style: ElevatedButton.styleFrom(
-                                                      backgroundColor: AppColors.primary,
-                                                      foregroundColor: Colors.white,
+                                                onPressed: () =>
+                                                    _showPaymentSelectionDialog(
+                                                      order,
                                                     ),
-                                                  )
-                                                else
-                                                  TextButton.icon(
-                                                    icon: const Icon(Icons.print_outlined),
-                                                    label: const Text('Reprint Invoice'),
-                                                    onPressed: () => _showInvoice(order),
-                                                  ),
-                                              ],
-                                            ),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor:
+                                                      AppColors.primary,
+                                                  foregroundColor: Colors.white,
+                                                ),
+                                              )
+                                            else
+                                              TextButton.icon(
+                                                icon: const Icon(
+                                                  Icons.print_outlined,
+                                                ),
+                                                label: const Text(
+                                                  'Reprint Invoice',
+                                                ),
+                                                onPressed: () =>
+                                                    _showInvoice(order),
+                                              ),
                                           ],
                                         ),
                                       ],
                                     ),
-                                  ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

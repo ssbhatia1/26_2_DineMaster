@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../core/database/database_helper.dart';
+import '../models/user_model.dart';
+import '../repositories/user_repository.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 import '../services/sync_service.dart';
 import 'dart:async';
@@ -11,13 +14,15 @@ class UserManagementScreen extends StatefulWidget {
   State<UserManagementScreen> createState() => _UserManagementScreenState();
 }
 
-class _UserManagementScreenState extends State<UserManagementScreen> with SingleTickerProviderStateMixin {
+class _UserManagementScreenState extends State<UserManagementScreen>
+    with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _users = [];
   bool _isLoading = true;
   bool _obscurePassword = true;
   String _searchQuery = '';
   late TabController _tabController;
   StreamSubscription? _syncSubscription;
+  final UserRepository _userRepository = UserRepository();
 
   @override
   void initState() {
@@ -42,6 +47,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
 
   Future<void> _loadUsers() async {
     try {
+      if (await _useBackendApi()) {
+        final users = await _userRepository.getUsers();
+        if (!mounted) return;
+        setState(() {
+          _users = users.map((user) => user.toMap()).toList();
+          _isLoading = false;
+        });
+        return;
+      }
+
       final db = await DatabaseHelper.instance.database;
       final users = await db.query('users', orderBy: 'name ASC');
       setState(() {
@@ -57,13 +72,23 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   void _showUserDialog([Map<String, dynamic>? user]) {
     _obscurePassword = true;
     final isEditing = user != null;
-    final nameController = TextEditingController(text: isEditing ? user['name'] : '');
-    final usernameController = TextEditingController(text: isEditing ? user['username'] : '');
+    final nameController = TextEditingController(
+      text: isEditing ? user['name'] : '',
+    );
+    final usernameController = TextEditingController(
+      text: isEditing ? user['username'] : '',
+    );
     // Prefill edit password with placeholder
-    final passwordController = TextEditingController(text: isEditing ? '********' : '');
-    final contactController = TextEditingController(text: isEditing ? (user['contact_details'] ?? '') : '');
-    final shiftController = TextEditingController(text: isEditing ? (user['shift_timing'] ?? '') : '');
-    
+    final passwordController = TextEditingController(
+      text: isEditing ? '********' : '',
+    );
+    final contactController = TextEditingController(
+      text: isEditing ? (user['contact_details'] ?? '') : '',
+    );
+    final shiftController = TextEditingController(
+      text: isEditing ? (user['shift_timing'] ?? '') : '',
+    );
+
     String role = isEditing ? user['role'] : 'Waiter';
     bool isActive = isEditing ? (user['is_active'] == 1) : true;
 
@@ -71,10 +96,17 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setStateDialog) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
-              Icon(isEditing ? Icons.edit_outlined : Icons.person_add_alt_1_outlined, color: AppColors.primary),
+              Icon(
+                isEditing
+                    ? Icons.edit_outlined
+                    : Icons.person_add_alt_1_outlined,
+                color: AppColors.primary,
+              ),
               const SizedBox(width: 8),
               Text(isEditing ? 'Edit Employee Profile' : 'Add New Employee'),
             ],
@@ -105,11 +137,17 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                 TextField(
                   controller: passwordController,
                   decoration: InputDecoration(
-                    labelText: isEditing ? 'Password (Leave as-is to keep old)' : 'Password',
+                    labelText: isEditing
+                        ? 'Password (Leave as-is to keep old)'
+                        : 'Password',
                     border: const OutlineInputBorder(),
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                      ),
                       onPressed: () {
                         setStateDialog(() {
                           _obscurePassword = !_obscurePassword;
@@ -176,12 +214,34 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                 final shift = shiftController.text.trim();
 
                 if (name.isEmpty || username.isEmpty || password.isEmpty) {
+                  return;
+                }
 
+                if (await _useBackendApi()) {
+                  final apiUser = UserModel(
+                    id: isEditing ? user['id'] as int? : null,
+                    name: name,
+                    username: username,
+                    password: password == '********' ? '' : password,
+                    role: role,
+                    isActive: isActive,
+                    createdAt: isEditing
+                        ? (user['created_at'] ?? user['createdAt'] ?? '')
+                              .toString()
+                        : DateTime.now().toIso8601String(),
+                  );
+                  if (isEditing) {
+                    await _userRepository.updateUser(apiUser);
+                  } else {
+                    await _userRepository.addUser(apiUser);
+                  }
+                  if (context.mounted) Navigator.pop(context);
+                  _loadUsers();
                   return;
                 }
 
                 final db = await DatabaseHelper.instance.database;
-                
+
                 final Map<String, dynamic> data = {
                   'name': name,
                   'role': role,
@@ -200,16 +260,23 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                   if (password != '********') {
                     data['password'] = DatabaseHelper.hashPassword(password);
                   }
-                  await db.update('users', data, where: 'id = ?', whereArgs: [user['id']]);
+                  await db.update(
+                    'users',
+                    data,
+                    where: 'id = ?',
+                    whereArgs: [user['id']],
+                  );
                 }
 
                 if (context.mounted) {
                   Navigator.pop(context);
-
                 }
                 _loadUsers();
               },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
               child: Text(isEditing ? 'Save Changes' : 'Add Employee'),
             ),
           ],
@@ -229,7 +296,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
             Text('Confirm Delete'),
           ],
         ),
-        content: Text('Are you sure you want to delete employee "$name"? This cannot be undone.'),
+        content: Text(
+          'Are you sure you want to delete employee "$name"? This cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -238,23 +307,37 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           ElevatedButton(
             onPressed: () async {
               try {
+                if (await _useBackendApi()) {
+                  await _userRepository.deleteUser(id);
+                  if (context.mounted) Navigator.pop(context);
+                  _loadUsers();
+                  return;
+                }
+
                 final db = await DatabaseHelper.instance.database;
                 await db.delete('users', where: 'id = ?', whereArgs: [id]);
                 if (context.mounted) {
                   Navigator.pop(context);
-
                 }
                 _loadUsers();
               } catch (e) {
                 print('Error deleting user: $e');
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
+  }
+
+  Future<bool> _useBackendApi() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('use_backend_api') ?? false;
   }
 
   Widget _buildEmployeeList(List<Map<String, dynamic>> list) {
@@ -273,9 +356,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
             Icon(Icons.people_outline, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
-              _searchQuery.isEmpty 
+              _searchQuery.isEmpty
                   ? 'No staff members registered in this category'
-                  : 'No staff members match "$_searchQuery"', 
+                  : 'No staff members match "$_searchQuery"',
               style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
             ),
           ],
@@ -298,9 +381,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         final shift = emp['shift_timing'] as String? ?? '';
 
         // Initials and gradient colors
-        final initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'S';
-        final List<Color> avatarGradient = isActive 
-            ? [AppColors.primary, Colors.indigo] 
+        final initial = name.isNotEmpty
+            ? name.substring(0, 1).toUpperCase()
+            : 'S';
+        final List<Color> avatarGradient = isActive
+            ? [AppColors.primary, Colors.indigo]
             : [Colors.grey, Colors.blueGrey];
 
         return Card(
@@ -308,7 +393,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: isDark ? Colors.grey.shade800 : Colors.grey.shade100, width: 1.5),
+            side: BorderSide(
+              color: isDark ? Colors.grey.shade800 : Colors.grey.shade100,
+              width: 1.5,
+            ),
           ),
           color: isDark ? Colors.grey.shade900 : Colors.white,
           child: Padding(
@@ -338,7 +426,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                   child: Center(
                     child: Text(
                       initial,
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 20),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 20,
+                      ),
                     ),
                   ),
                 ),
@@ -353,26 +445,38 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                           Expanded(
                             child: Text(
                               name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 17,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 8),
                           // Premium badge status
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
-                              color: isActive ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                              color: isActive
+                                  ? Colors.green.withValues(alpha: 0.1)
+                                  : Colors.red.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: isActive ? Colors.green.withValues(alpha: 0.3) : Colors.red.withValues(alpha: 0.3),
+                                color: isActive
+                                    ? Colors.green.withValues(alpha: 0.3)
+                                    : Colors.red.withValues(alpha: 0.3),
                                 width: 1,
                               ),
                             ),
                             child: Text(
                               isActive ? 'Active' : 'Inactive',
                               style: TextStyle(
-                                color: isActive ? Colors.green.shade800 : Colors.red.shade800,
+                                color: isActive
+                                    ? Colors.green.shade800
+                                    : Colors.red.shade800,
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -383,17 +487,31 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                       const SizedBox(height: 4),
                       Text(
                         '@$username  |  $role',
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.w500),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Icon(Icons.phone_outlined, size: 14, color: AppColors.primaryMaterialColor[300]!),
+                          Icon(
+                            Icons.phone_outlined,
+                            size: 14,
+                            color: AppColors.primaryMaterialColor[300]!,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              contact.isNotEmpty ? contact : 'No contact details',
-                              style: TextStyle(color: Colors.grey.shade700, fontSize: 12, fontWeight: FontWeight.w400),
+                              contact.isNotEmpty
+                                  ? contact
+                                  : 'No contact details',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -402,12 +520,20 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Icon(Icons.schedule_outlined, size: 14, color: AppColors.primaryMaterialColor[300]!),
+                          Icon(
+                            Icons.schedule_outlined,
+                            size: 14,
+                            color: AppColors.primaryMaterialColor[300]!,
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               shift.isNotEmpty ? shift : 'No shift assigned',
-                              style: TextStyle(color: Colors.grey.shade700, fontSize: 12, fontWeight: FontWeight.w400),
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -422,12 +548,20 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: Colors.blue,
+                        size: 20,
+                      ),
                       onPressed: () => _showUserDialog(emp),
                       // tooltip disabled,
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                        size: 20,
+                      ),
                       onPressed: () => _confirmDelete(emp['id'], name),
                       // tooltip disabled,
                     ),
@@ -444,17 +578,22 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     // Filtered users by role
     final chefs = _users.where((u) => u['role'] == 'Chef').toList();
     final waiters = _users.where((u) => u['role'] == 'Waiter').toList();
-    final otherStaff = _users.where((u) => u['role'] != 'Chef' && u['role'] != 'Waiter').toList();
+    final otherStaff = _users
+        .where((u) => u['role'] != 'Chef' && u['role'] != 'Waiter')
+        .toList();
 
     return DefaultTabController(
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Staff & User Onboarding', style: TextStyle(fontWeight: FontWeight.bold)),
+          title: const Text(
+            'Staff & User Onboarding',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           backgroundColor: isDark ? null : Colors.white,
           foregroundColor: isDark ? null : Colors.black,
           elevation: 0,
@@ -466,24 +605,39 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
             tabs: const [
               Tab(icon: Icon(Icons.restaurant), text: 'Chefs'),
               Tab(icon: Icon(Icons.directions_walk), text: 'Waiters'),
-              Tab(icon: Icon(Icons.admin_panel_settings_outlined), text: 'Other Staff'),
+              Tab(
+                icon: Icon(Icons.admin_panel_settings_outlined),
+                text: 'Other Staff',
+              ),
             ],
           ),
         ),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+            ? const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              )
             : Column(
                 children: [
                   // Sleek Search Bar
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 12.0,
+                    ),
                     child: TextField(
                       decoration: InputDecoration(
                         hintText: 'Search staff by name or username...',
-                        prefixIcon: const Icon(Icons.search, color: AppColors.primary),
-                        fillColor: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: AppColors.primary,
+                        ),
+                        fillColor: isDark
+                            ? Colors.grey.shade900
+                            : Colors.grey.shade100,
                         filled: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -513,7 +667,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           icon: const Icon(Icons.person_add_alt_1_outlined),
-          label: const Text('Onboard Staff', style: TextStyle(fontWeight: FontWeight.bold)),
+          label: const Text(
+            'Onboard Staff',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
         ),
       ),
     );

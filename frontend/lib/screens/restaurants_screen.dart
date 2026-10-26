@@ -1,6 +1,11 @@
-﻿import 'package:flutter/material.dart';
-import '../core/database/database_helper.dart';
-import 'package:dine_master/core/theme/app_colors.dart';
+
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../core/theme/app_colors.dart';
+import '../repositories/restaurant_repository.dart';
+import '../services/sync_service.dart';
 
 class RestaurantsScreen extends StatefulWidget {
   const RestaurantsScreen({super.key});
@@ -10,21 +15,54 @@ class RestaurantsScreen extends StatefulWidget {
 }
 
 class _RestaurantsScreenState extends State<RestaurantsScreen> {
-  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  final RestaurantRepository _repo = RestaurantRepository();
+
   List<Map<String, dynamic>> _restaurants = [];
   bool _isLoading = true;
+  StreamSubscription<String>? _syncSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadRestaurants();
+
+    // Keep the list in sync when other screens modify restaurant data.
+    _syncSubscription = SyncService.instance.syncEvents.listen((event) {
+      if (mounted && event.contains('restaurant')) {
+        _loadRestaurants();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadRestaurants() async {
+    if (!mounted) return;
+
     setState(() => _isLoading = true);
-    final db = await _dbHelper.database;
-    _restaurants = await db.query('restaurants');
-    setState(() => _isLoading = false);
+
+    try {
+      final list = await _repo.getRestaurants();
+
+      if (!mounted) return;
+
+      setState(() {
+        _restaurants = list;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => _isLoading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load restaurants: $e')),
+      );
+    }
   }
 
   void _showAddRestaurantDialog() {
@@ -41,7 +79,9 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
           children: [
             TextField(
               controller: nameController,
-              decoration: const InputDecoration(labelText: 'Restaurant Name'),
+              decoration: const InputDecoration(
+                labelText: 'Restaurant Name',
+              ),
             ),
             TextField(
               controller: addressController,
@@ -60,16 +100,23 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (nameController.text.isNotEmpty) {
-                final db = await _dbHelper.database;
-                await db.insert('restaurants', {
-                  'name': nameController.text,
-                  'address': addressController.text,
-                  'phone': phoneController.text,
-                  'created_at': DateTime.now().toIso8601String(),
-                });
-                Navigator.pop(context);
-                _loadRestaurants();
+              if (nameController.text.trim().isNotEmpty) {
+                try {
+                  await _repo.createRestaurant(
+                    name: nameController.text.trim(),
+                    address: addressController.text.trim(),
+                    phone: phoneController.text.trim(),
+                  );
+
+                  if (context.mounted) Navigator.pop(context);
+                  _loadRestaurants();
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error adding restaurant: $e')),
+                    );
+                  }
+                }
               }
             },
             child: const Text('Add'),
@@ -80,9 +127,12 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
   }
 
   void _showEditRestaurantDialog(Map<String, dynamic> restaurant) {
-    final nameController = TextEditingController(text: restaurant['name']);
-    final addressController = TextEditingController(text: restaurant['address']);
-    final phoneController = TextEditingController(text: restaurant['phone']);
+    final nameController =
+        TextEditingController(text: restaurant['name']?.toString() ?? '');
+    final addressController =
+        TextEditingController(text: restaurant['address']?.toString() ?? '');
+    final phoneController =
+        TextEditingController(text: restaurant['phone']?.toString() ?? '');
 
     showDialog(
       context: context,
@@ -93,7 +143,9 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
           children: [
             TextField(
               controller: nameController,
-              decoration: const InputDecoration(labelText: 'Restaurant Name'),
+              decoration: const InputDecoration(
+                labelText: 'Restaurant Name',
+              ),
             ),
             TextField(
               controller: addressController,
@@ -112,20 +164,24 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (nameController.text.isNotEmpty) {
-                final db = await _dbHelper.database;
-                await db.update(
-                  'restaurants',
-                  {
-                    'name': nameController.text,
-                    'address': addressController.text,
-                    'phone': phoneController.text,
-                  },
-                  where: 'id = ?',
-                  whereArgs: [restaurant['id']],
-                );
-                Navigator.pop(context);
-                _loadRestaurants();
+              if (nameController.text.trim().isNotEmpty) {
+                try {
+                  await _repo.updateRestaurant(
+                    id: (restaurant['id'] as num).toInt(),
+                    name: nameController.text.trim(),
+                    address: addressController.text.trim(),
+                    phone: phoneController.text.trim(),
+                  );
+
+                  if (context.mounted) Navigator.pop(context);
+                  _loadRestaurants();
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error updating restaurant: $e')),
+                    );
+                  }
+                }
               }
             },
             child: const Text('Save'),
@@ -136,13 +192,64 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
   }
 
   Future<void> _deleteRestaurant(int id) async {
-    final db = await _dbHelper.database;
-    await db.delete(
-      'restaurants',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    _loadRestaurants();
+    // Count linked records before deleting.
+    try {
+      final counts = await _repo.getLinkedRecordCounts(id);
+
+      final totalLinked = (counts['tables'] ?? 0) +
+          (counts['products'] ?? 0) +
+          (counts['orders'] ?? 0);
+
+      if (totalLinked > 0 && mounted) {
+        final parts = <String>[];
+
+        if ((counts['tables'] ?? 0) > 0) {
+          parts.add('${counts['tables']} table(s)');
+        }
+        if ((counts['products'] ?? 0) > 0) {
+          parts.add('${counts['products']} product(s)');
+        }
+        if ((counts['orders'] ?? 0) > 0) {
+          parts.add('${counts['orders']} order(s)');
+        }
+
+        final proceed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Warning: Linked Data Found'),
+            content: Text(
+              'This restaurant has ${parts.join(', ')} linked to it. '
+              'Deleting it may leave orphaned data. Continue?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Delete Anyway'),
+              ),
+            ],
+          ),
+        );
+
+        if (proceed != true) return;
+      }
+
+      await _repo.deleteRestaurant(id);
+      _loadRestaurants();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting restaurant: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -166,6 +273,7 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
                   itemCount: _restaurants.length,
                   itemBuilder: (context, index) {
                     final restaurant = _restaurants[index];
+
                     return Card(
                       elevation: 0,
                       color: Colors.white,
@@ -177,39 +285,62 @@ class _RestaurantsScreenState extends State<RestaurantsScreen> {
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: AppColors.primaryLight,
-                          child: const Icon(Icons.restaurant, color: AppColors.primary),
+                          child: const Icon(
+                            Icons.restaurant,
+                            color: AppColors.primary,
+                          ),
                         ),
                         title: Text(
-                          restaurant['name'],
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          restaurant['name']?.toString() ?? '',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        subtitle: Text(restaurant['address'] ?? 'No address'),
+                        subtitle: Text(
+                          restaurant['address']?.toString() ?? 'No address',
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.grey),
-                              onPressed: () => _showEditRestaurantDialog(restaurant),
+                              icon: const Icon(
+                                Icons.edit,
+                                color: Colors.grey,
+                              ),
+                              onPressed: () =>
+                                  _showEditRestaurantDialog(restaurant),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
+                              icon: const Icon(
+                                Icons.delete,
+                                color: Colors.red,
+                              ),
                               onPressed: () {
                                 showDialog(
                                   context: context,
                                   builder: (context) => AlertDialog(
                                     title: const Text('Delete Restaurant'),
-                                    content: const Text('Are you sure you want to delete this restaurant? This might affect linked data.'),
+                                    content: const Text(
+                                      'Are you sure you want to delete this '
+                                      'restaurant? This might affect linked data.',
+                                    ),
                                     actions: [
                                       TextButton(
-                                        onPressed: () => Navigator.pop(context),
+                                        onPressed: () =>
+                                            Navigator.pop(context),
                                         child: const Text('Cancel'),
                                       ),
                                       ElevatedButton(
                                         onPressed: () {
-                                          _deleteRestaurant(restaurant['id']);
                                           Navigator.pop(context);
+                                          _deleteRestaurant(
+                                            (restaurant['id'] as num).toInt(),
+                                          );
                                         },
-                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                        ),
                                         child: const Text('Delete'),
                                       ),
                                     ],

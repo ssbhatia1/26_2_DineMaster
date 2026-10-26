@@ -1,9 +1,12 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import '../core/api/api_mode.dart';
 import '../core/database/database_helper.dart';
+import 'package:flutter/foundation.dart';
+import '../services/backend_api_client.dart';
 
 class BranchSelectionScreen extends StatefulWidget {
   const BranchSelectionScreen({super.key});
@@ -23,12 +26,40 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen> {
   }
 
   Future<void> _loadRestaurants() async {
-    final db = await DatabaseHelper.instance.database;
-    final restaurants = await db.query('restaurants');
-    setState(() {
-      _restaurants = restaurants;
-      _isLoading = false;
-    });
+    try {
+      List<Map<String, dynamic>> restaurants;
+
+      if (kIsWeb) {
+        final response =
+            await const BackendApiClient().getJson('/api/restaurants');
+
+        if (response is! List) {
+          throw const FormatException('Unexpected restaurants response');
+        }
+
+        restaurants = response
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      } else {
+        final db = await DatabaseHelper.instance.database;
+        restaurants = await db.query('restaurants');
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _restaurants = restaurants;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load branches: $e')),
+      );
+    }
   }
 
   @override
@@ -112,9 +143,11 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen> {
                                           style: const TextStyle(color: Colors.white70),
                                         ),
                                         trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
-                                        onTap: () {
-                                          DatabaseHelper.currentRestaurantId = restaurant['id'];
-                                          context.go('/dashboard');
+                                        onTap: () async {
+                                          final id = restaurant['id'] as int;
+                                          DatabaseHelper.currentRestaurantId = id;
+                                          await ApiMode.setCurrentRestaurantId(id);
+                                          if (context.mounted) context.go('/dashboard');
                                         },
                                       ),
                                     ).animate().fadeIn(delay: (index * 100).ms).slideX(begin: 0.1);
@@ -131,3 +164,5 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen> {
     );
   }
 }
+
+

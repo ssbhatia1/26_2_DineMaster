@@ -2,6 +2,7 @@ class OrderItemModel {
   final int? id;
   final int? orderId;
   final int productId;
+  final String? productName;
   final int quantity;
   final double price;
   final String? notes;
@@ -12,6 +13,7 @@ class OrderItemModel {
     this.id,
     this.orderId,
     required this.productId,
+    this.productName,
     required this.quantity,
     required this.price,
     this.notes,
@@ -23,6 +25,7 @@ class OrderItemModel {
     int? id,
     int? orderId,
     int? productId,
+    String? productName,
     int? quantity,
     double? price,
     String? notes,
@@ -33,6 +36,7 @@ class OrderItemModel {
       id: id ?? this.id,
       orderId: orderId ?? this.orderId,
       productId: productId ?? this.productId,
+      productName: productName ?? this.productName,
       quantity: quantity ?? this.quantity,
       price: price ?? this.price,
       notes: notes ?? this.notes,
@@ -55,15 +59,23 @@ class OrderItemModel {
   }
 
   factory OrderItemModel.fromMap(Map<String, dynamic> map) {
+    dynamic value(String snakeCase, String camelCase) =>
+        map[snakeCase] ?? map[camelCase];
+    int? asInt(dynamic input) =>
+        input is num ? input.toInt() : int.tryParse('$input');
+    double? asDouble(dynamic input) =>
+        input is num ? input.toDouble() : double.tryParse('$input');
+
     return OrderItemModel(
-      id: map['id'],
-      orderId: map['order_id'],
-      productId: map['product_id'],
-      quantity: map['quantity'] ?? 1,
-      price: map['price'] != null ? double.parse(map['price'].toString()) : 0.0,
-      notes: map['notes'],
-      status: map['status'] ?? 'Pending',
-      kotId: map['kot_id'],
+      id: asInt(map['id']),
+      orderId: asInt(value('order_id', 'orderId')),
+      productId: asInt(value('product_id', 'productId')) ?? 0,
+      quantity: asInt(map['quantity']) ?? 1,
+      price: asDouble(map['price']) ?? 0.0,
+      notes: map['notes']?.toString(),
+      productName: map['product_name'] ?? map['productName'],
+      status: map['status']?.toString() ?? 'Pending',
+      kotId: asInt(value('kot_id', 'kotId')),
     );
   }
 }
@@ -82,7 +94,7 @@ class OrderModel {
   final String paymentStatus; // Unpaid, Paid
   final String? paymentMethod;
   final double discountAmount;
-  
+
   // Additional Tracking Fields
   final String? customerName;
   final String? customerPhone;
@@ -197,29 +209,50 @@ class OrderModel {
     };
   }
 
-  factory OrderModel.fromMap(Map<String, dynamic> map, {List<OrderItemModel>? items}) {
+  factory OrderModel.fromMap(
+    Map<String, dynamic> map, {
+    List<OrderItemModel>? items,
+  }) {
+    dynamic value(String snakeCase, String camelCase) =>
+        map[snakeCase] ?? map[camelCase];
+
     return OrderModel(
-      id: map['id'],
-      tableId: map['table_id'],
-      customerId: map['customer_id'],
-      waiterId: map['waiter_id'],
-      totalAmount: map['total_amount'] != null ? double.parse(map['total_amount'].toString()) : 0.0,
-      status: map['status'] ?? 'Received',
-      type: map['type'] ?? 'Dine-in',
-      orderTime: map['order_time'] ?? DateTime.now().toIso8601String(),
-      notes: map['notes'],
-      restaurantId: map['restaurant_id'],
-      paymentStatus: map['payment_status'] ?? 'Unpaid',
-      paymentMethod: map['payment_method'],
-      discountAmount: map['discount_amount'] != null ? double.parse(map['discount_amount'].toString()) : 0.0,
-      customerName: map['customer_name'],
-      customerPhone: map['customer_phone'],
-      orderTakerName: map['order_taker_name'],
-      orderTakerId: map['order_taker_id'],
-      deliveredByName: map['delivered_by_name'],
-      deliveredById: map['delivered_by_id'],
-      deliveryTimestamp: map['delivery_timestamp'],
-      guestCount: map['guest_count'],
+      id: (map['id'] as num?)?.toInt(),
+      tableId: (value('table_id', 'tableId') as num?)?.toInt(),
+      customerId: (value('customer_id', 'customerId') as num?)?.toInt(),
+      waiterId: (value('waiter_id', 'waiterId') as num?)?.toInt(),
+      totalAmount: value('total_amount', 'totalAmount') != null
+          ? double.parse(value('total_amount', 'totalAmount').toString())
+          : 0.0,
+      status: map['status']?.toString() ?? 'Received',
+      type: map['type']?.toString() ?? 'Dine-in',
+      orderTime:
+          value('order_time', 'orderTime')?.toString() ??
+          DateTime.now().toIso8601String(),
+      notes: map['notes']?.toString(),
+      restaurantId: (value('restaurant_id', 'restaurantId') as num?)?.toInt(),
+      paymentStatus:
+          value('payment_status', 'paymentStatus')?.toString() ?? 'Unpaid',
+      paymentMethod: value('payment_method', 'paymentMethod')?.toString(),
+      discountAmount: value('discount_amount', 'discountAmount') != null
+          ? double.parse(value('discount_amount', 'discountAmount').toString())
+          : 0.0,
+      customerName: value('customer_name', 'customerName')?.toString(),
+      customerPhone: value('customer_phone', 'customerPhone')?.toString(),
+      orderTakerName:
+          value('order_taker_name', 'orderTakerName')?.toString() ??
+          map['orderTaker']?.toString(),
+      orderTakerId: (value('order_taker_id', 'orderTakerId') as num?)?.toInt(),
+      deliveredByName:
+          value('delivered_by_name', 'deliveredByName')?.toString() ??
+          map['deliveredBy']?.toString(),
+      deliveredById: (value('delivered_by_id', 'deliveredById') as num?)
+          ?.toInt(),
+      deliveryTimestamp: value(
+        'delivery_timestamp',
+        'deliveryTimestamp',
+      )?.toString(),
+      guestCount: (value('guest_count', 'guestCount') as num?)?.toInt(),
       items: items,
     );
   }

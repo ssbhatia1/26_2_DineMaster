@@ -18,6 +18,7 @@
 
     <properties>
         <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jjwt.version>0.12.5</jjwt.version>
         <cloudinary.version>1.39.0</cloudinary.version>
     </properties>
@@ -28,6 +29,7 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        
 
         <!-- Spring Boot Data JPA -->
         <dependency>
@@ -87,6 +89,11 @@
             <version>${cloudinary.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-hibernate6</artifactId>
+        </dependency>
+
         <!-- Spring Boot Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -98,6 +105,17 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+        
+        <!-- Flyway Database Migrations -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
