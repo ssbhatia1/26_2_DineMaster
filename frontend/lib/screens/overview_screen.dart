@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,7 @@ import 'package:dine_master/core/theme/app_colors.dart';
 import '../core/database/database_helper.dart';
 import '../repositories/table_repository.dart';
 import '../services/sync_service.dart';
+import '../services/backend_api_client.dart';
 
 class OverviewScreen extends StatefulWidget {
   const OverviewScreen({super.key});
@@ -51,10 +53,43 @@ class _OverviewScreenState extends State<OverviewScreen> {
       final prefs = await SharedPreferences.getInstance();
       final username = prefs.getString('username') ?? 'User';
 
+      if (kIsWeb) {
+        final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
+        final response = await BackendApiClient().getJson(
+          '/api/inventory?restaurantId=$restaurantId',
+        );
+
+        final List<dynamic> items = response is List
+            ? response
+            : (response is Map
+                ? (response['content'] as List<dynamic>? ?? [])
+                : <dynamic>[]);
+
+        final lowStock = items.where((raw) {
+          if (raw is! Map) return false;
+          final stock = num.tryParse(
+                (raw['currentStock'] ?? raw['current_stock'] ?? 0).toString(),
+              ) ?? 0;
+          final threshold = num.tryParse(
+                (raw['lowStockThreshold'] ?? raw['low_stock_threshold'] ?? 0)
+                    .toString(),
+              ) ?? 0;
+          return stock > 0 && stock <= threshold;
+        }).length;
+
+        if (mounted) {
+          setState(() {
+            _username = username;
+            _lowStockCount = lowStock;
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
       final db = await DatabaseHelper.instance.database;
       final restaurantId = DatabaseHelper.currentRestaurantId;
 
-      // 1. Total Sales (Paid orders)
       final salesRes = await db.rawQuery(
         "SELECT SUM(total_amount) as total FROM orders WHERE restaurant_id = ? AND payment_status = 'Paid'",
         [restaurantId],
@@ -62,14 +97,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
       final totalSalesVal = salesRes.first['total'] as num?;
       final totalSales = totalSalesVal?.toDouble() ?? 0.0;
 
-      // 2. Live Orders (Active states)
       final liveRes = await db.rawQuery(
         "SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND status IN ('Received', 'Sent to Kitchen', 'Preparing', 'Ready', 'Cooking', 'Billing Pending')",
         [restaurantId],
       );
       final liveOrders = liveRes.first['count'] as int? ?? 0;
 
-      // 3. Occupied / Total Tables
       await TableRepository().syncAllTableStatuses(restaurantId);
       final occupiedRes = await db.rawQuery(
         "SELECT COUNT(*) as count FROM tables WHERE (restaurant_id = ? OR restaurant_id IS NULL) AND status = 'Occupied'",
@@ -83,14 +116,12 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
       final totalTables = totalTablesRes.first['count'] as int? ?? 0;
 
-      // 4. Low stock inventory items
       final lowStockRes = await db.rawQuery(
-        "SELECT COUNT(*) as count FROM inventory WHERE restaurant_id = ? AND current_stock <= low_stock_threshold",
+        "SELECT COUNT(*) as count FROM inventory WHERE restaurant_id = ? AND current_stock > 0 AND current_stock <= low_stock_threshold",
         [restaurantId],
       );
-      final lowStock = lowStockRes.first['count'] as int? ?? 0;
+      final lowStock = (lowStockRes.first['count'] as num?)?.toInt() ?? 0;
 
-      // 5. Recent orders
       final recentOrdersRes = await db.rawQuery('''
         SELECT o.*, t.table_number,
                (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as item_count
@@ -120,7 +151,6 @@ class _OverviewScreenState extends State<OverviewScreen> {
       }
     }
   }
-
   Color _statusColor(String status) {
     switch (status) {
       case 'Preparing':
@@ -389,3 +419,4 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 }
+
