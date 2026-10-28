@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 import '../core/database/database_helper.dart';
 import '../repositories/table_repository.dart';
+import '../models/table_model.dart';
 import '../services/sync_service.dart';
 import '../services/backend_api_client.dart';
 
@@ -55,32 +56,52 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
       if (kIsWeb) {
         final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
-        final response = await BackendApiClient().getJson(
-          '/api/inventory?restaurantId=$restaurantId',
-        );
 
-        final List<dynamic> items = response is List
-            ? response
-            : (response is Map
-                ? (response['content'] as List<dynamic>? ?? [])
+        final results = await Future.wait([
+          BackendApiClient().getJson(
+            '/api/inventory?restaurantId=$restaurantId',
+          ),
+          TableRepository().getTables(),
+        ]);
+
+        final inventoryResponse = results[0];
+        final List<dynamic> items = inventoryResponse is List
+            ? inventoryResponse
+            : (inventoryResponse is Map
+                ? (inventoryResponse['content'] as List<dynamic>? ?? [])
                 : <dynamic>[]);
 
         final lowStock = items.where((raw) {
           if (raw is! Map) return false;
+
           final stock = num.tryParse(
                 (raw['currentStock'] ?? raw['current_stock'] ?? 0).toString(),
-              ) ?? 0;
+              ) ??
+              0;
+
           final threshold = num.tryParse(
-                (raw['lowStockThreshold'] ?? raw['low_stock_threshold'] ?? 0)
+                (raw['lowStockThreshold'] ??
+                        raw['low_stock_threshold'] ??
+                        0)
                     .toString(),
-              ) ?? 0;
+              ) ??
+              0;
+
           return stock > 0 && stock <= threshold;
         }).length;
+
+        final tables = results[1] as List<TableModel>;
+        final totalTables = tables.where((table) => table.isActive).length;
+        final occupiedTables = tables
+            .where((table) => table.isActive && table.isOccupied)
+            .length;
 
         if (mounted) {
           setState(() {
             _username = username;
             _lowStockCount = lowStock;
+            _occupiedTablesCount = occupiedTables;
+            _totalTablesCount = totalTables;
             _isLoading = false;
           });
         }
