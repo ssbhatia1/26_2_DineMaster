@@ -1,10 +1,10 @@
-# DineMaster — Execution & Run Guide
+﻿# DineMaster â€” Execution & Run Guide
 
 This document defines the exact execution paths, environment commands, and options for running the **Spring Boot Backend** and the **Flutter Frontend**.
 
 ---
 
-## 🧭 Project Execution Path Map
+## ðŸ§­ Project Execution Path Map
 
 | Component | Relative Path | Default Port | Description |
 | :--- | :--- | :--- | :--- |
@@ -15,34 +15,34 @@ This document defines the exact execution paths, environment commands, and optio
 
 ---
 
-## 🔒 0. Activating the Isolated Project Environment First
+## ðŸ”’ 0. Activating the Isolated Project Environment First
 
-Before executing backend or frontend commands, activate the project-contained environment (`.venv`) in your terminal session. This automatically configures the project's isolated JDK 21 and Flutter SDK:
+The project `.venv` is a Python-only virtual environment for repository tooling. It does not install or configure Java or Flutter. Activate it only when running Python tooling:
 
 - **Windows PowerShell:**
   ```powershell
-  .\Activate.ps1
+  .\.venv\Scripts\Activate.ps1
   ```
 - **Windows Command Prompt (CMD):**
   ```cmd
-  activate.bat
+  .venv\Scripts\activate.bat
   ```
 - **Linux / macOS (Bash):**
   ```bash
-  source ./activate.sh
+  source .venv/bin/activate
   ```
 
-> *Tip:* Run `check-env` in PowerShell or Bash to display the active toolchain paths. Run `deactivate` when finished.
+> *Tip:* Verify tools separately with `java -version`, `.\mvnw.cmd -version` (inside `backend`), and `flutter --version`. Use `deactivate` to exit the Python virtual environment.
 
 ---
 
-## ☕ 1. Spring Boot Backend Execution
+## â˜• 1. Spring Boot Backend Execution
 
 ### Working Directory
 ```bash
 cd backend
 ```
-*Full Path:* `C:\Users\ssbha\Desktop\CI_Projects\26_2_DineMaster\backend`
+*Path:* `backend/` (from the project root)
 
 ---
 
@@ -84,7 +84,7 @@ Connects to local PostgreSQL on port `5432` (database `dinemaster`):
   ```
 
 #### Option 2: Run in Standalone / Zero-Setup Mode (`test` profile)
-Uses embedded H2 in-memory database — no local PostgreSQL server required:
+Uses embedded H2 in-memory database â€” no local PostgreSQL server required:
 
 - **Windows (PowerShell / Command Prompt):**
   ```powershell
@@ -134,13 +134,13 @@ curl http://localhost:8081/api/payments/config
 
 ---
 
-## 📱 2. Flutter Frontend Execution
+## ðŸ“± 2. Flutter Frontend Execution
 
 ### Working Directory
 ```bash
 cd frontend
 ```
-*Full Path:* `C:\Users\ssbha\Desktop\CI_Projects\26_2_DineMaster\frontend`
+*Path:* `frontend/` (from the project root)
 
 ---
 
@@ -233,23 +233,23 @@ flutter build web --release
 
 ---
 
-## ⚡ 3. Running Both Frontend & Backend Concurrently
+## âš¡ 3. Running Both Frontend & Backend Concurrently
 
 ### Terminal 1: Backend
 ```powershell
-cd C:\Users\ssbha\Desktop\CI_Projects\26_2_DineMaster\backend
+cd backend
 .\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
 ### Terminal 2: Frontend
 ```powershell
-cd C:\Users\ssbha\Desktop\CI_Projects\26_2_DineMaster\frontend
+cd frontend
 flutter run -d windows
 ```
 
 ---
 
-## 🔑 4. Default Credentials & Ports
+## ðŸ”‘ 4. Default Credentials & Ports
 
 | Service | Host / Port | Default Credentials |
 | :--- | :--- | :--- |
@@ -257,3 +257,4 @@ flutter run -d windows
 | **Spring Boot Backend** | `http://localhost:8081` | Accepts JWT / REST endpoints |
 | **Embedded Shelf Server** | `http://localhost:8080` | Local Wi-Fi QR customer ordering |
 | **PostgreSQL Database** | `localhost:5432` | **DB:** `dinemaster` \| **User:** `postgres` |
+

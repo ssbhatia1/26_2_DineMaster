@@ -1,11 +1,13 @@
+﻿import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../core/api/api_mode.dart';
 import '../core/database/database_helper.dart';
 import '../models/user_model.dart';
 import '../repositories/user_repository.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:dine_master/core/theme/app_colors.dart';
 import '../services/sync_service.dart';
-import 'dart:async';
+import 'package:dine_master/core/theme/app_colors.dart';
 
 class UserManagementScreen extends StatefulWidget {
   const UserManagementScreen({super.key});
@@ -20,17 +22,20 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   bool _isLoading = true;
   bool _obscurePassword = true;
   String _searchQuery = '';
+
   late TabController _tabController;
   StreamSubscription? _syncSubscription;
+
   final UserRepository _userRepository = UserRepository();
 
   @override
   void initState() {
     super.initState();
+
     _tabController = TabController(length: 3, vsync: this);
     _loadUsers();
 
-    // Subscribe to database changes to sync in real time across screens
+    // Keep existing synchronization behavior on supported platforms.
     _syncSubscription = SyncService.instance.syncEvents.listen((event) {
       if (mounted) {
         _loadUsers();
@@ -45,56 +50,119 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     super.dispose();
   }
 
+  // Web always uses the backend API.
+  // Desktop/mobile continue using the existing ApiMode preference.
+  Future<bool> _useBackendApi() {
+    return ApiMode.useBackendApi();
+  }
+
+  // Normalize roles returned by the API or stored in SQLite.
+  // Examples: WAITER, Waiter, ROLE_WAITER -> Waiter.
+  String _displayRole(String role) {
+    final normalized = role
+        .trim()
+        .toUpperCase()
+        .replaceAll(RegExp(r'[\s-]+'), '_')
+        .replaceFirst(RegExp(r'^ROLE_'), '');
+
+    switch (normalized) {
+      case 'OWNER':
+        return 'Owner';
+      case 'MANAGER':
+        return 'Manager';
+      case 'CASHIER':
+        return 'Cashier';
+      case 'WAITER':
+        return 'Waiter';
+      case 'CHEF':
+      case 'COOK':
+        return 'Chef';
+      case 'STAFF':
+      case 'EMPLOYEE':
+        return 'Other Staff';
+      default:
+        return role.trim();
+    }
+  }
+
+  bool _isActiveValue(dynamic value) {
+    return value == true || value == 1 || value?.toString() == '1';
+  }
+
   Future<void> _loadUsers() async {
     try {
+      List<Map<String, dynamic>> users;
+
       if (await _useBackendApi()) {
-        final users = await _userRepository.getUsers();
-        if (!mounted) return;
-        setState(() {
-          _users = users.map((user) => user.toMap()).toList();
-          _isLoading = false;
-        });
-        return;
+        final result = await _userRepository.getUsers();
+        users = result.map((user) {
+          final data = user.toMap();
+          data['role'] = _displayRole(user.role);
+          data['is_active'] = user.isActive ? 1 : 0;
+          return data;
+        }).toList();
+      } else {
+        final db = await DatabaseHelper.instance.database;
+        users = await db.query('users', orderBy: 'name ASC');
       }
 
-      final db = await DatabaseHelper.instance.database;
-      final users = await db.query('users', orderBy: 'name ASC');
+      if (!mounted) return;
+
       setState(() {
         _users = users;
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading users: $e');
-      setState(() => _isLoading = false);
+      debugPrint('Error loading users: $e');
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   void _showUserDialog([Map<String, dynamic>? user]) {
     _obscurePassword = true;
+
     final isEditing = user != null;
+
     final nameController = TextEditingController(
-      text: isEditing ? user['name'] : '',
+      text: isEditing ? (user['name'] ?? '').toString() : '',
     );
+
     final usernameController = TextEditingController(
-      text: isEditing ? user['username'] : '',
+      text: isEditing ? (user['username'] ?? '').toString() : '',
     );
-    // Prefill edit password with placeholder
+
+    // Keep the existing password unchanged unless the user edits it.
     final passwordController = TextEditingController(
       text: isEditing ? '********' : '',
     );
+
     final contactController = TextEditingController(
-      text: isEditing ? (user['contact_details'] ?? '') : '',
-    );
-    final shiftController = TextEditingController(
-      text: isEditing ? (user['shift_timing'] ?? '') : '',
+      text: isEditing
+          ? (user['contact_details'] ?? user['contactDetails'] ?? '').toString()
+          : '',
     );
 
-    String role = isEditing ? user['role'] : 'Waiter';
-    bool isActive = isEditing ? (user['is_active'] == 1) : true;
+    final shiftController = TextEditingController(
+      text: isEditing
+          ? (user['shift_timing'] ?? user['shiftTiming'] ?? '').toString()
+          : '',
+    );
+
+    // Dropdown value must exactly match one of the displayed items.
+    String role = isEditing
+        ? _displayRole((user['role'] ?? 'Waiter').toString())
+        : 'Waiter';
+
+    bool isActive = isEditing
+        ? _isActiveValue(user['is_active'] ?? user['active'])
+        : true;
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
+      builder: (dialogContext) => StatefulBuilder(
         builder: (context, setStateDialog) => AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -108,7 +176,11 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 color: AppColors.primary,
               ),
               const SizedBox(width: 8),
-              Text(isEditing ? 'Edit Employee Profile' : 'Add New Employee'),
+              Expanded(
+                child: Text(
+                  isEditing ? 'Edit Employee Profile' : 'Add New Employee',
+                ),
+              ),
             ],
           ),
           content: SingleChildScrollView(
@@ -158,12 +230,24 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                   obscureText: _obscurePassword,
                 ),
                 const SizedBox(height: 12),
+
+                // All possible values are normalized before being assigned.
                 DropdownButtonFormField<String>(
-                  value: role,
-                  items: ['Owner', 'Manager', 'Cashier', 'Waiter', 'Chef']
-                      .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                  key: ValueKey(role),
+                  initialValue: role,
+                  items: const ['Owner', 'Manager', 'Cashier', 'Waiter', 'Chef']
+                      .map((r) {
+                        return DropdownMenuItem<String>(
+                          value: r,
+                          child: Text(r),
+                        );
+                      })
                       .toList(),
-                  onChanged: (val) => setStateDialog(() => role = val!),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setStateDialog(() => role = value);
+                    }
+                  },
                   decoration: const InputDecoration(
                     labelText: 'Role',
                     border: OutlineInputBorder(),
@@ -195,14 +279,16 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                   title: const Text('Status (Active)'),
                   value: isActive,
                   activeColor: Colors.green,
-                  onChanged: (val) => setStateDialog(() => isActive = val),
+                  onChanged: (value) {
+                    setStateDialog(() => isActive = value);
+                  },
                 ),
               ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
@@ -217,61 +303,74 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                   return;
                 }
 
-                if (await _useBackendApi()) {
-                  final apiUser = UserModel(
-                    id: isEditing ? user['id'] as int? : null,
-                    name: name,
-                    username: username,
-                    password: password == '********' ? '' : password,
-                    role: role,
-                    isActive: isActive,
-                    createdAt: isEditing
-                        ? (user['created_at'] ?? user['createdAt'] ?? '')
-                              .toString()
-                        : DateTime.now().toIso8601String(),
-                  );
-                  if (isEditing) {
-                    await _userRepository.updateUser(apiUser);
+                try {
+                  if (await _useBackendApi()) {
+                    final apiUser = UserModel(
+                      id: isEditing ? (user['id'] as num?)?.toInt() : null,
+                      name: name,
+                      username: username,
+                      password: password == '********' ? '' : password,
+                      role: role,
+                      isActive: isActive,
+                      contactDetails: contact,
+                      shiftTiming: shift,
+                      createdAt: isEditing
+                          ? (user['created_at'] ?? user['createdAt'] ?? '')
+                                .toString()
+                          : DateTime.now().toIso8601String(),
+                    );
+
+                    if (isEditing) {
+                      await _userRepository.updateUser(apiUser);
+                    } else {
+                      await _userRepository.addUser(apiUser);
+                    }
                   } else {
-                    await _userRepository.addUser(apiUser);
+                    final db = await DatabaseHelper.instance.database;
+
+                    final Map<String, dynamic> data = {
+                      'name': name,
+                      'role': role,
+                      'is_active': isActive ? 1 : 0,
+                      'contact_details': contact,
+                      'shift_timing': shift,
+                    };
+
+                    if (!isEditing) {
+                      data['username'] = username;
+                      data['password'] = DatabaseHelper.hashPassword(password);
+                      data['created_at'] = DateTime.now().toIso8601String();
+
+                      await db.insert('users', data);
+                    } else {
+                      if (password != '********') {
+                        data['password'] = DatabaseHelper.hashPassword(
+                          password,
+                        );
+                      }
+
+                      await db.update(
+                        'users',
+                        data,
+                        where: 'id = ?',
+                        whereArgs: [user['id']],
+                      );
+                    }
                   }
-                  if (context.mounted) Navigator.pop(context);
-                  _loadUsers();
-                  return;
-                }
 
-                final db = await DatabaseHelper.instance.database;
+                  if (!mounted || !dialogContext.mounted) return;
 
-                final Map<String, dynamic> data = {
-                  'name': name,
-                  'role': role,
-                  'is_active': isActive ? 1 : 0,
-                  'contact_details': contact,
-                  'shift_timing': shift,
-                };
+                  Navigator.pop(dialogContext);
+                  await _loadUsers();
+                } catch (e) {
+                  debugPrint('Error saving user: $e');
 
-                // Hash password if edited/new
-                if (!isEditing) {
-                  data['username'] = username;
-                  data['password'] = DatabaseHelper.hashPassword(password);
-                  data['created_at'] = DateTime.now().toIso8601String();
-                  await db.insert('users', data);
-                } else {
-                  if (password != '********') {
-                    data['password'] = DatabaseHelper.hashPassword(password);
+                  if (dialogContext.mounted) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      SnackBar(content: Text('Unable to save employee: $e')),
+                    );
                   }
-                  await db.update(
-                    'users',
-                    data,
-                    where: 'id = ?',
-                    whereArgs: [user['id']],
-                  );
                 }
-
-                if (context.mounted) {
-                  Navigator.pop(context);
-                }
-                _loadUsers();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
@@ -288,7 +387,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   void _confirmDelete(int id, String name) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.red),
@@ -301,7 +400,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
@@ -309,19 +408,23 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               try {
                 if (await _useBackendApi()) {
                   await _userRepository.deleteUser(id);
-                  if (context.mounted) Navigator.pop(context);
-                  _loadUsers();
-                  return;
+                } else {
+                  final db = await DatabaseHelper.instance.database;
+                  await db.delete('users', where: 'id = ?', whereArgs: [id]);
                 }
 
-                final db = await DatabaseHelper.instance.database;
-                await db.delete('users', where: 'id = ?', whereArgs: [id]);
-                if (context.mounted) {
-                  Navigator.pop(context);
-                }
-                _loadUsers();
+                if (!mounted || !dialogContext.mounted) return;
+
+                Navigator.pop(dialogContext);
+                await _loadUsers();
               } catch (e) {
-                print('Error deleting user: $e');
+                debugPrint('Error deleting user: $e');
+
+                if (dialogContext.mounted) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    SnackBar(content: Text('Unable to delete employee: $e')),
+                  );
+                }
               }
             },
             style: ElevatedButton.styleFrom(
@@ -335,16 +438,13 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     );
   }
 
-  Future<bool> _useBackendApi() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('use_backend_api') ?? false;
-  }
-
   Widget _buildEmployeeList(List<Map<String, dynamic>> list) {
-    final filtered = list.where((emp) {
-      final name = (emp['name'] as String? ?? '').toLowerCase();
-      final username = (emp['username'] as String? ?? '').toLowerCase();
-      final query = _searchQuery.toLowerCase();
+    final query = _searchQuery.toLowerCase();
+
+    final filtered = list.where((employee) {
+      final name = (employee['name'] ?? '').toString().toLowerCase();
+      final username = (employee['username'] ?? '').toString().toLowerCase();
+
       return name.contains(query) || username.contains(query);
     }).toList();
 
@@ -372,19 +472,29 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       itemCount: filtered.length,
       itemBuilder: (context, index) {
-        final emp = filtered[index];
-        final bool isActive = emp['is_active'] == 1;
-        final name = emp['name'] as String? ?? 'N/A';
-        final username = emp['username'] as String? ?? '';
-        final role = emp['role'] as String? ?? '';
-        final contact = emp['contact_details'] as String? ?? '';
-        final shift = emp['shift_timing'] as String? ?? '';
+        final employee = filtered[index];
 
-        // Initials and gradient colors
+        final isActive = _isActiveValue(
+          employee['is_active'] ?? employee['active'],
+        );
+
+        final name = (employee['name'] ?? 'N/A').toString();
+        final username = (employee['username'] ?? '').toString();
+        final role = _displayRole((employee['role'] ?? '').toString());
+
+        final contact =
+            (employee['contact_details'] ?? employee['contactDetails'] ?? '')
+                .toString();
+
+        final shift =
+            (employee['shift_timing'] ?? employee['shiftTiming'] ?? '')
+                .toString();
+
         final initial = name.isNotEmpty
             ? name.substring(0, 1).toUpperCase()
             : 'S';
-        final List<Color> avatarGradient = isActive
+
+        final avatarGradient = isActive
             ? [AppColors.primary, Colors.indigo]
             : [Colors.grey, Colors.blueGrey];
 
@@ -400,11 +510,10 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           ),
           color: isDark ? Colors.grey.shade900 : Colors.white,
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Avatar with modern gradient
                 Container(
                   width: 52,
                   height: 52,
@@ -435,7 +544,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                   ),
                 ),
                 const SizedBox(width: 16),
-                // Details
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -453,7 +561,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Premium badge status
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
@@ -468,7 +575,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                                 color: isActive
                                     ? Colors.green.withValues(alpha: 0.3)
                                     : Colors.red.withValues(alpha: 0.3),
-                                width: 1,
                               ),
                             ),
                             child: Text(
@@ -510,7 +616,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                               style: TextStyle(
                                 color: Colors.grey.shade700,
                                 fontSize: 12,
-                                fontWeight: FontWeight.w400,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -532,7 +637,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                               style: TextStyle(
                                 color: Colors.grey.shade700,
                                 fontSize: 12,
-                                fontWeight: FontWeight.w400,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -543,9 +647,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Action options
                 Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     IconButton(
                       icon: const Icon(
@@ -553,8 +655,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                         color: Colors.blue,
                         size: 20,
                       ),
-                      onPressed: () => _showUserDialog(emp),
-                      // tooltip disabled,
+                      onPressed: () => _showUserDialog(employee),
                     ),
                     IconButton(
                       icon: const Icon(
@@ -562,8 +663,12 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                         color: Colors.red,
                         size: 20,
                       ),
-                      onPressed: () => _confirmDelete(emp['id'], name),
-                      // tooltip disabled,
+                      onPressed: () {
+                        final id = (employee['id'] as num?)?.toInt();
+                        if (id != null) {
+                          _confirmDelete(id, name);
+                        }
+                      },
                     ),
                   ],
                 ),
@@ -579,100 +684,105 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Filtered users by role
-    final chefs = _users.where((u) => u['role'] == 'Chef').toList();
-    final waiters = _users.where((u) => u['role'] == 'Waiter').toList();
-    final otherStaff = _users
-        .where((u) => u['role'] != 'Chef' && u['role'] != 'Waiter')
-        .toList();
+    // Normalize role names before filtering so API roles like CHEF/WAITER
+    // appear in the correct tabs.
+    final chefs = _users.where((employee) {
+      return _displayRole((employee['role'] ?? '').toString()) == 'Chef';
+    }).toList();
 
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            'Staff & User Onboarding',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: isDark ? null : Colors.white,
-          foregroundColor: isDark ? null : Colors.black,
-          elevation: 0,
-          bottom: TabBar(
-            controller: _tabController,
-            labelColor: AppColors.primary,
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: AppColors.primary,
-            tabs: const [
-              Tab(icon: Icon(Icons.restaurant), text: 'Chefs'),
-              Tab(icon: Icon(Icons.directions_walk), text: 'Waiters'),
-              Tab(
-                icon: Icon(Icons.admin_panel_settings_outlined),
-                text: 'Other Staff',
-              ),
-            ],
-          ),
+    final waiters = _users.where((employee) {
+      return _displayRole((employee['role'] ?? '').toString()) == 'Waiter';
+    }).toList();
+
+    final otherStaff = _users.where((employee) {
+      final role = _displayRole((employee['role'] ?? '').toString());
+
+      return role != 'Chef' && role != 'Waiter';
+    }).toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Staff & User Onboarding',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        body: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              )
-            : Column(
-                children: [
-                  // Sleek Search Bar
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16.0,
-                      vertical: 12.0,
-                    ),
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search staff by name or username...',
-                        prefixIcon: const Icon(
-                          Icons.search,
-                          color: AppColors.primary,
-                        ),
-                        fillColor: isDark
-                            ? Colors.grey.shade900
-                            : Colors.grey.shade100,
-                        filled: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
+        backgroundColor: isDark ? null : Colors.white,
+        foregroundColor: isDark ? null : Colors.black,
+        elevation: 0,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: AppColors.primary,
+          tabs: const [
+            Tab(icon: Icon(Icons.restaurant), text: 'Chefs'),
+            Tab(icon: Icon(Icons.directions_walk), text: 'Waiters'),
+            Tab(
+              icon: Icon(Icons.admin_panel_settings_outlined),
+              text: 'Other Staff',
+            ),
+          ],
+        ),
+      ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
+          : Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search staff by name or username...',
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: AppColors.primary,
                       ),
-                      onChanged: (val) {
-                        setState(() {
-                          _searchQuery = val;
-                        });
-                      },
+                      fillColor: isDark
+                          ? Colors.grey.shade900
+                          : Colors.grey.shade100,
+                      filled: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value;
+                      });
+                    },
                   ),
-                  Expanded(
-                    child: TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _buildEmployeeList(chefs),
-                        _buildEmployeeList(waiters),
-                        _buildEmployeeList(otherStaff),
-                      ],
-                    ),
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildEmployeeList(chefs),
+                      _buildEmployeeList(waiters),
+                      _buildEmployeeList(otherStaff),
+                    ],
                   ),
-                ],
-              ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _showUserDialog(),
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          icon: const Icon(Icons.person_add_alt_1_outlined),
-          label: const Text(
-            'Onboard Staff',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
+                ),
+              ],
+            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showUserDialog(),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.person_add_alt_1_outlined),
+        label: const Text(
+          'Onboard Staff',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
     );
   }
 }
+
+

@@ -6,6 +6,8 @@
   final String role;
   final bool isActive;
   final String createdAt;
+  final String contactDetails;
+  final String shiftTiming;
 
   UserModel({
     this.id,
@@ -15,6 +17,8 @@
     required this.role,
     this.isActive = true,
     required this.createdAt,
+    this.contactDetails = '',
+    this.shiftTiming = '',
   });
 
   Map<String, dynamic> toMap() {
@@ -26,19 +30,27 @@
       'role': role,
       'is_active': isActive ? 1 : 0,
       'created_at': createdAt,
+      'contact_details': contactDetails,
+      'shift_timing': shiftTiming,
     };
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
     final active = map['is_active'] ?? map['active'];
+
     return UserModel(
-      id: map['id'],
-      name: map['name'] ?? '',
-      username: map['username'] ?? '',
-      password: map['password'] ?? '',
-      role: map['role'] ?? '',
-      isActive: active == 1 || active == true,
-      createdAt: map['created_at'] ?? map['createdAt'] ?? '',
+      id: map['id'] == null ? null : (map['id'] as num).toInt(),
+      name: (map['name'] ?? '').toString(),
+      username: (map['username'] ?? '').toString(),
+      password: (map['password'] ?? '').toString(),
+      role: (map['role'] ?? '').toString(),
+      isActive: active == 1 || active == true ||
+          active?.toString().toLowerCase() == 'true',
+      createdAt: (map['created_at'] ?? map['createdAt'] ?? '').toString(),
+      contactDetails:
+          (map['contact_details'] ?? map['contactDetails'] ?? '').toString(),
+      shiftTiming:
+          (map['shift_timing'] ?? map['shiftTiming'] ?? '').toString(),
     );
   }
 }

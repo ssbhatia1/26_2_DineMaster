@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../repositories/table_repository.dart';
+import '../repositories/user_repository.dart';
 import '../models/table_model.dart';
 import '../core/database/database_helper.dart';
+import '../core/api/api_mode.dart';
+import '../services/backend_api_client.dart';
 import '../services/sync_service.dart';
 import '../widgets/searchable_dropdown.dart';
 
@@ -71,15 +74,32 @@ class _TablesScreenState extends State<TablesScreen> {
     super.dispose();
   }
 
+  final UserRepository _userRepository = UserRepository();
+
   Future<void> _loadWaiters() async {
     try {
-      final db = await DatabaseHelper.instance.database;
-      final waiters = await db.query(
-        'users',
-        where: 'role = ? AND is_active = 1',
-        whereArgs: ['Waiter'],
-        orderBy: 'name ASC',
-      );
+      final users = await _userRepository.getUsers();
+      final waiters =
+          users
+              .where(
+                (user) =>
+                    user.role.trim().toLowerCase() == 'waiter' && user.isActive,
+              )
+              .map(
+                (user) => <String, dynamic>{
+                  'id': user.id,
+                  'name': user.name,
+                  'role': user.role,
+                  'is_active': user.isActive ? 1 : 0,
+                },
+              )
+              .toList()
+            ..sort(
+              (a, b) => (a['name'] as String).toLowerCase().compareTo(
+                (b['name'] as String).toLowerCase(),
+              ),
+            );
+
       if (!mounted) return;
       setState(() => _waiters = waiters);
     } catch (e) {
@@ -90,6 +110,116 @@ class _TablesScreenState extends State<TablesScreen> {
   Future<void> _loadTables() async {
     setState(() => _isLoading = true);
     try {
+      if (await ApiMode.useBackendApi()) {
+        final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
+        final tables = await _tableRepository.getTables();
+        const api = BackendApiClient();
+
+        final response = await api.getJson(
+          '/api/bookings?restaurantId=$restaurantId',
+        );
+
+        final rawBookings = response is List
+            ? response
+            : (response is Map && response['content'] is List)
+            ? response['content'] as List
+            : <dynamic>[];
+
+        final allBookings = <Map<String, dynamic>>[];
+
+        for (final item in rawBookings) {
+          if (item is! Map) continue;
+
+          final nestedTable = item['table'];
+          final tableId =
+              item['tableId'] ??
+              (nestedTable is Map ? nestedTable['id'] : null);
+          final bookingTime = item['bookingTime'] ?? item['booking_time'];
+
+          allBookings.add(<String, dynamic>{
+            ...Map<String, dynamic>.from(item),
+            'table_id': tableId,
+            'table_number': nestedTable is Map
+                ? nestedTable['tableNumber']?.toString() ?? ''
+                : '',
+            'customer_name':
+                item['customerName'] ?? item['customer_name'] ?? '',
+            'customer_phone':
+                item['customerPhone'] ?? item['customer_phone'] ?? '',
+            'guest_count': item['guestCount'] ?? item['guest_count'] ?? 0,
+            'booking_time': bookingTime?.toString() ?? '',
+            'status': item['status']?.toString() ?? '',
+          });
+        }
+
+        final confirmedBookings = allBookings
+            .where(
+              (booking) =>
+                  booking['status'].toString().toLowerCase() == 'confirmed',
+            )
+            .toList();
+
+        final now = DateTime.now();
+        final enrichedTables = tables.map((table) {
+          final tableBookings = confirmedBookings
+              .where(
+                (booking) =>
+                    booking['table_id']?.toString() == table.id?.toString(),
+              )
+              .toList();
+
+          Map<String, dynamic>? activeBooking;
+          final upcomingBookings = <Map<String, dynamic>>[];
+
+          for (final booking in tableBookings) {
+            final bookingTime = DateTime.tryParse(
+              booking['booking_time']?.toString() ?? '',
+            );
+            if (bookingTime == null) continue;
+
+            final bookingEnd = bookingTime.add(const Duration(hours: 1));
+            if (!now.isBefore(bookingTime) && now.isBefore(bookingEnd)) {
+              activeBooking ??= booking;
+            } else if (bookingTime.isAfter(now)) {
+              upcomingBookings.add(booking);
+            }
+          }
+
+          return <String, dynamic>{
+            'table': table,
+            'active_booking': activeBooking,
+            'all_bookings': tableBookings,
+            'upcoming_bookings': upcomingBookings,
+            'active_order': null,
+            'order_items_count': 0,
+          };
+        }).toList();
+
+        if (!mounted) return;
+        setState(() {
+          _sections = ['All', 'Main Hall'];
+          _tableTypes = ['Standard Table'];
+          _enrichedTables = enrichedTables;
+          _bookingsList = confirmedBookings;
+          _heldOrdersList = [];
+          if (_selectedGridTable != null) {
+            final match = enrichedTables.where((item) {
+              final table = item['table'] as TableModel;
+              return table.id == _selectedGridTable!.id ||
+                  table.tableNumber == _selectedGridTable!.tableNumber;
+            });
+            _selectedGridTable = match.isNotEmpty
+                ? match.first['table'] as TableModel
+                : (enrichedTables.isNotEmpty
+                      ? enrichedTables.first['table'] as TableModel
+                      : null);
+          } else if (enrichedTables.isNotEmpty) {
+            _selectedGridTable = enrichedTables.first['table'] as TableModel;
+          }
+          _isLoading = false;
+        });
+        return;
+      }
       final db = await DatabaseHelper.instance.database;
       final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
 
@@ -107,20 +237,24 @@ class _TablesScreenState extends State<TablesScreen> {
 
       List<String> loadedSections = ['All'];
       loadedSections.addAll(sectionMaps.map((m) => m['name'] as String));
-      if (loadedSections.length == 1) loadedSections.add('Main Hall'); // Fallback
+      if (loadedSections.length == 1)
+        loadedSections.add('Main Hall'); // Fallback
 
       List<String> loadedTypes = [];
       loadedTypes.addAll(typeMaps.map((m) => m['name'] as String));
       if (loadedTypes.isEmpty) loadedTypes.add('Standard Table'); // Fallback
 
       // Load all tables for current restaurant
-      final List<Map<String, dynamic>> tableMaps = await db.rawQuery('''
+      final List<Map<String, dynamic>> tableMaps = await db.rawQuery(
+        '''
         SELECT t.*, u.name as waiter_name 
         FROM tables t
         LEFT JOIN users u ON t.waiter_id = u.id
         WHERE (t.restaurant_id = ? OR t.restaurant_id IS NULL)
         ORDER BY t.table_number ASC
-      ''', [restaurantId]);
+      ''',
+        [restaurantId],
+      );
 
       List<Map<String, dynamic>> enrichedTables = [];
 
@@ -132,7 +266,8 @@ class _TablesScreenState extends State<TablesScreen> {
         // Find all confirmed bookings for this table
         final List<Map<String, dynamic>> bookingMaps = await db.query(
           'bookings',
-          where: 'table_id = ? AND status = ? AND (restaurant_id = ? OR restaurant_id IS NULL)',
+          where:
+              'table_id = ? AND status = ? AND (restaurant_id = ? OR restaurant_id IS NULL)',
           whereArgs: [tableId, 'Confirmed', restaurantId],
           orderBy: 'booking_time ASC',
         );
@@ -140,7 +275,8 @@ class _TablesScreenState extends State<TablesScreen> {
         // Find active unpaid order (Received, Sent to Kitchen, In Kitchen, Preparing, Ready, Served, Billing Pending, Held)
         final List<Map<String, dynamic>> orderMaps = await db.query(
           'orders',
-          where: 'table_id = ? AND status IN (?, ?, ?, ?, ?, ?, ?, ?) AND payment_status != ? AND (restaurant_id = ? OR restaurant_id IS NULL)',
+          where:
+              'table_id = ? AND status IN (?, ?, ?, ?, ?, ?, ?, ?) AND payment_status != ? AND (restaurant_id = ? OR restaurant_id IS NULL)',
           whereArgs: [
             tableId,
             'Received',
@@ -176,7 +312,9 @@ class _TablesScreenState extends State<TablesScreen> {
           }
         }
 
-        Map<String, dynamic>? activeOrder = orderMaps.isNotEmpty ? orderMaps.first : null;
+        Map<String, dynamic>? activeOrder = orderMaps.isNotEmpty
+            ? orderMaps.first
+            : null;
 
         // Auto-occupy or sanitize table status:
         // - If table has an active order or active booking: status must be 'Occupied'
@@ -184,14 +322,26 @@ class _TablesScreenState extends State<TablesScreen> {
         var currentStatus = tMap['status'] as String? ?? 'Available';
         if (activeOrder != null || currentBooking != null) {
           if (currentStatus != 'Occupied') {
-            await db.update('tables', {'status': 'Occupied'}, where: 'id = ?', whereArgs: [tableId]);
+            await db.update(
+              'tables',
+              {'status': 'Occupied'},
+              where: 'id = ?',
+              whereArgs: [tableId],
+            );
             currentStatus = 'Occupied';
           }
           tMap = Map<String, dynamic>.from(tMap)..['status'] = currentStatus;
         } else {
           // If was Occupied, Reserved, or Billing Pending, but order is paid and no booking -> reset to Available
-          if (currentStatus == 'Occupied' || currentStatus == 'Reserved' || currentStatus == 'Billing Pending') {
-            await db.update('tables', {'status': 'Available'}, where: 'id = ?', whereArgs: [tableId]);
+          if (currentStatus == 'Occupied' ||
+              currentStatus == 'Reserved' ||
+              currentStatus == 'Billing Pending') {
+            await db.update(
+              'tables',
+              {'status': 'Available'},
+              where: 'id = ?',
+              whereArgs: [tableId],
+            );
             currentStatus = 'Available';
           }
           tMap = Map<String, dynamic>.from(tMap)..['status'] = currentStatus;
@@ -205,7 +355,10 @@ class _TablesScreenState extends State<TablesScreen> {
             where: 'order_id = ?',
             whereArgs: [activeOrder['id']],
           );
-          orderItemsCount = items.fold(0, (sum, it) => sum + (it['quantity'] as int? ?? 1));
+          orderItemsCount = items.fold(
+            0,
+            (sum, it) => sum + (it['quantity'] as int? ?? 1),
+          );
         }
 
         enrichedTables.add({
@@ -219,22 +372,28 @@ class _TablesScreenState extends State<TablesScreen> {
       }
 
       // Also load all booked tables list
-      final List<Map<String, dynamic>> allBookings = await db.rawQuery('''
+      final List<Map<String, dynamic>> allBookings = await db.rawQuery(
+        '''
         SELECT b.*, t.table_number 
         FROM bookings b
         JOIN tables t ON b.table_id = t.id
         WHERE b.status = 'Confirmed' AND (b.restaurant_id = ? OR b.restaurant_id IS NULL)
         ORDER BY b.booking_time ASC
-      ''', [restaurantId]);
+      ''',
+        [restaurantId],
+      );
 
       // Also load all held orders list
-      final List<Map<String, dynamic>> allHeldOrders = await db.rawQuery('''
+      final List<Map<String, dynamic>> allHeldOrders = await db.rawQuery(
+        '''
         SELECT o.*, t.table_number 
         FROM orders o
         LEFT JOIN tables t ON o.table_id = t.id
         WHERE o.status = 'Held' AND (o.restaurant_id = ? OR o.restaurant_id IS NULL)
         ORDER BY o.order_time DESC
-      ''', [restaurantId]);
+      ''',
+        [restaurantId],
+      );
 
       if (!mounted) return;
       setState(() {
@@ -247,7 +406,8 @@ class _TablesScreenState extends State<TablesScreen> {
           final match = enrichedTables.firstWhere(
             (it) =>
                 (it['table'] as TableModel).id == _selectedGridTable!.id ||
-                (it['table'] as TableModel).tableNumber == _selectedGridTable!.tableNumber,
+                (it['table'] as TableModel).tableNumber ==
+                    _selectedGridTable!.tableNumber,
             orElse: () => {},
           );
           if (match.isNotEmpty) {
@@ -274,7 +434,8 @@ class _TablesScreenState extends State<TablesScreen> {
       final table = item['table'] as TableModel;
       final activeOrder = item['active_order'] as Map<String, dynamic>?;
       final activeBooking = item['active_booking'] as Map<String, dynamic>?;
-      final allBookings = (item['all_bookings'] as List<Map<String, dynamic>>?) ?? [];
+      final allBookings =
+          (item['all_bookings'] as List<Map<String, dynamic>>?) ?? [];
       final isHeld = activeOrder != null && activeOrder['status'] == 'Held';
 
       // 1. Search Query
@@ -284,7 +445,8 @@ class _TablesScreenState extends State<TablesScreen> {
         final matchesName = table.name?.toLowerCase().contains(q) ?? false;
         final matchesNotes = table.notes?.toLowerCase().contains(q) ?? false;
         final matchesSection = table.section.toLowerCase().contains(q);
-        if (!matchesNum && !matchesName && !matchesNotes && !matchesSection) return false;
+        if (!matchesNum && !matchesName && !matchesNotes && !matchesSection)
+          return false;
       }
 
       // 2. Section Filter
@@ -297,11 +459,20 @@ class _TablesScreenState extends State<TablesScreen> {
         if (_statusFilter == 'Held') {
           if (!isHeld) return false;
         } else if (_statusFilter == 'Occupied') {
-          if (table.status != 'Occupied' && activeOrder == null && activeBooking == null) return false;
+          if (table.status != 'Occupied' &&
+              activeOrder == null &&
+              activeBooking == null)
+            return false;
         } else if (_statusFilter == 'Available') {
-          if (table.status != 'Available' || activeOrder != null || activeBooking != null) return false;
+          if (table.status != 'Available' ||
+              activeOrder != null ||
+              activeBooking != null)
+            return false;
         } else if (_statusFilter == 'Reserved') {
-          if (activeBooking == null && allBookings.isEmpty && table.status != 'Reserved') return false;
+          if (activeBooking == null &&
+              allBookings.isEmpty &&
+              table.status != 'Reserved')
+            return false;
         } else if (table.status != _statusFilter) {
           return false;
         }
@@ -309,7 +480,9 @@ class _TablesScreenState extends State<TablesScreen> {
 
       // 4. Capacity Filter
       if (_capacityFilter == '2 Seats' && table.capacity > 2) return false;
-      if (_capacityFilter == '4 Seats' && (table.capacity < 3 || table.capacity > 4)) return false;
+      if (_capacityFilter == '4 Seats' &&
+          (table.capacity < 3 || table.capacity > 4))
+        return false;
       if (_capacityFilter == '6+ Seats' && table.capacity < 6) return false;
 
       return true;
@@ -350,7 +523,8 @@ class _TablesScreenState extends State<TablesScreen> {
       final table = item['table'] as TableModel;
       final activeOrder = item['active_order'] as Map<String, dynamic>?;
       final activeBooking = item['active_booking'] as Map<String, dynamic>?;
-      final allBookings = (item['all_bookings'] as List<Map<String, dynamic>>?) ?? [];
+      final allBookings =
+          (item['all_bookings'] as List<Map<String, dynamic>>?) ?? [];
 
       if (activeOrder != null) {
         final st = activeOrder['status'];
@@ -361,13 +535,19 @@ class _TablesScreenState extends State<TablesScreen> {
         }
       }
 
-      if (allBookings.isNotEmpty || activeBooking != null || table.status == 'Reserved') {
+      if (allBookings.isNotEmpty ||
+          activeBooking != null ||
+          table.status == 'Reserved') {
         reserved++;
       }
 
-      if (table.status == 'Occupied' || activeBooking != null || (activeOrder != null && activeOrder['status'] != 'Held')) {
+      if (table.status == 'Occupied' ||
+          activeBooking != null ||
+          (activeOrder != null && activeOrder['status'] != 'Held')) {
         occupied++;
-      } else if (table.status == 'Available' && activeOrder == null && activeBooking == null) {
+      } else if (table.status == 'Available' &&
+          activeOrder == null &&
+          activeBooking == null) {
         available++;
       } else {
         switch (table.status) {
@@ -470,19 +650,31 @@ class _TablesScreenState extends State<TablesScreen> {
   // Table Configuration Dialog (Add & Edit Table)
   void _showTableConfigDialog([TableModel? existingTable]) {
     final isEditing = existingTable != null;
-    final numberCtrl = TextEditingController(text: existingTable?.tableNumber ?? '');
+    final numberCtrl = TextEditingController(
+      text: existingTable?.tableNumber ?? '',
+    );
     final nameCtrl = TextEditingController(text: existingTable?.name ?? '');
-    final capacityCtrl = TextEditingController(text: (existingTable?.capacity ?? 4).toString());
+    final capacityCtrl = TextEditingController(
+      text: (existingTable?.capacity ?? 4).toString(),
+    );
     final notesCtrl = TextEditingController(text: existingTable?.notes ?? '');
-    
+
     final availableSections = _sections.where((s) => s != 'All').toList();
     if (availableSections.isEmpty) availableSections.add('Main Hall');
-    String section = existingTable?.section ?? (availableSections.contains('Main Hall') ? 'Main Hall' : availableSections.first);
+    String section =
+        existingTable?.section ??
+        (availableSections.contains('Main Hall')
+            ? 'Main Hall'
+            : availableSections.first);
     if (!availableSections.contains(section)) availableSections.add(section);
 
     final availableTypes = List<String>.from(_tableTypes);
     if (availableTypes.isEmpty) availableTypes.add('Standard Table');
-    String tableType = existingTable?.tableType ?? (availableTypes.contains('Standard Table') ? 'Standard Table' : availableTypes.first);
+    String tableType =
+        existingTable?.tableType ??
+        (availableTypes.contains('Standard Table')
+            ? 'Standard Table'
+            : availableTypes.first);
     if (!availableTypes.contains(tableType)) availableTypes.add(tableType);
 
     String status = existingTable?.status ?? 'Available';
@@ -496,12 +688,19 @@ class _TablesScreenState extends State<TablesScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDlgState) {
           final currentWaiter = selectedWaiterId != null
-              ? _waiters.firstWhere((w) => w['id'] == selectedWaiterId, orElse: () => {})
+              ? _waiters.firstWhere(
+                  (w) => w['id'] == selectedWaiterId,
+                  orElse: () => {},
+                )
               : null;
-          final cleanWaiter = currentWaiter != null && currentWaiter.isNotEmpty ? currentWaiter : null;
+          final cleanWaiter = currentWaiter != null && currentWaiter.isNotEmpty
+              ? currentWaiter
+              : null;
 
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             title: Row(
               children: [
                 CircleAvatar(
@@ -514,11 +713,19 @@ class _TablesScreenState extends State<TablesScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    isEditing ? 'Configure Table ${existingTable.tableNumber}' : 'Add New Restaurant Table',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    isEditing
+                        ? 'Configure Table ${existingTable.tableNumber}'
+                        : 'Add New Restaurant Table',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ],
             ),
             content: SizedBox(
@@ -562,9 +769,15 @@ class _TablesScreenState extends State<TablesScreen> {
                           child: TextField(
                             controller: capacityCtrl,
                             keyboardType: TextInputType.number,
-                            enabled: !isEditing || (existingTable.status == 'Available'),
+                            enabled:
+                                !isEditing ||
+                                (existingTable.status == 'Available'),
                             decoration: InputDecoration(
-                              labelText: (!isEditing || (existingTable.status == 'Available')) ? 'Seating Capacity *' : 'Capacity Locked (Active Order)',
+                              labelText:
+                                  (!isEditing ||
+                                      (existingTable.status == 'Available'))
+                                  ? 'Seating Capacity *'
+                                  : 'Capacity Locked (Active Order)',
                               prefixIcon: const Icon(Icons.chair_alt),
                               border: const OutlineInputBorder(),
                             ),
@@ -576,9 +789,18 @@ class _TablesScreenState extends State<TablesScreen> {
                             isExpanded: true,
                             value: section,
                             items: availableSections
-                                .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
+                                .map(
+                                  (s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(
+                                      s,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
                                 .toList(),
-                            onChanged: (val) => setDlgState(() => section = val!),
+                            onChanged: (val) =>
+                                setDlgState(() => section = val!),
                             decoration: const InputDecoration(
                               labelText: 'Section / Dining Area',
                               border: OutlineInputBorder(),
@@ -595,9 +817,18 @@ class _TablesScreenState extends State<TablesScreen> {
                             isExpanded: true,
                             value: tableType,
                             items: availableTypes
-                                .map((t) => DropdownMenuItem(value: t, child: Text(t, overflow: TextOverflow.ellipsis)))
+                                .map(
+                                  (t) => DropdownMenuItem(
+                                    value: t,
+                                    child: Text(
+                                      t,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
                                 .toList(),
-                            onChanged: (val) => setDlgState(() => tableType = val!),
+                            onChanged: (val) =>
+                                setDlgState(() => tableType = val!),
                             decoration: const InputDecoration(
                               labelText: 'Table Type / Shape',
                               border: OutlineInputBorder(),
@@ -611,9 +842,18 @@ class _TablesScreenState extends State<TablesScreen> {
                             value: status,
                             items: _allStatuses
                                 .where((s) => s != 'All')
-                                .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
+                                .map(
+                                  (s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(
+                                      s,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
                                 .toList(),
-                            onChanged: (val) => setDlgState(() => status = val!),
+                            onChanged: (val) =>
+                                setDlgState(() => status = val!),
                             decoration: const InputDecoration(
                               labelText: 'Table Status',
                               border: OutlineInputBorder(),
@@ -629,8 +869,11 @@ class _TablesScreenState extends State<TablesScreen> {
                       labelText: 'Default Assigned Waiter',
                       hintText: 'Select or search waiter...',
                       itemToString: (w) => w['name'] as String,
-                      filterFn: (w, query) => (w['name'] as String).toLowerCase().contains(query.toLowerCase()),
-                      onChanged: (val) => setDlgState(() => selectedWaiterId = val?['id']),
+                      filterFn: (w, query) => (w['name'] as String)
+                          .toLowerCase()
+                          .contains(query.toLowerCase()),
+                      onChanged: (val) =>
+                          setDlgState(() => selectedWaiterId = val?['id']),
                       prefixIcon: const Icon(Icons.person_outline),
                     ),
                     const SizedBox(height: 12),
@@ -639,7 +882,8 @@ class _TablesScreenState extends State<TablesScreen> {
                       maxLines: 2,
                       decoration: const InputDecoration(
                         labelText: 'Table Notes / Location Specifics',
-                        hintText: 'e.g. Near AC, power outlet available, quiet area...',
+                        hintText:
+                            'e.g. Near AC, power outlet available, quiet area...',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -652,7 +896,8 @@ class _TablesScreenState extends State<TablesScreen> {
                             title: const Text('Active for Service'),
                             subtitle: const Text('Visible in POS & floor maps'),
                             value: isActive,
-                            onChanged: (val) => setDlgState(() => isActive = val),
+                            onChanged: (val) =>
+                                setDlgState(() => isActive = val),
                           ),
                         ),
                         Expanded(
@@ -661,7 +906,8 @@ class _TablesScreenState extends State<TablesScreen> {
                             title: const Text('Reservable'),
                             subtitle: const Text('Can accept advance bookings'),
                             value: isReservable,
-                            onChanged: (val) => setDlgState(() => isReservable = val),
+                            onChanged: (val) =>
+                                setDlgState(() => isReservable = val),
                           ),
                         ),
                       ],
@@ -674,11 +920,21 @@ class _TablesScreenState extends State<TablesScreen> {
             actions: [
               if (isEditing)
                 TextButton.icon(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                  label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Colors.red,
+                    size: 18,
+                  ),
+                  label: const Text(
+                    'Delete',
+                    style: TextStyle(color: Colors.red),
+                  ),
                   onPressed: () {
                     Navigator.pop(context);
-                    _confirmDeleteTable(existingTable.id!, existingTable.tableNumber);
+                    _confirmDeleteTable(
+                      existingTable.id!,
+                      existingTable.tableNumber,
+                    );
                   },
                 )
               else
@@ -695,108 +951,140 @@ class _TablesScreenState extends State<TablesScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     icon: const Icon(Icons.save, size: 18),
                     label: Text(isEditing ? 'Update Table' : 'Create Table'),
                     onPressed: () async {
-                  final num = numberCtrl.text.trim();
-                  final cap = int.tryParse(capacityCtrl.text.trim()) ?? 0;
+                      final num = numberCtrl.text.trim();
+                      final cap = int.tryParse(capacityCtrl.text.trim()) ?? 0;
 
-                  if (num.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please enter a table number'), backgroundColor: Colors.red),
-                    );
-                    return;
-                  }
-                  if (cap <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Seating capacity must be at least 1'), backgroundColor: Colors.red),
-                    );
-                    return;
-                  }
-
-                  final updated = TableModel(
-                    id: existingTable?.id,
-                    tableNumber: num,
-                    name: nameCtrl.text.trim().isNotEmpty ? nameCtrl.text.trim() : null,
-                    capacity: cap,
-                    status: status,
-                    section: section,
-                    tableType: tableType,
-                    isActive: isActive,
-                    isReservable: isReservable,
-                    notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
-                    waiterId: selectedWaiterId,
-                    restaurantId: DatabaseHelper.currentRestaurantId ?? 1,
-                  );
-
-                  try {
-                    int tableId;
-                    if (isEditing) {
-                      await _tableRepository.updateTable(updated);
-                      tableId = updated.id!;
-                    } else {
-                      tableId = await _tableRepository.addTable(updated);
-                    }
-                    if (mounted) {
-                      Navigator.pop(context);
-                      await _loadTables();
-                      final match = _enrichedTables.firstWhere(
-                        (it) =>
-                            (it['table'] as TableModel).id == tableId ||
-                            (it['table'] as TableModel).tableNumber == num,
-                        orElse: () => {},
-                      );
-                      if (match.isNotEmpty) {
-                        setState(() {
-                          _selectedGridTable = match['table'] as TableModel;
-                        });
+                      if (num.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please enter a table number'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
                       }
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(isEditing ? 'Table $num updated successfully' : 'Table $num added successfully'),
-                          backgroundColor: const Color(0xFF2E7D32),
-                        ),
+                      if (cap <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Seating capacity must be at least 1',
+                            ),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+
+                      final updated = TableModel(
+                        id: existingTable?.id,
+                        tableNumber: num,
+                        name: nameCtrl.text.trim().isNotEmpty
+                            ? nameCtrl.text.trim()
+                            : null,
+                        capacity: cap,
+                        status: status,
+                        section: section,
+                        tableType: tableType,
+                        isActive: isActive,
+                        isReservable: isReservable,
+                        notes: notesCtrl.text.trim().isNotEmpty
+                            ? notesCtrl.text.trim()
+                            : null,
+                        waiterId: selectedWaiterId,
+                        restaurantId: DatabaseHelper.currentRestaurantId ?? 1,
                       );
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error saving table: $e'), backgroundColor: Colors.red),
-                      );
-                    }
-                  }
-                },
+
+                      try {
+                        int tableId;
+                        if (isEditing) {
+                          await _tableRepository.updateTable(updated);
+                          tableId = updated.id!;
+                        } else {
+                          tableId = await _tableRepository.addTable(updated);
+                        }
+                        if (mounted) {
+                          Navigator.pop(context);
+                          await _loadTables();
+                          final match = _enrichedTables.firstWhere(
+                            (it) =>
+                                (it['table'] as TableModel).id == tableId ||
+                                (it['table'] as TableModel).tableNumber == num,
+                            orElse: () => {},
+                          );
+                          if (match.isNotEmpty) {
+                            setState(() {
+                              _selectedGridTable = match['table'] as TableModel;
+                            });
+                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                isEditing
+                                    ? 'Table $num updated successfully'
+                                    : 'Table $num added successfully',
+                              ),
+                              backgroundColor: const Color(0xFF2E7D32),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error saving table: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
               ),
             ],
-          ),
-        ],
-      );
-    },
-  ),
-);
+          );
+        },
+      ),
+    );
   }
 
   // Quick Order View Modal
-  void _showOrderDetailsSheet(TableModel table, Map<String, dynamic> activeOrder) async {
+  void _showOrderDetailsSheet(
+    TableModel table,
+    Map<String, dynamic> activeOrder,
+  ) async {
     final db = await DatabaseHelper.instance.database;
     final orderId = activeOrder['id'] as int;
 
-    final items = await db.rawQuery('''
+    final items = await db.rawQuery(
+      '''
       SELECT oi.*, p.name as product_name, p.category, p.is_veg
       FROM order_items oi
       JOIN products p ON oi.product_id = p.id
       WHERE oi.order_id = ?
-    ''', [orderId]);
+    ''',
+      [orderId],
+    );
 
     if (!mounted) return;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) {
         final total = (activeOrder['total_amount'] as num?)?.toDouble() ?? 0.0;
         final guest = activeOrder['customer_name'] ?? 'Guest';
@@ -817,13 +1105,19 @@ class _TablesScreenState extends State<TablesScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Order #${activeOrder['id']} • ${table.displayName}',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          'Order #${activeOrder['id']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${table.displayName}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          'Guest: $guest • Taken by: $orderTaker • ${_getOccupiedDuration(timeStr)}',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          'Guest: $guest ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Taken by: $orderTaker ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${_getOccupiedDuration(timeStr)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
@@ -831,13 +1125,26 @@ class _TablesScreenState extends State<TablesScreen> {
                   ),
                   const SizedBox(width: 8),
                   Chip(
-                    label: Text(activeOrder['status'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                    backgroundColor: _getStatusColor(activeOrder['status'], false),
+                    label: Text(
+                      activeOrder['status'],
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                    backgroundColor: _getStatusColor(
+                      activeOrder['status'],
+                      false,
+                    ),
                   ),
                 ],
               ),
               const Divider(height: 24),
-              const Text('Ordered Items', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text(
+                'Ordered Items',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
               const SizedBox(height: 8),
               if (items.isEmpty)
                 const Padding(
@@ -857,30 +1164,54 @@ class _TablesScreenState extends State<TablesScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('$qty x ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text(
+                          '$qty x ',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(pName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                              Text(
+                                pName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                               if (notes != null && notes.isNotEmpty)
                                 Text(
-                                  '📝 $notes',
-                                  style: TextStyle(fontSize: 11, color: AppColors.primaryMaterialColor[700]!, fontStyle: FontStyle.italic),
+                                  'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒâ€šÃ‚Â $notes',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.primaryMaterialColor[700]!,
+                                    fontStyle: FontStyle.italic,
+                                  ),
                                 ),
                             ],
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(itStatus, style: TextStyle(fontSize: 10, color: Colors.grey.shade700)),
+                          child: Text(
+                            itStatus,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
-                        Text('₹${(price * qty).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text(
+                          'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${(price * qty).toStringAsFixed(2)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
                   );
@@ -889,10 +1220,17 @@ class _TablesScreenState extends State<TablesScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Total Bill Amount', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Total Bill Amount',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                   Text(
-                    '₹${total.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${total.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ],
               ),
@@ -920,7 +1258,9 @@ class _TablesScreenState extends State<TablesScreen> {
                       label: const Text('Open POS / Add Items'),
                       onPressed: () {
                         Navigator.pop(context);
-                        context.go('/dashboard/pos?tableId=${table.id}&reopenOrderId=$orderId');
+                        context.go(
+                          '/dashboard/pos?tableId=${table.id}&reopenOrderId=$orderId',
+                        );
                       },
                     ),
                   ),
@@ -939,14 +1279,20 @@ class _TablesScreenState extends State<TablesScreen> {
 
     final availableTables = _enrichedTables
         .map((e) => e['table'] as TableModel)
-        .where((t) => t.id != sourceTable.id && (t.status == 'Available' || t.status == 'Cleaning'))
+        .where(
+          (t) =>
+              t.id != sourceTable.id &&
+              (t.status == 'Available' || t.status == 'Cleaning'),
+        )
         .toList();
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDlgState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               const Icon(Icons.swap_horiz, color: AppColors.primary),
@@ -960,10 +1306,16 @@ class _TablesScreenState extends State<TablesScreen> {
             children: [
               Text('Current Table: ${sourceTable.displayName}'),
               const SizedBox(height: 16),
-              const Text('Select Destination Table:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Select Destination Table:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               if (availableTables.isEmpty)
-                const Text('No other available tables at this moment.', style: TextStyle(color: Colors.red))
+                const Text(
+                  'No other available tables at this moment.',
+                  style: TextStyle(color: Colors.red),
+                )
               else
                 DropdownButtonFormField<TableModel>(
                   value: destinationTable,
@@ -973,20 +1325,28 @@ class _TablesScreenState extends State<TablesScreen> {
                     return DropdownMenuItem(
                       value: t,
                       child: Text(
-                        '${t.displayName} (${t.capacity} seats • ${t.section})',
+                        '${t.displayName} (${t.capacity} seats ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${t.section})',
                         overflow: TextOverflow.ellipsis,
                       ),
                     );
                   }).toList(),
                   onChanged: (val) => setDlgState(() => destinationTable = val),
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                  ),
                 ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
               onPressed: destinationTable == null
                   ? null
                   : () async {
@@ -1001,15 +1361,20 @@ class _TablesScreenState extends State<TablesScreen> {
                       );
 
                       // Update destination table status to Occupied
-                      await _tableRepository.updateTableStatus(destinationTable!.id!, 'Occupied');
+                      await _tableRepository.updateTableStatus(
+                        destinationTable!.id!,
+                        'Occupied',
+                      );
 
                       // Mark source table as Cleaning or Available
-                      await _tableRepository.updateTableStatus(sourceTable.id!, 'Cleaning');
+                      await _tableRepository.updateTableStatus(
+                        sourceTable.id!,
+                        'Cleaning',
+                      );
 
                       if (mounted) {
                         Navigator.pop(context);
                         _loadTables();
-
                       }
                     },
               child: const Text('Confirm Transfer'),
@@ -1022,21 +1387,29 @@ class _TablesScreenState extends State<TablesScreen> {
 
   // Reservation Dialog
   void _showReservationDialog(TableModel table, [DateTime? initialDate]) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final guestsCtrl = TextEditingController(text: '${table.capacity}');
     final notesCtrl = TextEditingController();
     DateTime date = initialDate ?? DateTime.now();
-    TimeOfDay time = initialDate != null ? TimeOfDay.fromDateTime(initialDate) : TimeOfDay.now();
+    TimeOfDay time = initialDate != null
+        ? TimeOfDay.fromDateTime(initialDate)
+        : TimeOfDay.now();
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDlgState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
-              const Icon(Icons.bookmark_added_outlined, color: AppColors.primary),
+              const Icon(
+                Icons.bookmark_added_outlined,
+                color: AppColors.primary,
+              ),
               const SizedBox(width: 8),
               Text('Reserve ${table.displayName}'),
             ],
@@ -1047,19 +1420,28 @@ class _TablesScreenState extends State<TablesScreen> {
               children: [
                 TextField(
                   controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Customer / Guest Name *', prefixIcon: Icon(Icons.person)),
+                  decoration: const InputDecoration(
+                    labelText: 'Customer / Guest Name *',
+                    prefixIcon: Icon(Icons.person),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: phoneCtrl,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Phone Number', prefixIcon: Icon(Icons.phone)),
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    prefixIcon: Icon(Icons.phone),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: guestsCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Guest Count', prefixIcon: Icon(Icons.people_outline)),
+                  decoration: const InputDecoration(
+                    labelText: 'Guest Count',
+                    prefixIcon: Icon(Icons.people_outline),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -1073,7 +1455,9 @@ class _TablesScreenState extends State<TablesScreen> {
                             context: context,
                             initialDate: date,
                             firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 60)),
+                            lastDate: DateTime.now().add(
+                              const Duration(days: 60),
+                            ),
                           );
                           if (picked != null) setDlgState(() => date = picked);
                         },
@@ -1085,7 +1469,10 @@ class _TablesScreenState extends State<TablesScreen> {
                         icon: const Icon(Icons.access_time, size: 16),
                         label: Text(time.format(context)),
                         onPressed: () async {
-                          final picked = await showTimePicker(context: context, initialTime: time);
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: time,
+                          );
                           if (picked != null) setDlgState(() => time = picked);
                         },
                       ),
@@ -1095,19 +1482,30 @@ class _TablesScreenState extends State<TablesScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: notesCtrl,
-                  decoration: const InputDecoration(labelText: 'Reservation Notes (e.g. Birthday celebration)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Reservation Notes (e.g. Birthday celebration)',
+                  ),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
               onPressed: () async {
                 if (nameCtrl.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter a customer/guest name'), backgroundColor: Colors.red),
+                  messenger?.showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a customer/guest name'),
+                      backgroundColor: Colors.red,
+                    ),
                   );
                   return;
                 }
@@ -1120,63 +1518,167 @@ class _TablesScreenState extends State<TablesScreen> {
                   time.minute,
                 );
                 final bookingEnd = bookingStart.add(const Duration(hours: 1));
+                final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
 
-                final db = await DatabaseHelper.instance.database;
+                try {
+                  if (await ApiMode.useBackendApi()) {
+                    const api = BackendApiClient();
+                    final response = await api.getJson(
+                      '/api/bookings?restaurantId=$restaurantId',
+                    );
 
-                // Check for overlapping confirmed reservation for this table
-                final existingBookings = await db.query(
-                  'bookings',
-                  where: 'table_id = ? AND status = ?',
-                  whereArgs: [table.id, 'Confirmed'],
-                );
+                    final bookings = response is List
+                        ? response
+                        : (response is Map && response['content'] is List)
+                        ? response['content'] as List
+                        : <dynamic>[];
 
-                bool hasConflict = false;
-                for (final eb in existingBookings) {
-                  final ebStart = DateTime.tryParse(eb['booking_time'] as String? ?? '');
-                  if (ebStart == null) continue;
-                  final ebEnd = ebStart.add(const Duration(hours: 1));
-                  if (bookingStart.isBefore(ebEnd) && bookingEnd.isAfter(ebStart)) {
-                    hasConflict = true;
-                    break;
+                    for (final item in bookings) {
+                      if (item is! Map) continue;
+
+                      final status = (item['status'] ?? '')
+                          .toString()
+                          .toLowerCase();
+                      if (status != 'confirmed') continue;
+
+                      final bookedTable = item['table'];
+                      final bookedTableId =
+                          item['tableId'] ??
+                          (bookedTable is Map ? bookedTable['id'] : null);
+
+                      if (bookedTableId.toString() != table.id.toString())
+                        continue;
+
+                      final bookingTimeValue =
+                          item['bookingTime'] ?? item['booking_time'];
+                      final existingStart = DateTime.tryParse(
+                        bookingTimeValue?.toString() ?? '',
+                      );
+                      if (existingStart == null) continue;
+
+                      final existingEnd = existingStart.add(
+                        const Duration(hours: 1),
+                      );
+                      if (bookingStart.isBefore(existingEnd) &&
+                          bookingEnd.isAfter(existingStart)) {
+                        messenger?.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Table ${table.tableNumber} already has a confirmed reservation around that time.',
+                            ),
+                            backgroundColor: Colors.red.shade700,
+                          ),
+                        );
+                        return;
+                      }
+                    }
+
+                    final offset = bookingStart.timeZoneOffset;
+                    final sign = offset.isNegative ? '-' : '+';
+                    final offsetText =
+                        '$sign${offset.inHours.abs().toString().padLeft(2, '0')}:${(offset.inMinutes.abs() % 60).toString().padLeft(2, '0')}';
+                    final bookingTime =
+                        "${DateFormat("yyyy-MM-dd'T'HH:mm:ss").format(bookingStart)}$offsetText";
+
+                    await api.postJson('/api/bookings', {
+                      'tableId': table.id,
+                      'customerName': nameCtrl.text.trim(),
+                      'customerPhone': phoneCtrl.text.trim().isNotEmpty
+                          ? phoneCtrl.text.trim()
+                          : null,
+                      'guestCount':
+                          int.tryParse(guestsCtrl.text.trim()) ??
+                          table.capacity,
+                      'bookingTime': bookingTime,
+                      'status': 'Confirmed',
+                      'notes': notesCtrl.text.trim().isNotEmpty
+                          ? notesCtrl.text.trim()
+                          : null,
+                      'restaurantId': restaurantId,
+                    });
+                  } else {
+                    final db = await DatabaseHelper.instance.database;
+
+                    final existingBookings = await db.query(
+                      'bookings',
+                      where: 'table_id = ? AND status = ?',
+                      whereArgs: [table.id, 'Confirmed'],
+                    );
+
+                    bool hasConflict = false;
+                    for (final eb in existingBookings) {
+                      final ebStart = DateTime.tryParse(
+                        eb['booking_time'] as String? ?? '',
+                      );
+                      if (ebStart == null) continue;
+
+                      final ebEnd = ebStart.add(const Duration(hours: 1));
+                      if (bookingStart.isBefore(ebEnd) &&
+                          bookingEnd.isAfter(ebStart)) {
+                        hasConflict = true;
+                        break;
+                      }
+                    }
+
+                    if (hasConflict) {
+                      messenger?.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Table ${table.tableNumber} already has a confirmed reservation around that time.',
+                          ),
+                          backgroundColor: Colors.red.shade700,
+                        ),
+                      );
+                      return;
+                    }
+
+                    await db.insert('bookings', {
+                      'table_id': table.id,
+                      'customer_name': nameCtrl.text.trim(),
+                      'customer_phone': phoneCtrl.text.trim().isNotEmpty
+                          ? phoneCtrl.text.trim()
+                          : null,
+                      'guest_count':
+                          int.tryParse(guestsCtrl.text.trim()) ??
+                          table.capacity,
+                      'booking_time': bookingStart.toIso8601String(),
+                      'status': 'Confirmed',
+                      'notes': notesCtrl.text.trim().isNotEmpty
+                          ? notesCtrl.text.trim()
+                          : null,
+                      'restaurant_id': restaurantId,
+                    });
                   }
-                }
 
-                if (hasConflict) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Table ${table.tableNumber} already has a confirmed reservation around that time.'),
-                      backgroundColor: Colors.red.shade700,
-                    ),
-                  );
-                  return;
-                }
+                  final now = DateTime.now();
+                  if (!now.isBefore(bookingStart) && now.isBefore(bookingEnd)) {
+                    await _tableRepository.updateTableStatus(
+                      table.id!,
+                      'Occupied',
+                    );
+                  }
 
-                await db.insert('bookings', {
-                  'table_id': table.id,
-                  'customer_name': nameCtrl.text.trim(),
-                  'customer_phone': phoneCtrl.text.trim().isNotEmpty ? phoneCtrl.text.trim() : null,
-                  'guest_count': int.tryParse(guestsCtrl.text.trim()) ?? table.capacity,
-                  'booking_time': bookingStart.toIso8601String(),
-                  'status': 'Confirmed',
-                  'notes': notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
-                  'restaurant_id': DatabaseHelper.currentRestaurantId ?? 1,
-                });
-
-                // Auto-occupy ONLY if current time is within this reservation time window
-                final now = DateTime.now();
-                if (!now.isBefore(bookingStart) && now.isBefore(bookingEnd)) {
-                  await _tableRepository.updateTableStatus(table.id!, 'Occupied');
-                }
-
-                if (mounted) {
-                  Navigator.pop(context);
-                  await _loadTables();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Reservation confirmed for ${table.displayName}'),
-                      backgroundColor: const Color(0xFF2E7D32),
-                    ),
-                  );
+                  if (mounted) {
+                    Navigator.pop(context);
+                    await _loadTables();
+                    messenger?.showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Reservation confirmed for ${table.displayName}',
+                        ),
+                        backgroundColor: const Color(0xFF2E7D32),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    messenger?.showSnackBar(
+                      SnackBar(
+                        content: Text('Could not save reservation: $e'),
+                        backgroundColor: Colors.red.shade700,
+                      ),
+                    );
+                  }
                 }
               },
               child: const Text('Confirm Reservation'),
@@ -1188,7 +1690,10 @@ class _TablesScreenState extends State<TablesScreen> {
   }
 
   // Dialog showing all confirmed reservations for a table
-  void _showAllReservationsDialog(TableModel table, List<Map<String, dynamic>> bookings) {
+  void _showAllReservationsDialog(
+    TableModel table,
+    List<Map<String, dynamic>> bookings,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1199,8 +1704,11 @@ class _TablesScreenState extends State<TablesScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Reservations • ${table.displayName}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                'Reservations ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${table.displayName}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -1211,29 +1719,40 @@ class _TablesScreenState extends State<TablesScreen> {
           child: bookings.isEmpty
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: Text('No active reservations for this table.')),
+                  child: Center(
+                    child: Text('No active reservations for this table.'),
+                  ),
                 )
               : SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: bookings.map((b) {
-                      final bTime = DateTime.tryParse(b['booking_time'] as String? ?? '');
+                      final bTime = DateTime.tryParse(
+                        b['booking_time'] as String? ?? '',
+                      );
                       final now = DateTime.now();
-                      final isNow = bTime != null &&
+                      final isNow =
+                          bTime != null &&
                           !now.isBefore(bTime) &&
                           now.isBefore(bTime.add(const Duration(hours: 1)));
                       final timeStr = bTime != null
-                          ? DateFormat('EEE, dd MMM yyyy • hh:mm a').format(bTime)
+                          ? DateFormat(
+                              'EEE, dd MMM yyyy ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ hh:mm a',
+                            ).format(bTime)
                           : 'N/A';
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: isNow ? Colors.amber.shade50 : Colors.grey.shade50,
+                          color: isNow
+                              ? Colors.amber.shade50
+                              : Colors.grey.shade50,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: isNow ? Colors.amber.shade600 : Colors.grey.shade300,
+                            color: isNow
+                                ? Colors.amber.shade600
+                                : Colors.grey.shade300,
                             width: isNow ? 1.5 : 1,
                           ),
                         ),
@@ -1246,14 +1765,22 @@ class _TablesScreenState extends State<TablesScreen> {
                                 Expanded(
                                   child: Text(
                                     b['customer_name'] ?? 'Guest',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: isNow ? Colors.amber.shade700 : Colors.blue.shade600,
+                                    color: isNow
+                                        ? Colors.amber.shade700
+                                        : Colors.blue.shade600,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
@@ -1269,50 +1796,91 @@ class _TablesScreenState extends State<TablesScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '⏰ $timeStr',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade800, fontWeight: FontWeight.w500),
+                              'ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â° $timeStr',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade800,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                            if (b['customer_phone'] != null && (b['customer_phone'] as String).isNotEmpty)
+                            if (b['customer_phone'] != null &&
+                                (b['customer_phone'] as String).isNotEmpty)
                               Text(
-                                '📞 ${b['customer_phone']}',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                                'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒâ€¦Ã‚Â¾ ${b['customer_phone']}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade700,
+                                ),
                               ),
                             Text(
-                              '👥 ${b['guest_count'] ?? table.capacity} Guests',
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                              'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“Ãƒâ€šÃ‚Â¥ ${b['guest_count'] ?? table.capacity} Guests',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade700,
+                              ),
                             ),
-                            if (b['notes'] != null && (b['notes'] as String).isNotEmpty)
+                            if (b['notes'] != null &&
+                                (b['notes'] as String).isNotEmpty)
                               Text(
-                                '📝 Note: ${b['notes']}',
-                                style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade600),
+                                'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒâ€šÃ‚Â Note: ${b['notes']}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic,
+                                  color: Colors.grey.shade600,
+                                ),
                               ),
                             const SizedBox(height: 8),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                                 TextButton.icon(
-                                  style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
-                                  icon: const Icon(Icons.cancel_outlined, size: 14),
-                                  label: const Text('Cancel Booking', style: TextStyle(fontSize: 11)),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.red.shade700,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.cancel_outlined,
+                                    size: 14,
+                                  ),
+                                  label: const Text(
+                                    'Cancel Booking',
+                                    style: TextStyle(fontSize: 11),
+                                  ),
                                   onPressed: () async {
                                     final confirm = await showDialog<bool>(
                                       context: ctx,
                                       builder: (c) => AlertDialog(
                                         title: const Text('Cancel Reservation'),
-                                        content: Text('Cancel reservation for ${b['customer_name']}?'),
+                                        content: Text(
+                                          'Cancel reservation for ${b['customer_name']}?',
+                                        ),
                                         actions: [
-                                          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No')),
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(c, false),
+                                            child: const Text('No'),
+                                          ),
                                           ElevatedButton(
-                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                                            onPressed: () => Navigator.pop(c, true),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.red,
+                                              foregroundColor: Colors.white,
+                                            ),
+                                            onPressed: () =>
+                                                Navigator.pop(c, true),
                                             child: const Text('Yes, Cancel'),
                                           ),
                                         ],
                                       ),
                                     );
                                     if (confirm == true) {
-                                      final db = await DatabaseHelper.instance.database;
-                                      await db.update('bookings', {'status': 'Cancelled'}, where: 'id = ?', whereArgs: [b['id']]);
+                                      final db = await DatabaseHelper
+                                          .instance
+                                          .database;
+                                      await db.update(
+                                        'bookings',
+                                        {'status': 'Cancelled'},
+                                        where: 'id = ?',
+                                        whereArgs: [b['id']],
+                                      );
                                       if (mounted) {
                                         Navigator.pop(ctx);
                                         await _loadTables();
@@ -1354,15 +1922,20 @@ class _TablesScreenState extends State<TablesScreen> {
         title: const Text('Delete Table'),
         content: Text('Are you sure you want to delete table "$number"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () async {
               await _tableRepository.deleteTable(id);
               if (mounted) {
                 Navigator.pop(context);
                 _loadTables();
-
               }
             },
             child: const Text('Delete'),
@@ -1404,9 +1977,18 @@ class _TablesScreenState extends State<TablesScreen> {
             indicatorColor: AppColors.primary,
             tabs: [
               Tab(icon: Icon(Icons.grid_view), text: 'Table Layout Grid'),
-              Tab(icon: Icon(Icons.calendar_view_day), text: 'Booking Time Grid'),
-              Tab(icon: Icon(Icons.bookmark_added_outlined), text: 'Booked / Reserved'),
-              Tab(icon: Icon(Icons.pause_circle_outline), text: 'Active Hold Orders'),
+              Tab(
+                icon: Icon(Icons.calendar_view_day),
+                text: 'Booking Time Grid',
+              ),
+              Tab(
+                icon: Icon(Icons.bookmark_added_outlined),
+                text: 'Booked / Reserved',
+              ),
+              Tab(
+                icon: Icon(Icons.pause_circle_outline),
+                text: 'Active Hold Orders',
+              ),
             ],
           ),
         ),
@@ -1447,19 +2029,61 @@ class _TablesScreenState extends State<TablesScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildKpiCard('Total Tables', '${counts['Total']}', Icons.table_bar, Colors.grey.shade800, 'All'),
+                _buildKpiCard(
+                  'Total Tables',
+                  '${counts['Total']}',
+                  Icons.table_bar,
+                  Colors.grey.shade800,
+                  'All',
+                ),
                 const SizedBox(width: 8),
-                _buildKpiCard('Available', '${counts['Available']}', Icons.check_circle_outline, const Color(0xFF2E7D32), 'Available'),
+                _buildKpiCard(
+                  'Available',
+                  '${counts['Available']}',
+                  Icons.check_circle_outline,
+                  const Color(0xFF2E7D32),
+                  'Available',
+                ),
                 const SizedBox(width: 8),
-                _buildKpiCard('Occupied', '${counts['Occupied']}', Icons.people, const Color(0xFF1565C0), 'Occupied'),
+                _buildKpiCard(
+                  'Occupied',
+                  '${counts['Occupied']}',
+                  Icons.people,
+                  const Color(0xFF1565C0),
+                  'Occupied',
+                ),
                 const SizedBox(width: 8),
-                _buildKpiCard('In Kitchen', '${counts['In Kitchen']}', Icons.outdoor_grill_outlined, const Color(0xFFE65100), 'Preparing'),
+                _buildKpiCard(
+                  'In Kitchen',
+                  '${counts['In Kitchen']}',
+                  Icons.outdoor_grill_outlined,
+                  const Color(0xFFE65100),
+                  'Preparing',
+                ),
                 const SizedBox(width: 8),
-                _buildKpiCard('Billing', '${counts['Billing']}', Icons.receipt_long, const Color(0xFFF9A825), 'Bill Requested'),
+                _buildKpiCard(
+                  'Billing',
+                  '${counts['Billing']}',
+                  Icons.receipt_long,
+                  const Color(0xFFF9A825),
+                  'Bill Requested',
+                ),
                 const SizedBox(width: 8),
-                _buildKpiCard('Cleaning', '${counts['Cleaning']}', Icons.cleaning_services_outlined, const Color(0xFF0288D1), 'Cleaning'),
+                _buildKpiCard(
+                  'Cleaning',
+                  '${counts['Cleaning']}',
+                  Icons.cleaning_services_outlined,
+                  const Color(0xFF0288D1),
+                  'Cleaning',
+                ),
                 const SizedBox(width: 8),
-                _buildKpiCard('Reserved', '${counts['Reserved']}', Icons.bookmark_added_outlined, const Color(0xFF7B1FA2), 'Reserved'),
+                _buildKpiCard(
+                  'Reserved',
+                  '${counts['Reserved']}',
+                  Icons.bookmark_added_outlined,
+                  const Color(0xFF7B1FA2),
+                  'Reserved',
+                ),
               ],
             ),
           ),
@@ -1480,8 +2104,13 @@ class _TablesScreenState extends State<TablesScreen> {
                   hintText: 'Search by table #, name, section, or notes...',
                   prefixIcon: const Icon(Icons.search, size: 20),
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 12,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 onChanged: (val) => setState(() => _searchQuery = val),
               );
@@ -1494,7 +2123,14 @@ class _TablesScreenState extends State<TablesScreen> {
                     DropdownButton<String>(
                       value: _selectedSection,
                       underline: const SizedBox(),
-                      items: _sections.map((s) => DropdownMenuItem(value: s, child: Text('Area: $s'))).toList(),
+                      items: _sections
+                          .map(
+                            (s) => DropdownMenuItem(
+                              value: s,
+                              child: Text('Area: $s'),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (val) {
                         if (val != null) setState(() => _selectedSection = val);
                       },
@@ -1505,9 +2141,18 @@ class _TablesScreenState extends State<TablesScreen> {
                       underline: const SizedBox(),
                       items: const [
                         DropdownMenuItem(value: 'All', child: Text('Cap: All')),
-                        DropdownMenuItem(value: '2 Seats', child: Text('Cap: 2 Seats')),
-                        DropdownMenuItem(value: '4 Seats', child: Text('Cap: 4 Seats')),
-                        DropdownMenuItem(value: '6+ Seats', child: Text('Cap: 6+ Seats')),
+                        DropdownMenuItem(
+                          value: '2 Seats',
+                          child: Text('Cap: 2 Seats'),
+                        ),
+                        DropdownMenuItem(
+                          value: '4 Seats',
+                          child: Text('Cap: 4 Seats'),
+                        ),
+                        DropdownMenuItem(
+                          value: '6+ Seats',
+                          child: Text('Cap: 6+ Seats'),
+                        ),
                       ],
                       onChanged: (val) {
                         if (val != null) setState(() => _capacityFilter = val);
@@ -1518,10 +2163,22 @@ class _TablesScreenState extends State<TablesScreen> {
                       value: _sortBy,
                       underline: const SizedBox(),
                       items: const [
-                        DropdownMenuItem(value: 'Table Number', child: Text('Sort: Number')),
-                        DropdownMenuItem(value: 'Capacity', child: Text('Sort: Capacity')),
-                        DropdownMenuItem(value: 'Status', child: Text('Sort: Status')),
-                        DropdownMenuItem(value: 'Section', child: Text('Sort: Area')),
+                        DropdownMenuItem(
+                          value: 'Table Number',
+                          child: Text('Sort: Number'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Capacity',
+                          child: Text('Sort: Capacity'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Status',
+                          child: Text('Sort: Status'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Section',
+                          child: Text('Sort: Area'),
+                        ),
                       ],
                       onChanged: (val) {
                         if (val != null) setState(() => _sortBy = val);
@@ -1534,20 +2191,13 @@ class _TablesScreenState extends State<TablesScreen> {
               if (isNarrow) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    searchField,
-                    const SizedBox(height: 8),
-                    dropdowns,
-                  ],
+                  children: [searchField, const SizedBox(height: 8), dropdowns],
                 );
               }
 
               return Row(
                 children: [
-                  Expanded(
-                    flex: 3,
-                    child: searchField,
-                  ),
+                  Expanded(flex: 3, child: searchField),
                   const SizedBox(width: 12),
                   dropdowns,
                 ],
@@ -1563,7 +2213,11 @@ class _TablesScreenState extends State<TablesScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.table_restaurant_outlined, size: 64, color: Colors.grey.shade300),
+                      Icon(
+                        Icons.table_restaurant_outlined,
+                        size: 64,
+                        color: Colors.grey.shade300,
+                      ),
                       const SizedBox(height: 12),
                       const Text(
                         'No tables match the selected filters',
@@ -1603,7 +2257,13 @@ class _TablesScreenState extends State<TablesScreen> {
     );
   }
 
-  Widget _buildKpiCard(String label, String count, IconData icon, Color color, String filterKey) {
+  Widget _buildKpiCard(
+    String label,
+    String count,
+    IconData icon,
+    Color color,
+    String filterKey,
+  ) {
     final isSelected = _statusFilter == filterKey;
     return InkWell(
       onTap: () {
@@ -1632,7 +2292,11 @@ class _TablesScreenState extends State<TablesScreen> {
               children: [
                 Text(
                   count,
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
                 ),
                 Text(
                   label,
@@ -1651,8 +2315,10 @@ class _TablesScreenState extends State<TablesScreen> {
     final table = item['table'] as TableModel;
     final activeOrder = item['active_order'] as Map<String, dynamic>?;
     final activeBooking = item['active_booking'] as Map<String, dynamic>?;
-    final allBookings = (item['all_bookings'] as List<Map<String, dynamic>>?) ?? [];
-    final upcomingBookings = (item['upcoming_bookings'] as List<Map<String, dynamic>>?) ?? [];
+    final allBookings =
+        (item['all_bookings'] as List<Map<String, dynamic>>?) ?? [];
+    final upcomingBookings =
+        (item['upcoming_bookings'] as List<Map<String, dynamic>>?) ?? [];
     final orderItemsCount = item['order_items_count'] as int? ?? 0;
 
     // Merged group info: tables merged into this table, and table this is merged into.
@@ -1715,14 +2381,22 @@ class _TablesScreenState extends State<TablesScreen> {
                       const SizedBox(width: 8),
                       Text(
                         table.tableNumber,
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: statusColor),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: statusColor,
+                        ),
                       ),
                       if (table.name != null && table.name!.isNotEmpty) ...[
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
                             '(${table.name})',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1732,14 +2406,22 @@ class _TablesScreenState extends State<TablesScreen> {
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2.5,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     displayStatus.toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ),
               ],
@@ -1749,7 +2431,10 @@ class _TablesScreenState extends State<TablesScreen> {
           // Body Details
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12.0,
+                vertical: 8.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1758,7 +2443,9 @@ class _TablesScreenState extends State<TablesScreen> {
                     Row(
                       children: [
                         Icon(
-                          mergedMembers.isNotEmpty ? Icons.merge_type : Icons.call_split,
+                          mergedMembers.isNotEmpty
+                              ? Icons.merge_type
+                              : Icons.call_split,
                           size: 14,
                           color: Colors.blue,
                         ),
@@ -1766,9 +2453,13 @@ class _TablesScreenState extends State<TablesScreen> {
                         Expanded(
                           child: Text(
                             mergedMembers.isNotEmpty
-                                ? 'Merged: ${[table, ...mergedMembers].map((t) => t.tableNumber).join(' + ')} • Capacity: ${table.capacity + mergedMembers.fold<int>(0, (s, t) => s + t.capacity)}'
+                                ? 'Merged: ${[table, ...mergedMembers].map((t) => t.tableNumber).join(' + ')} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Capacity: ${table.capacity + mergedMembers.fold<int>(0, (s, t) => s + t.capacity)}'
                                 : 'Part of merged group: Table ${mergedIntoNumber ?? ''}',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blue),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1789,19 +2480,30 @@ class _TablesScreenState extends State<TablesScreen> {
                         if (allBookings.isNotEmpty) ...[
                           const SizedBox(width: 6),
                           InkWell(
-                            onTap: () => _showAllReservationsDialog(table, allBookings),
+                            onTap: () =>
+                                _showAllReservationsDialog(table, allBookings),
                             borderRadius: BorderRadius.circular(4),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.amber.shade100,
                                 borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.amber.shade600, width: 0.8),
+                                border: Border.all(
+                                  color: Colors.amber.shade600,
+                                  width: 0.8,
+                                ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.bookmark, size: 12, color: Colors.amber.shade900),
+                                  Icon(
+                                    Icons.bookmark,
+                                    size: 12,
+                                    color: Colors.amber.shade900,
+                                  ),
                                   const SizedBox(width: 3),
                                   Text(
                                     '${allBookings.length} ${allBookings.length == 1 ? 'Booking' : 'Bookings'}',
@@ -1831,13 +2533,19 @@ class _TablesScreenState extends State<TablesScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Order #${activeOrder['id']} • $orderItemsCount items',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                'Order #${activeOrder['id']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ $orderItemsCount items',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                'Guest: ${activeOrder['customer_name'] ?? 'Guest'} • ${_getOccupiedDuration(activeOrder['order_time'])}',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                'Guest: ${activeOrder['customer_name'] ?? 'Guest'} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${_getOccupiedDuration(activeOrder['order_time'])}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ],
@@ -1845,29 +2553,48 @@ class _TablesScreenState extends State<TablesScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '₹${(activeOrder['total_amount'] as num?)?.toStringAsFixed(2) ?? "0.00"}',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primary),
+                          'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${(activeOrder['total_amount'] as num?)?.toStringAsFixed(2) ?? "0.00"}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
                         ),
                       ],
                     ),
                   ] else if (isHeld) ...[
                     Text(
                       'Held Order #${activeOrder['id']}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.purple, fontSize: 13),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.purple,
+                        fontSize: 13,
+                      ),
                     ),
                     Text(
-                      'Total: ₹${activeOrder['total_amount']} • ${_getOccupiedDuration(activeOrder['order_time'])}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      'Total: ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${activeOrder['total_amount']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${_getOccupiedDuration(activeOrder['order_time'])}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   ] else if (activeBooking != null) ...[
                     Row(
                       children: [
-                        const Icon(Icons.bookmark_added, size: 16, color: Colors.amber),
+                        const Icon(
+                          Icons.bookmark_added,
+                          size: 16,
+                          color: Colors.amber,
+                        ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             'Reserved Now: ${activeBooking['customer_name']} (${activeBooking['guest_count']} guests)',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.amber),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.amber,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1876,27 +2603,42 @@ class _TablesScreenState extends State<TablesScreen> {
                     const SizedBox(height: 2),
                     Text(
                       'Slot: ${DateFormat('hh:mm a').format(DateTime.parse(activeBooking['booking_time']))} - ${DateFormat('hh:mm a').format(DateTime.parse(activeBooking['booking_time']).add(const Duration(hours: 1)))}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade700,
+                      ),
                     ),
                     if (allBookings.length > 1) ...[
                       const SizedBox(height: 2),
                       InkWell(
-                        onTap: () => _showAllReservationsDialog(table, allBookings),
+                        onTap: () =>
+                            _showAllReservationsDialog(table, allBookings),
                         child: Text(
-                          'View all ${allBookings.length} reservations →',
-                          style: const TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.w600),
+                          'View all ${allBookings.length} reservations ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.blue,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
                   ] else if (upcomingBookings.isNotEmpty) ...[
                     Row(
                       children: [
-                        Icon(Icons.calendar_today, size: 14, color: Colors.amber.shade800),
+                        Icon(
+                          Icons.calendar_today,
+                          size: 14,
+                          color: Colors.amber.shade800,
+                        ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             'Next: ${upcomingBookings.first['customer_name']} (${upcomingBookings.first['guest_count']} guests)',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1905,27 +2647,43 @@ class _TablesScreenState extends State<TablesScreen> {
                     const SizedBox(height: 2),
                     Text(
                       'At: ${DateFormat('dd MMM, hh:mm a').format(DateTime.parse(upcomingBookings.first['booking_time']))}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                     if (allBookings.length > 1) ...[
                       const SizedBox(height: 2),
                       InkWell(
-                        onTap: () => _showAllReservationsDialog(table, allBookings),
+                        onTap: () =>
+                            _showAllReservationsDialog(table, allBookings),
                         child: Text(
-                          'View all ${allBookings.length} reservations →',
-                          style: const TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.w600),
+                          'View all ${allBookings.length} reservations ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.blue,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
                   ] else if (table.status == 'Cleaning') ...[
                     Row(
                       children: [
-                        const Icon(Icons.cleaning_services, size: 16, color: Colors.cyan),
+                        const Icon(
+                          Icons.cleaning_services,
+                          size: 16,
+                          color: Colors.cyan,
+                        ),
                         const SizedBox(width: 6),
                         const Expanded(
                           child: Text(
                             'Table is currently being sanitized',
-                            style: TextStyle(fontSize: 12, color: Colors.cyan, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.cyan,
+                              fontWeight: FontWeight.w600,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1934,12 +2692,20 @@ class _TablesScreenState extends State<TablesScreen> {
                   ] else if (table.status == 'Occupied') ...[
                     Row(
                       children: [
-                        const Icon(Icons.people, size: 16, color: Color(0xFF1565C0)),
+                        const Icon(
+                          Icons.people,
+                          size: 16,
+                          color: Color(0xFF1565C0),
+                        ),
                         const SizedBox(width: 6),
                         const Expanded(
                           child: Text(
                             'Table manually occupied (Walk-in)',
-                            style: TextStyle(fontSize: 12, color: Color(0xFF1565C0), fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF1565C0),
+                              fontWeight: FontWeight.w600,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -1948,7 +2714,10 @@ class _TablesScreenState extends State<TablesScreen> {
                   ] else ...[
                     Text(
                       'Ready for new party (${table.capacity} guests)',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   ],
                   const Spacer(),
@@ -1968,7 +2737,11 @@ class _TablesScreenState extends State<TablesScreen> {
               children: [
                 // Configure / Settings
                 IconButton(
-                  icon: const Icon(Icons.settings_outlined, size: 18, color: Colors.grey),
+                  icon: const Icon(
+                    Icons.settings_outlined,
+                    size: 18,
+                    color: Colors.grey,
+                  ),
                   onPressed: () => _showTableConfigDialog(table),
                 ),
 
@@ -1981,33 +2754,55 @@ class _TablesScreenState extends State<TablesScreen> {
                       children: [
                         if (isMergedMember)
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
                             child: Text(
                               'Order on Table $mergedIntoNumber',
-                              style: const TextStyle(fontSize: 11, color: Colors.blueGrey, fontWeight: FontWeight.w500),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.blueGrey,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           )
-                        else if (table.status == 'Available' && !hasActiveOrder && !isHeld && activeBooking == null) ...[
+                        else if (table.status == 'Available' &&
+                            !hasActiveOrder &&
+                            !isHeld &&
+                            activeBooking == null) ...[
                           // Manual Occupation anytime for walk-in guests
                           OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 4,
+                              ),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             icon: const Icon(Icons.people_outline, size: 13),
-                            label: const Text('Occupy', style: TextStyle(fontSize: 10)),
+                            label: const Text(
+                              'Occupy',
+                              style: TextStyle(fontSize: 10),
+                            ),
                             onPressed: () => _updateStatus(table, 'Occupied'),
                           ),
                           const SizedBox(width: 4),
                           OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 4,
+                              ),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             icon: const Icon(Icons.bookmark_outline, size: 13),
-                            label: const Text('Reserve', style: TextStyle(fontSize: 10)),
+                            label: const Text(
+                              'Reserve',
+                              style: TextStyle(fontSize: 10),
+                            ),
                             onPressed: () => _showReservationDialog(table),
                           ),
                           const SizedBox(width: 4),
@@ -2015,39 +2810,68 @@ class _TablesScreenState extends State<TablesScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF2E7D32),
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             icon: const Icon(Icons.add, size: 13),
-                            label: const Text('New Order', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                            label: const Text(
+                              'New Order',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             onPressed: () {
-                              context.go('/dashboard/waiter_order?tableId=${table.id}');
+                              context.go(
+                                '/dashboard/waiter_order?tableId=${table.id}',
+                              );
                             },
                           ),
                         ] else if (hasActiveOrder) ...[
                           OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 4,
+                              ),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            onPressed: () => _showOrderDetailsSheet(table, activeOrder),
-                            child: const Text('View Order', style: TextStyle(fontSize: 10)),
+                            onPressed: () =>
+                                _showOrderDetailsSheet(table, activeOrder),
+                            child: const Text(
+                              'View Order',
+                              style: TextStyle(fontSize: 10),
+                            ),
                           ),
                           const SizedBox(width: 4),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             icon: const Icon(Icons.point_of_sale, size: 13),
-                            label: const Text('Open Order', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                            label: const Text(
+                              'Open Order',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             onPressed: () {
-                              context.go('/dashboard/waiter_order?tableId=${table.id}');
+                              context.go(
+                                '/dashboard/waiter_order?tableId=${table.id}',
+                              );
                             },
                           ),
                         ] else if (isHeld) ...[
@@ -2055,12 +2879,20 @@ class _TablesScreenState extends State<TablesScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.purple,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
                             ),
                             icon: const Icon(Icons.play_arrow, size: 14),
-                            label: const Text('Resume Order', style: TextStyle(fontSize: 11)),
+                            label: const Text(
+                              'Resume Order',
+                              style: TextStyle(fontSize: 11),
+                            ),
                             onPressed: () {
-                              context.go('/dashboard/waiter_order?tableId=${table.id}');
+                              context.go(
+                                '/dashboard/waiter_order?tableId=${table.id}',
+                              );
                             },
                           ),
                         ] else if (table.status == 'Cleaning') ...[
@@ -2068,48 +2900,84 @@ class _TablesScreenState extends State<TablesScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF0288D1),
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                             ),
                             icon: const Icon(Icons.check, size: 16),
-                            label: const Text('Mark Available', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            label: const Text(
+                              'Mark Available',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             onPressed: () => _updateStatus(table, 'Available'),
                           ),
-                        ] else if (table.status == 'Occupied' || activeBooking != null) ...[
+                        ] else if (table.status == 'Occupied' ||
+                            activeBooking != null) ...[
                           OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 4,
+                              ),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             onPressed: () => _updateStatus(table, 'Available'),
-                            child: const Text('Available', style: TextStyle(fontSize: 10)),
+                            child: const Text(
+                              'Available',
+                              style: TextStyle(fontSize: 10),
+                            ),
                           ),
                           const SizedBox(width: 4),
                           OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 4,
+                              ),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             onPressed: () => _showReservationDialog(table),
-                            child: const Text('Reserve', style: TextStyle(fontSize: 10)),
+                            child: const Text(
+                              'Reserve',
+                              style: TextStyle(fontSize: 10),
+                            ),
                           ),
                           const SizedBox(width: 4),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF2E7D32),
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            onPressed: () => context.go('/dashboard/waiter_order?tableId=${table.id}'),
-                            child: const Text('Start Order', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                            onPressed: () => context.go(
+                              '/dashboard/waiter_order?tableId=${table.id}',
+                            ),
+                            child: const Text(
+                              'Start Order',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ] else ...[
                           ElevatedButton(
                             onPressed: () => _updateStatus(table, 'Available'),
-                            child: const Text('Mark Available', style: TextStyle(fontSize: 11)),
+                            child: const Text(
+                              'Mark Available',
+                              style: TextStyle(fontSize: 11),
+                            ),
                           ),
                         ],
                       ],
@@ -2138,7 +3006,11 @@ class _TablesScreenState extends State<TablesScreen> {
           const SizedBox(width: 3),
           Text(
             label,
-            style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
@@ -2200,18 +3072,28 @@ class _TablesScreenState extends State<TablesScreen> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.table_restaurant, color: AppColors.primary, size: 20),
+                          const Icon(
+                            Icons.table_restaurant,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
                           const SizedBox(width: 8),
                           const Expanded(
                             child: Text(
                               'Select Table First',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.primary.withAlpha(25),
                               borderRadius: BorderRadius.circular(12),
@@ -2235,7 +3117,10 @@ class _TablesScreenState extends State<TablesScreen> {
                           isDense: true,
                           filled: true,
                           fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 12,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -2245,7 +3130,8 @@ class _TablesScreenState extends State<TablesScreen> {
                             borderSide: BorderSide(color: Colors.grey.shade300),
                           ),
                         ),
-                        onChanged: (val) => setState(() => _gridTableSearch = val),
+                        onChanged: (val) =>
+                            setState(() => _gridTableSearch = val),
                       ),
                       if (_sections.length > 1) ...[
                         const SizedBox(height: 8),
@@ -2261,14 +3147,17 @@ class _TablesScreenState extends State<TablesScreen> {
                                     sec,
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: isSelected ? Colors.white : Colors.black87,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Colors.black87,
                                     ),
                                   ),
                                   selected: isSelected,
                                   selectedColor: AppColors.primary,
                                   visualDensity: VisualDensity.compact,
                                   onSelected: (selected) {
-                                    if (selected) setState(() => _gridSectionFilter = sec);
+                                    if (selected)
+                                      setState(() => _gridSectionFilter = sec);
                                   },
                                 ),
                               );
@@ -2293,10 +3182,12 @@ class _TablesScreenState extends State<TablesScreen> {
                       : ListView.separated(
                           padding: const EdgeInsets.all(12),
                           itemCount: tables.length,
-                          separatorBuilder: (context, index) => const SizedBox(height: 8),
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final table = tables[index];
-                            final isSelected = _selectedGridTable?.id == table.id;
+                            final isSelected =
+                                _selectedGridTable?.id == table.id;
                             return _buildTableSelectionCard(table, isSelected);
                           },
                         ),
@@ -2342,7 +3233,11 @@ class _TablesScreenState extends State<TablesScreen> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.table_restaurant, size: 16, color: AppColors.primary),
+                  const Icon(
+                    Icons.table_restaurant,
+                    size: 16,
+                    color: AppColors.primary,
+                  ),
                   const SizedBox(width: 6),
                   const Text(
                     'Select Table First:',
@@ -2351,7 +3246,10 @@ class _TablesScreenState extends State<TablesScreen> {
                   const Spacer(),
                   if (_selectedGridTable != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.primary.withAlpha(25),
                         borderRadius: BorderRadius.circular(8),
@@ -2385,12 +3283,19 @@ class _TablesScreenState extends State<TablesScreen> {
                         borderRadius: BorderRadius.circular(10),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
-                            color: isSelected ? AppColors.primary : Colors.white,
+                            color: isSelected
+                                ? AppColors.primary
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: isSelected ? AppColors.primary : Colors.grey.shade300,
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : Colors.grey.shade300,
                               width: isSelected ? 2.5 : 1,
                             ),
                             boxShadow: isSelected
@@ -2399,7 +3304,7 @@ class _TablesScreenState extends State<TablesScreen> {
                                       color: AppColors.primary.withAlpha(50),
                                       blurRadius: 6,
                                       offset: const Offset(0, 2),
-                                    )
+                                    ),
                                   ]
                                 : null,
                           ),
@@ -2407,9 +3312,13 @@ class _TablesScreenState extends State<TablesScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                isSelected ? Icons.check_circle : Icons.table_bar,
+                                isSelected
+                                    ? Icons.check_circle
+                                    : Icons.table_bar,
                                 size: 16,
-                                color: isSelected ? Colors.white : Colors.grey.shade700,
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.grey.shade700,
                               ),
                               const SizedBox(width: 6),
                               Text(
@@ -2417,7 +3326,9 @@ class _TablesScreenState extends State<TablesScreen> {
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
-                                  color: isSelected ? Colors.white : Colors.black87,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.black87,
                                 ),
                               ),
                               const SizedBox(width: 4),
@@ -2425,7 +3336,9 @@ class _TablesScreenState extends State<TablesScreen> {
                                 '(${t.capacity}s)',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: isSelected ? Colors.white70 : Colors.grey.shade600,
+                                  color: isSelected
+                                      ? Colors.white70
+                                      : Colors.grey.shade600,
                                 ),
                               ),
                             ],
@@ -2463,11 +3376,18 @@ class _TablesScreenState extends State<TablesScreen> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.calendar_month, size: 20, color: AppColors.primary),
+                const Icon(
+                  Icons.calendar_month,
+                  size: 20,
+                  color: AppColors.primary,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   DateFormat('EEE, dd MMMM yyyy').format(_selectedGridDate),
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
               ],
             ),
@@ -2476,7 +3396,11 @@ class _TablesScreenState extends State<TablesScreen> {
               icon: const Icon(Icons.arrow_back_ios, size: 16),
               tooltip: 'Previous Day',
               onPressed: () {
-                setState(() => _selectedGridDate = _selectedGridDate.subtract(const Duration(days: 1)));
+                setState(
+                  () => _selectedGridDate = _selectedGridDate.subtract(
+                    const Duration(days: 1),
+                  ),
+                );
               },
             ),
             OutlinedButton.icon(
@@ -2484,7 +3408,10 @@ class _TablesScreenState extends State<TablesScreen> {
               label: const Text('Select Date'),
               style: OutlinedButton.styleFrom(
                 visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
               onPressed: () async {
                 final picked = await showDatePicker(
@@ -2500,7 +3427,11 @@ class _TablesScreenState extends State<TablesScreen> {
               icon: const Icon(Icons.arrow_forward_ios, size: 16),
               tooltip: 'Next Day',
               onPressed: () {
-                setState(() => _selectedGridDate = _selectedGridDate.add(const Duration(days: 1)));
+                setState(
+                  () => _selectedGridDate = _selectedGridDate.add(
+                    const Duration(days: 1),
+                  ),
+                );
               },
             ),
           ],
@@ -2573,10 +3504,12 @@ class _TablesScreenState extends State<TablesScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${table.section} • ${table.capacity} Seats',
+                    '${table.section} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${table.capacity} Seats',
                     style: TextStyle(
                       fontSize: 12,
-                      color: isSelected ? AppColors.primary.withAlpha(200) : Colors.grey.shade600,
+                      color: isSelected
+                          ? AppColors.primary.withAlpha(200)
+                          : Colors.grey.shade600,
                     ),
                   ),
                 ],
@@ -2596,7 +3529,11 @@ class _TablesScreenState extends State<TablesScreen> {
                     SizedBox(width: 4),
                     Text(
                       'ACTIVE',
-                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -2636,7 +3573,11 @@ class _TablesScreenState extends State<TablesScreen> {
               'The booking interface requires a table to be selected before displaying available booking hours.\n'
               'Please select a table to view and manage its time grid.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.4),
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+                height: 1.4,
+              ),
             ),
             if (_enrichedTables.isNotEmpty) ...[
               const SizedBox(height: 20),
@@ -2644,13 +3585,17 @@ class _TablesScreenState extends State<TablesScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
                 ),
                 icon: const Icon(Icons.touch_app),
                 label: const Text('Select First Table'),
                 onPressed: () {
                   setState(() {
-                    _selectedGridTable = _enrichedTables.first['table'] as TableModel;
+                    _selectedGridTable =
+                        _enrichedTables.first['table'] as TableModel;
                     _selectedTimeSlotHour = null;
                   });
                 },
@@ -2665,7 +3610,10 @@ class _TablesScreenState extends State<TablesScreen> {
   Widget _buildVerticalTimeSlotsGrid(TableModel table) {
     const startHour = 10; // 10 AM
     const endHour = 23; // 11 PM
-    final timeSlots = List.generate(endHour - startHour + 1, (index) => startHour + index);
+    final timeSlots = List.generate(
+      endHour - startHour + 1,
+      (index) => startHour + index,
+    );
 
     final selectedDateStr = DateFormat('yyyy-MM-dd').format(_selectedGridDate);
     final bookingsForDay = _bookingsList.where((b) {
@@ -2680,7 +3628,9 @@ class _TablesScreenState extends State<TablesScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
             color: AppColors.primary.withAlpha(15),
-            border: Border(bottom: BorderSide(color: AppColors.primary.withAlpha(40))),
+            border: Border(
+              bottom: BorderSide(color: AppColors.primary.withAlpha(40)),
+            ),
           ),
           child: Row(
             children: [
@@ -2690,7 +3640,11 @@ class _TablesScreenState extends State<TablesScreen> {
                   color: AppColors.primary,
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Icon(Icons.table_bar, color: Colors.white, size: 16),
+                child: const Icon(
+                  Icons.table_bar,
+                  color: Colors.white,
+                  size: 16,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -2700,15 +3654,25 @@ class _TablesScreenState extends State<TablesScreen> {
                   children: [
                     Text(
                       'Table: ${table.displayName}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: AppColors.primary,
+                      ),
                     ),
                     Text(
                       'Section: ${table.section}',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade700,
+                      ),
                     ),
                     Text(
                       'Capacity: ${table.capacity} Guests',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade700,
+                      ),
                     ),
                   ],
                 ),
@@ -2717,7 +3681,11 @@ class _TablesScreenState extends State<TablesScreen> {
               Flexible(
                 child: Text(
                   '${bookingsForDay.length} Booked / ${timeSlots.length} Slots',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primary),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: AppColors.primary,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -2741,13 +3709,18 @@ class _TablesScreenState extends State<TablesScreen> {
     );
   }
 
-  Widget _buildVerticalTimeSlotCard(TableModel table, int h, List<Map<String, dynamic>> bookingsForDay) {
+  Widget _buildVerticalTimeSlotCard(
+    TableModel table,
+    int h,
+    List<Map<String, dynamic>> bookingsForDay,
+  ) {
     final hour12 = h > 12 ? h - 12 : (h == 0 ? 12 : h);
     final ampm = h >= 12 ? 'PM' : 'AM';
     final timeStr = '$hour12:00 $ampm';
 
     final now = DateTime.now();
-    final isCurrentHour = now.hour == h &&
+    final isCurrentHour =
+        now.hour == h &&
         _selectedGridDate.day == now.day &&
         _selectedGridDate.month == now.month &&
         _selectedGridDate.year == now.year;
@@ -2803,7 +3776,9 @@ class _TablesScreenState extends State<TablesScreen> {
               decoration: BoxDecoration(
                 color: isSelectedSlot
                     ? AppColors.primary
-                    : (isCurrentHour ? Colors.blue.shade100 : Colors.grey.shade100),
+                    : (isCurrentHour
+                          ? Colors.blue.shade100
+                          : Colors.grey.shade100),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
@@ -2817,7 +3792,9 @@ class _TablesScreenState extends State<TablesScreen> {
                         size: 14,
                         color: isSelectedSlot
                             ? Colors.white
-                            : (isCurrentHour ? Colors.blue.shade900 : Colors.grey.shade700),
+                            : (isCurrentHour
+                                  ? Colors.blue.shade900
+                                  : Colors.grey.shade700),
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -2827,7 +3804,9 @@ class _TablesScreenState extends State<TablesScreen> {
                           fontSize: 13,
                           color: isSelectedSlot
                               ? Colors.white
-                              : (isCurrentHour ? Colors.blue.shade900 : Colors.black87),
+                              : (isCurrentHour
+                                    ? Colors.blue.shade900
+                                    : Colors.black87),
                         ),
                       ),
                     ],
@@ -2837,7 +3816,9 @@ class _TablesScreenState extends State<TablesScreen> {
                     '1 Hour Slot',
                     style: TextStyle(
                       fontSize: 10,
-                      color: isSelectedSlot ? Colors.white70 : Colors.grey.shade600,
+                      color: isSelectedSlot
+                          ? Colors.white70
+                          : Colors.grey.shade600,
                     ),
                   ),
                 ],
@@ -2856,18 +3837,27 @@ class _TablesScreenState extends State<TablesScreen> {
                     runSpacing: 4,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
-                          color: isBooked ? Colors.amber.shade200 : Colors.green.shade100,
+                          color: isBooked
+                              ? Colors.amber.shade200
+                              : Colors.green.shade100,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              isBooked ? Icons.bookmark : Icons.check_circle_outline,
+                              isBooked
+                                  ? Icons.bookmark
+                                  : Icons.check_circle_outline,
                               size: 12,
-                              color: isBooked ? Colors.amber.shade900 : Colors.green.shade800,
+                              color: isBooked
+                                  ? Colors.amber.shade900
+                                  : Colors.green.shade800,
                             ),
                             const SizedBox(width: 4),
                             Text(
@@ -2875,7 +3865,9 @@ class _TablesScreenState extends State<TablesScreen> {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color: isBooked ? Colors.amber.shade900 : Colors.green.shade900,
+                                color: isBooked
+                                    ? Colors.amber.shade900
+                                    : Colors.green.shade900,
                               ),
                             ),
                           ],
@@ -2883,26 +3875,40 @@ class _TablesScreenState extends State<TablesScreen> {
                       ),
                       if (isCurrentHour)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.blue.shade600,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
                             'CURRENT',
-                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       if (isSelectedSlot)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.primary,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
                             'SELECTED SLOT',
-                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                     ],
@@ -2910,26 +3916,41 @@ class _TablesScreenState extends State<TablesScreen> {
                   const SizedBox(height: 6),
                   if (isBooked) ...[
                     Text(
-                      '${booking['customer_name'] ?? 'Booked Customer'} • ${booking['guest_count'] ?? table.capacity} Guests',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      '${booking['customer_name'] ?? 'Booked Customer'} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${booking['guest_count'] ?? table.capacity} Guests',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (booking['customer_phone'] != null && (booking['customer_phone'] as String).isNotEmpty)
+                    if (booking['customer_phone'] != null &&
+                        (booking['customer_phone'] as String).isNotEmpty)
                       Text(
                         'Phone: ${booking['customer_phone']}',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade700,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
-                    if (booking['notes'] != null && (booking['notes'] as String).isNotEmpty)
+                    if (booking['notes'] != null &&
+                        (booking['notes'] as String).isNotEmpty)
                       Text(
                         'Notes: ${booking['notes']}',
-                        style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade600),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                          color: Colors.grey.shade600,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                   ] else ...[
                     Text(
                       'Ready for reservation for ${table.displayName}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
@@ -2944,7 +3965,10 @@ class _TablesScreenState extends State<TablesScreen> {
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.red.shade700,
                   side: BorderSide(color: Colors.red.shade300),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   visualDensity: VisualDensity.compact,
                 ),
                 icon: const Icon(Icons.close, size: 14),
@@ -2954,11 +3978,19 @@ class _TablesScreenState extends State<TablesScreen> {
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('Cancel Booking'),
-                      content: Text('Cancel booking for ${booking['customer_name']} at $timeStr?'),
+                      content: Text(
+                        'Cancel booking for ${booking['customer_name']} at $timeStr?',
+                      ),
                       actions: [
-                        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Back')),
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: const Text('Back'),
+                        ),
                         ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                          ),
                           onPressed: () => Navigator.of(ctx).pop(true),
                           child: const Text('Cancel Booking'),
                         ),
@@ -2967,7 +3999,12 @@ class _TablesScreenState extends State<TablesScreen> {
                   );
                   if (confirm == true) {
                     final db = await DatabaseHelper.instance.database;
-                    await db.update('bookings', {'status': 'Cancelled'}, where: 'id = ?', whereArgs: [booking['id']]);
+                    await db.update(
+                      'bookings',
+                      {'status': 'Cancelled'},
+                      where: 'id = ?',
+                      whereArgs: [booking['id']],
+                    );
                     await _loadTables();
                   }
                 },
@@ -2977,12 +4014,18 @@ class _TablesScreenState extends State<TablesScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                   visualDensity: VisualDensity.compact,
                   elevation: isSelectedSlot ? 2 : 0,
                 ),
                 icon: const Icon(Icons.add, size: 16),
-                label: const Text('Book', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'Book',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
                 onPressed: () {
                   setState(() => _selectedTimeSlotHour = h);
                   final selectedDateTime = DateTime(
@@ -3011,7 +4054,10 @@ class _TablesScreenState extends State<TablesScreen> {
           children: [
             Icon(Icons.bookmark_border, size: 64, color: Colors.grey.shade300),
             const SizedBox(height: 12),
-            const Text('No table reservations found', style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const Text(
+              'No table reservations found',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
           ],
         ),
       );
@@ -3025,7 +4071,9 @@ class _TablesScreenState extends State<TablesScreen> {
         final bTime = DateTime.parse(b['booking_time']);
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -3041,14 +4089,20 @@ class _TablesScreenState extends State<TablesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Table ${b['table_number']} • ${b['customer_name']}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        'Table ${b['table_number']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${b['customer_name']}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Phone: ${b['customer_phone'] ?? "N/A"} • Guests: ${b['guest_count']} • Time: ${DateFormat('dd MMM yyyy, hh:mm a').format(bTime)}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                        'Phone: ${b['customer_phone'] ?? "N/A"} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Guests: ${b['guest_count']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Time: ${DateFormat('dd MMM yyyy, hh:mm a').format(bTime)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade700,
+                        ),
                       ),
                     ],
                   ),
@@ -3063,19 +4117,35 @@ class _TablesScreenState extends State<TablesScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                         ),
                         onPressed: () {
-                          context.go('/dashboard/waiter_order?tableId=${b['table_id']}');
+                          context.go(
+                            '/dashboard/waiter_order?tableId=${b['table_id']}',
+                          );
                         },
-                        child: const Text('Start Order', style: TextStyle(fontSize: 12)),
+                        child: const Text(
+                          'Start Order',
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ),
                       const SizedBox(width: 4),
                       IconButton(
-                        icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                        icon: const Icon(
+                          Icons.cancel_outlined,
+                          color: Colors.red,
+                        ),
                         onPressed: () async {
                           final db = await DatabaseHelper.instance.database;
-                          await db.update('bookings', {'status': 'Cancelled'}, where: 'id = ?', whereArgs: [b['id']]);
+                          await db.update(
+                            'bookings',
+                            {'status': 'Cancelled'},
+                            where: 'id = ?',
+                            whereArgs: [b['id']],
+                          );
                           await _loadTables();
                         },
                       ),
@@ -3097,9 +4167,16 @@ class _TablesScreenState extends State<TablesScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.pause_circle_outline, size: 64, color: Colors.grey.shade300),
+            Icon(
+              Icons.pause_circle_outline,
+              size: 64,
+              color: Colors.grey.shade300,
+            ),
             const SizedBox(height: 12),
-            const Text('No orders currently on hold', style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const Text(
+              'No orders currently on hold',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
           ],
         ),
       );
@@ -3112,7 +4189,9 @@ class _TablesScreenState extends State<TablesScreen> {
         final order = _heldOrdersList[index];
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: ListTile(
             leading: CircleAvatar(
               backgroundColor: Colors.purple.shade50,
@@ -3123,14 +4202,19 @@ class _TablesScreenState extends State<TablesScreen> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              'Guest: ${order['customer_name'] ?? 'Guest'} • Total: ₹${order['total_amount']} • Time: ${_getOccupiedDuration(order['order_time'])}',
+              'Guest: ${order['customer_name'] ?? 'Guest'} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Total: ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${order['total_amount']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Time: ${_getOccupiedDuration(order['order_time'])}',
             ),
             trailing: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple,
+                foregroundColor: Colors.white,
+              ),
               icon: const Icon(Icons.play_arrow, size: 16),
               label: const Text('Resume in POS'),
               onPressed: () {
-                context.go('/dashboard/pos?tableId=${order['table_id']}&reopenOrderId=${order['id']}');
+                context.go(
+                  '/dashboard/pos?tableId=${order['table_id']}&reopenOrderId=${order['id']}',
+                );
               },
             ),
           ),

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 import '../core/api/api_mode.dart';
 import '../core/database/database_helper.dart';
 import '../models/user_model.dart';
@@ -114,6 +114,9 @@ class UserRepository {
       'password': user.password,
     'role': user.role,
     'active': user.isActive,
+    'contactDetails': user.contactDetails,
+    'shiftTiming': user.shiftTiming,
   };
 }
+
 
