@@ -1105,7 +1105,7 @@ class _TablesScreenState extends State<TablesScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Order #${activeOrder['id']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${table.displayName}',
+                          'Order #${activeOrder['id']} • ${table.displayName}',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -1113,7 +1113,7 @@ class _TablesScreenState extends State<TablesScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          'Guest: $guest ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Taken by: $orderTaker ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${_getOccupiedDuration(timeStr)}',
+                          'Guest: $guest • Taken by: $orderTaker • ${_getOccupiedDuration(timeStr)}',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade600,
@@ -1180,7 +1180,7 @@ class _TablesScreenState extends State<TablesScreen> {
                               ),
                               if (notes != null && notes.isNotEmpty)
                                 Text(
-                                  'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒâ€šÃ‚Â $notes',
+                                  'Notes: $notes',
                                   style: TextStyle(
                                     fontSize: 11,
                                     color: AppColors.primaryMaterialColor[700]!,
@@ -1209,7 +1209,7 @@ class _TablesScreenState extends State<TablesScreen> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${(price * qty).toStringAsFixed(2)}',
+                          '₹${(price * qty).toStringAsFixed(2)}',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -1225,7 +1225,7 @@ class _TablesScreenState extends State<TablesScreen> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${total.toStringAsFixed(2)}',
+                    '₹${total.toStringAsFixed(2)}',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -1325,7 +1325,7 @@ class _TablesScreenState extends State<TablesScreen> {
                     return DropdownMenuItem(
                       value: t,
                       child: Text(
-                        '${t.displayName} (${t.capacity} seats ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${t.section})',
+                        '${t.displayName} (${t.capacity} seats • ${t.section})',
                         overflow: TextOverflow.ellipsis,
                       ),
                     );
@@ -1704,7 +1704,7 @@ class _TablesScreenState extends State<TablesScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Reservations ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${table.displayName}',
+                'Reservations • ${table.displayName}',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 17,
@@ -1737,7 +1737,7 @@ class _TablesScreenState extends State<TablesScreen> {
                           now.isBefore(bTime.add(const Duration(hours: 1)));
                       final timeStr = bTime != null
                           ? DateFormat(
-                              'EEE, dd MMM yyyy ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ hh:mm a',
+                              'EEE, dd MMM yyyy • hh:mm a',
                             ).format(bTime)
                           : 'N/A';
 
@@ -1796,7 +1796,7 @@ class _TablesScreenState extends State<TablesScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â° $timeStr',
+                              'Time: $timeStr',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey.shade800,
@@ -1806,14 +1806,14 @@ class _TablesScreenState extends State<TablesScreen> {
                             if (b['customer_phone'] != null &&
                                 (b['customer_phone'] as String).isNotEmpty)
                               Text(
-                                'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒâ€¦Ã‚Â¾ ${b['customer_phone']}',
+                                'Phone: ${b['customer_phone']}',
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey.shade700,
                                 ),
                               ),
                             Text(
-                              'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“Ãƒâ€šÃ‚Â¥ ${b['guest_count'] ?? table.capacity} Guests',
+                              '${b['guest_count'] ?? table.capacity} Guests',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: Colors.grey.shade700,
@@ -1822,7 +1822,7 @@ class _TablesScreenState extends State<TablesScreen> {
                             if (b['notes'] != null &&
                                 (b['notes'] as String).isNotEmpty)
                               Text(
-                                'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒâ€šÃ‚Â Note: ${b['notes']}',
+                                'Note: ${b['notes']}',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontStyle: FontStyle.italic,
@@ -2453,7 +2453,7 @@ class _TablesScreenState extends State<TablesScreen> {
                         Expanded(
                           child: Text(
                             mergedMembers.isNotEmpty
-                                ? 'Merged: ${[table, ...mergedMembers].map((t) => t.tableNumber).join(' + ')} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Capacity: ${table.capacity + mergedMembers.fold<int>(0, (s, t) => s + t.capacity)}'
+                                ? 'Merged: ${[table, ...mergedMembers].map((t) => t.tableNumber).join(' + ')} • Capacity: ${table.capacity + mergedMembers.fold<int>(0, (s, t) => s + t.capacity)}'
                                 : 'Part of merged group: Table ${mergedIntoNumber ?? ''}',
                             style: const TextStyle(
                               fontSize: 11,
@@ -2533,7 +2533,7 @@ class _TablesScreenState extends State<TablesScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Order #${activeOrder['id']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ $orderItemsCount items',
+                                'Order #${activeOrder['id']} • $orderItemsCount items',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
@@ -2541,7 +2541,7 @@ class _TablesScreenState extends State<TablesScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                'Guest: ${activeOrder['customer_name'] ?? 'Guest'} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${_getOccupiedDuration(activeOrder['order_time'])}',
+                                'Guest: ${activeOrder['customer_name'] ?? 'Guest'} • ${_getOccupiedDuration(activeOrder['order_time'])}',
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey.shade600,
@@ -2553,7 +2553,7 @@ class _TablesScreenState extends State<TablesScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${(activeOrder['total_amount'] as num?)?.toStringAsFixed(2) ?? "0.00"}',
+                          '₹${(activeOrder['total_amount'] as num?)?.toStringAsFixed(2) ?? "0.00"}',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -2572,7 +2572,7 @@ class _TablesScreenState extends State<TablesScreen> {
                       ),
                     ),
                     Text(
-                      'Total: ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${activeOrder['total_amount']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${_getOccupiedDuration(activeOrder['order_time'])}',
+                      'Total: ₹${activeOrder['total_amount']} • ${_getOccupiedDuration(activeOrder['order_time'])}',
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.grey.shade600,
@@ -2614,7 +2614,7 @@ class _TablesScreenState extends State<TablesScreen> {
                         onTap: () =>
                             _showAllReservationsDialog(table, allBookings),
                         child: Text(
-                          'View all ${allBookings.length} reservations ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢',
+                          'View all ${allBookings.length} reservations',
                           style: const TextStyle(
                             fontSize: 11,
                             color: Colors.blue,
@@ -2658,7 +2658,7 @@ class _TablesScreenState extends State<TablesScreen> {
                         onTap: () =>
                             _showAllReservationsDialog(table, allBookings),
                         child: Text(
-                          'View all ${allBookings.length} reservations ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢',
+                          'View all ${allBookings.length} reservations',
                           style: const TextStyle(
                             fontSize: 11,
                             color: Colors.blue,
@@ -3504,7 +3504,7 @@ class _TablesScreenState extends State<TablesScreen> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${table.section} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${table.capacity} Seats',
+                    '${table.section} • ${table.capacity} Seats',
                     style: TextStyle(
                       fontSize: 12,
                       color: isSelected
@@ -3916,7 +3916,7 @@ class _TablesScreenState extends State<TablesScreen> {
                   const SizedBox(height: 6),
                   if (isBooked) ...[
                     Text(
-                      '${booking['customer_name'] ?? 'Booked Customer'} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${booking['guest_count'] ?? table.capacity} Guests',
+                      '${booking['customer_name'] ?? 'Booked Customer'} • ${booking['guest_count'] ?? table.capacity} Guests',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
@@ -4089,7 +4089,7 @@ class _TablesScreenState extends State<TablesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Table ${b['table_number']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${b['customer_name']}',
+                        'Table ${b['table_number']} • ${b['customer_name']}',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -4098,7 +4098,7 @@ class _TablesScreenState extends State<TablesScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Phone: ${b['customer_phone'] ?? "N/A"} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Guests: ${b['guest_count']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Time: ${DateFormat('dd MMM yyyy, hh:mm a').format(bTime)}',
+                        'Phone: ${b['customer_phone'] ?? "N/A"} • Guests: ${b['guest_count']} • Time: ${DateFormat('dd MMM yyyy, hh:mm a').format(bTime)}',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade700,
@@ -4202,7 +4202,7 @@ class _TablesScreenState extends State<TablesScreen> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              'Guest: ${order['customer_name'] ?? 'Guest'} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Total: ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${order['total_amount']} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Time: ${_getOccupiedDuration(order['order_time'])}',
+              'Guest: ${order['customer_name'] ?? 'Guest'} • Total: ₹${order['total_amount']} • Time: ${_getOccupiedDuration(order['order_time'])}',
             ),
             trailing: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
