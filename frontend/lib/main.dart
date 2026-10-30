@@ -101,9 +101,15 @@ GoRouter _buildRouter(bool hasToken, [String? initialLocation]) {
             builder: (context, state) => const TablesScreen(),
           ),
           GoRoute(
-            path: '/dashboard/waiter_order',
-            builder: (context, state) => const WaiterOrderScreen(),
-          ),
+  path: '/dashboard/waiter_order',
+  builder: (context, state) {
+    final tableId = state.uri.queryParameters['tableId'];
+
+    return WaiterOrderScreen(
+      selectedTableId: tableId != null ? int.tryParse(tableId) : null,
+    );
+  },
+),
           GoRoute(
             path: '/dashboard/kitchen',
             builder: (context, state) => const KitchenScreen(),

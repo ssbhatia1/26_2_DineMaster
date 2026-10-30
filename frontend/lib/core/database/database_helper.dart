@@ -21,27 +21,29 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'SQLite is not available on Flutter Web. Use the Spring Boot REST API.',
-      );
+      return NetworkDatabase(serverIp: 'localhost', port: 8081);
     }
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final isServer = prefs.getBool('is_server') ?? true;
-      
+
       if (!isServer) {
         final serverIp = prefs.getString('server_ip') ?? 'localhost';
-        return NetworkDatabase(serverIp: serverIp);
+
+        return NetworkDatabase(serverIp: serverIp, port: 8082);
       }
     } catch (_) {}
 
     if (_database != null) return _database!;
+
     _database = await _initDB(databaseName);
     return _database!;
   }
 
   Future<Database> _initDB(String filePath) async {
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       initSqliteFfiIfDesktop();
     }
 
@@ -57,7 +59,9 @@ class DatabaseHelper {
     try {
       final prefs = await SharedPreferences.getInstance();
       setupChoice = prefs.getString('setup_data_choice');
-      if (setupChoice != 'fresh' && await File(oldPath).exists() && !await File(path).exists()) {
+      if (setupChoice != 'fresh' &&
+          await File(oldPath).exists() &&
+          !await File(path).exists()) {
         try {
           await File(oldPath).copy(path);
         } catch (_) {}
@@ -101,7 +105,8 @@ class DatabaseHelper {
 
         final activeOrders = await db.query(
           'orders',
-          where: 'table_id = ? AND payment_status != ? AND status NOT IN (?, ?)',
+          where:
+              'table_id = ? AND payment_status != ? AND status NOT IN (?, ?)',
           whereArgs: [tableId, 'Paid', 'Completed', 'Cancelled'],
         );
 
@@ -129,7 +134,8 @@ class DatabaseHelper {
             updates[tableId] = 'Occupied';
           }
         } else {
-          if (currentStatus == 'Occupied' || currentStatus == 'Billing Pending') {
+          if (currentStatus == 'Occupied' ||
+              currentStatus == 'Billing Pending') {
             updates[tableId] = 'Available';
           }
         }
@@ -138,7 +144,12 @@ class DatabaseHelper {
       if (updates.isNotEmpty) {
         await db.transaction((txn) async {
           for (final entry in updates.entries) {
-            await txn.update('tables', {'status': entry.value}, where: 'id = ?', whereArgs: [entry.key]);
+            await txn.update(
+              'tables',
+              {'status': entry.value},
+              where: 'id = ?',
+              whereArgs: [entry.key],
+            );
           }
         });
       }
@@ -199,7 +210,9 @@ class DatabaseHelper {
 
     for (var entry in columns.entries) {
       try {
-        await db.execute('ALTER TABLE products ADD COLUMN ${entry.key} ${entry.value}');
+        await db.execute(
+          'ALTER TABLE products ADD COLUMN ${entry.key} ${entry.value}',
+        );
       } catch (_) {
         // Column already exists
       }
@@ -218,7 +231,9 @@ class DatabaseHelper {
     };
     for (var entry in tableColumns.entries) {
       try {
-        await db.execute('ALTER TABLE tables ADD COLUMN ${entry.key} ${entry.value}');
+        await db.execute(
+          'ALTER TABLE tables ADD COLUMN ${entry.key} ${entry.value}',
+        );
       } catch (_) {}
     }
 
@@ -238,7 +253,9 @@ class DatabaseHelper {
     };
     for (var entry in orderColumns.entries) {
       try {
-        await db.execute('ALTER TABLE orders ADD COLUMN ${entry.key} ${entry.value}');
+        await db.execute(
+          'ALTER TABLE orders ADD COLUMN ${entry.key} ${entry.value}',
+        );
       } catch (_) {}
     }
 
@@ -250,7 +267,9 @@ class DatabaseHelper {
     };
     for (var entry in bookingColumns.entries) {
       try {
-        await db.execute('ALTER TABLE bookings ADD COLUMN ${entry.key} ${entry.value}');
+        await db.execute(
+          'ALTER TABLE bookings ADD COLUMN ${entry.key} ${entry.value}',
+        );
       } catch (_) {}
     }
 
@@ -265,13 +284,12 @@ class DatabaseHelper {
     } catch (_) {}
 
     // Alter users table to add contact details and shift timing if missing
-    final userColumns = {
-      'contact_details': 'TEXT',
-      'shift_timing': 'TEXT',
-    };
+    final userColumns = {'contact_details': 'TEXT', 'shift_timing': 'TEXT'};
     for (var entry in userColumns.entries) {
       try {
-        await db.execute('ALTER TABLE users ADD COLUMN ${entry.key} ${entry.value}');
+        await db.execute(
+          'ALTER TABLE users ADD COLUMN ${entry.key} ${entry.value}',
+        );
       } catch (_) {}
     }
 
@@ -299,7 +317,9 @@ class DatabaseHelper {
     };
     for (var entry in kotColumns.entries) {
       try {
-        await db.execute('ALTER TABLE kot ADD COLUMN ${entry.key} ${entry.value}');
+        await db.execute(
+          'ALTER TABLE kot ADD COLUMN ${entry.key} ${entry.value}',
+        );
       } catch (_) {}
     }
 
@@ -311,7 +331,7 @@ class DatabaseHelper {
         restaurant_id INTEGER
       )
     ''');
-    
+
     await db.execute('''
       CREATE TABLE IF NOT EXISTS table_sections (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -332,19 +352,21 @@ class DatabaseHelper {
           created_at TEXT
         )
       ''');
-      
+
       await db.execute('ALTER TABLE tables ADD COLUMN restaurant_id INTEGER');
       await db.execute('ALTER TABLE products ADD COLUMN restaurant_id INTEGER');
       await db.execute('ALTER TABLE orders ADD COLUMN restaurant_id INTEGER');
-      await db.execute('ALTER TABLE inventory ADD COLUMN restaurant_id INTEGER');
-      
+      await db.execute(
+        'ALTER TABLE inventory ADD COLUMN restaurant_id INTEGER',
+      );
+
       // Insert a default restaurant so existing data can link to it
       final now = DateTime.now().toIso8601String();
       final restId = await db.insert('restaurants', {
         'name': 'Default Restaurant',
         'created_at': now,
       });
-      
+
       // Update existing data to use default restaurant
       await db.update('tables', {'restaurant_id': restId});
       await db.update('products', {'restaurant_id': restId});
@@ -379,14 +401,17 @@ class DatabaseHelper {
           FOREIGN KEY (restaurant_id) REFERENCES restaurants (id)
         )
       ''');
-      
-      final defaultCategories = ['Starters', 'Main Course', 'Breads', 'Beverages', 'Desserts'];
+
+      final defaultCategories = [
+        'Starters',
+        'Main Course',
+        'Breads',
+        'Beverages',
+        'Desserts',
+      ];
       for (var cat in defaultCategories) {
         try {
-          await db.insert('categories', {
-            'name': cat,
-            'restaurant_id': 1,
-          });
+          await db.insert('categories', {'name': cat, 'restaurant_id': 1});
         } catch (e) {
           // Ignore if already exists
         }
@@ -430,7 +455,9 @@ class DatabaseHelper {
 
     if (oldVersion < 6) {
       try {
-        await db.execute('ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT \'Unpaid\'');
+        await db.execute(
+          'ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT \'Unpaid\'',
+        );
         await db.execute('ALTER TABLE orders ADD COLUMN payment_method TEXT');
       } catch (e) {
         // Column might already exist
@@ -439,7 +466,9 @@ class DatabaseHelper {
 
     if (oldVersion < 7) {
       try {
-        await db.execute('ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0');
+        await db.execute(
+          'ALTER TABLE orders ADD COLUMN discount_amount REAL DEFAULT 0',
+        );
       } catch (e) {
         // Column might already exist
       }
@@ -566,7 +595,6 @@ CREATE TABLE table_sections (
   restaurant_id INTEGER
 )
 ''');
-
 
     // Orders Table
     await db.execute('''
@@ -782,7 +810,7 @@ CREATE TABLE suppliers (
 
   Future<void> _insertInitialData(Database db) async {
     final now = DateTime.now().toIso8601String();
-    
+
     // Insert Default Restaurant
     final restId = await db.insert('restaurants', {
       'name': 'Default Restaurant',
@@ -800,25 +828,44 @@ CREATE TABLE suppliers (
     });
 
     // Insert Default Table Types
-    final defaultTypes = ['Standard Table', 'Booth', 'Round Table', 'Square Table', 'Rectangle Table', 'Counter', 'Bar Counter', 'Outdoor Table'];
+    final defaultTypes = [
+      'Standard Table',
+      'Booth',
+      'Round Table',
+      'Square Table',
+      'Rectangle Table',
+      'Counter',
+      'Bar Counter',
+      'Outdoor Table',
+    ];
     for (var t in defaultTypes) {
       await db.insert('table_types', {'name': t, 'restaurant_id': restId});
     }
 
     // Insert Default Table Sections
-    final defaultSections = ['Main Hall', 'AC Dining', 'Rooftop', 'Outdoor / Patio', 'VIP Lounge', 'Bar Counter'];
+    final defaultSections = [
+      'Main Hall',
+      'AC Dining',
+      'Rooftop',
+      'Outdoor / Patio',
+      'VIP Lounge',
+      'Bar Counter',
+    ];
     for (var s in defaultSections) {
       await db.insert('table_sections', {'name': s, 'restaurant_id': restId});
     }
 
     // Insert Default Categories
-    final defaultCategories = ['Starters', 'Main Course', 'Breads', 'Beverages', 'Desserts'];
+    final defaultCategories = [
+      'Starters',
+      'Main Course',
+      'Breads',
+      'Beverages',
+      'Desserts',
+    ];
     for (var cat in defaultCategories) {
       try {
-        await db.insert('categories', {
-          'name': cat,
-          'restaurant_id': restId,
-        });
+        await db.insert('categories', {'name': cat, 'restaurant_id': restId});
       } catch (_) {}
     }
   }
@@ -829,8 +876,15 @@ CREATE TABLE suppliers (
     return digest.toString();
   }
 
-  Future<void> logOrderStatus(int orderId, String status, {String? changedBy, String? notes}) async {
-    final db = await database;
+  Future<void> logOrderStatus(
+    int orderId,
+    String status, {
+    String? changedBy,
+    String? notes,
+    DatabaseExecutor? executor,
+  }) async {
+    final db = executor ?? await database;
+
     await db.insert('order_status_logs', {
       'order_id': orderId,
       'status': status,
@@ -840,21 +894,21 @@ CREATE TABLE suppliers (
     });
   }
 
-  Future<void> generateKOTForOrder(int orderId, [String? chefName]) async {
-    final db = await database;
-    
-    // Check if there are any order items that do not have a KOT assigned
+  Future<void> generateKOTForOrder(
+    int orderId, [
+    String? chefName,
+    DatabaseExecutor? executor,
+  ]) async {
+    final db = executor ?? await database;
+
     final List<Map<String, dynamic>> pendingItems = await db.query(
       'order_items',
       where: 'order_id = ? AND (kot_id IS NULL OR kot_id = 0)',
       whereArgs: [orderId],
     );
 
-    if (pendingItems.isEmpty) {
-      return;
-    }
+    if (pendingItems.isEmpty) return;
 
-    // Count existing KOTs for this order
     final List<Map<String, dynamic>> existingKots = await db.query(
       'kot',
       where: 'order_id = ?',
@@ -864,47 +918,53 @@ CREATE TABLE suppliers (
     final int nextKotIndex = existingKots.length + 1;
     final String kotNumber = 'KOT-#$orderId-$nextKotIndex';
 
-    // Calculate product prep time
-    int maxProductTime = 10; // Default fallback
-    for (var item in pendingItems) {
+    int maxProductTime = 10;
+
+    for (final item in pendingItems) {
       final productId = item['product_id'];
+
       final List<Map<String, dynamic>> productMaps = await db.query(
         'products',
         columns: ['prep_time', 'cook_time'],
         where: 'id = ?',
         whereArgs: [productId],
       );
+
       if (productMaps.isNotEmpty) {
-        final prep = productMaps.first['prep_time'] as int? ?? 5;
-        final cook = productMaps.first['cook_time'] as int? ?? 10;
+        final prep =
+            (productMaps.first['prep_time'] as num?)?.toInt() ?? 5;
+        final cook =
+            (productMaps.first['cook_time'] as num?)?.toInt() ?? 10;
+
         final total = prep + cook;
-        if (total > maxProductTime) {
-          maxProductTime = total;
-        }
+        if (total > maxProductTime) maxProductTime = total;
       }
     }
 
-    // Workload delay: active KOTs in progress
     final List<Map<String, dynamic>> activeKots = await db.query(
       'kot',
-      where: 'status IN (\'Pending\', \'Cooking\')',
+      where: 'status IN (?, ?)',
+      whereArgs: ['Pending', 'Cooking'],
     );
+
     final workloadDelay = activeKots.length * 2;
     final estimatedTime = maxProductTime + workloadDelay;
 
-    // Determine priority based on order type
     final List<Map<String, dynamic>> orderMaps = await db.query(
       'orders',
       columns: ['type'],
       where: 'id = ?',
       whereArgs: [orderId],
     );
+
     String priority = 'Normal';
-    if (orderMaps.isNotEmpty && (orderMaps.first['type'] == 'Dine-in' || orderMaps.first['type'] == 'Table Order')) {
+
+    if (orderMaps.isNotEmpty &&
+        (orderMaps.first['type'] == 'Dine-in' ||
+            orderMaps.first['type'] == 'Table Order')) {
       priority = 'High';
     }
 
-    // Insert new KOT record
     final kotId = await db.insert('kot', {
       'order_id': orderId,
       'kot_number': kotNumber,
@@ -915,21 +975,21 @@ CREATE TABLE suppliers (
       if (chefName != null) 'chef_name': chefName,
     });
 
-    // Update those order items to point to this new KOT and set their status to Pending
     await db.update(
       'order_items',
-      {
-        'kot_id': kotId,
-        'status': 'Pending',
-      },
+      {'kot_id': kotId, 'status': 'Pending'},
       where: 'order_id = ? AND (kot_id IS NULL OR kot_id = 0)',
       whereArgs: [orderId],
     );
 
-    // Log the order status change
-    await logOrderStatus(orderId, 'Sent to Kitchen', notes: 'Generated KOT: $kotNumber with Est. Prep Time of $estimatedTime mins.');
+    await logOrderStatus(
+      orderId,
+      'Sent to Kitchen',
+      notes:
+          'Generated KOT: $kotNumber with Est. Prep Time of $estimatedTime mins.',
+      executor: db,
+    );
   }
-
   Future<String> backupDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'dinemaster_restaurant.db');
@@ -941,12 +1001,20 @@ CREATE TABLE suppliers (
       }
     }
     if (await dbFile.exists()) {
-      final String homeDir = Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '.';
-      final backupDir = Directory(join(homeDir, 'Downloads', 'DineMasterBackups'));
+      final String homeDir =
+          Platform.environment['USERPROFILE'] ??
+          Platform.environment['HOME'] ??
+          '.';
+      final backupDir = Directory(
+        join(homeDir, 'Downloads', 'DineMasterBackups'),
+      );
       if (!await backupDir.exists()) {
         await backupDir.create(recursive: true);
       }
-      final backupPath = join(backupDir.path, 'backup_${DateTime.now().toIso8601String().replaceAll(':', '-')}.db');
+      final backupPath = join(
+        backupDir.path,
+        'backup_${DateTime.now().toIso8601String().replaceAll(':', '-')}.db',
+      );
       await dbFile.copy(backupPath);
       return backupPath;
     }
@@ -1000,7 +1068,8 @@ CREATE TABLE suppliers (
     final dineMasterPath = join(dbPath, 'dinemaster_restaurant.db');
     final legacyPath = join(dbPath, 'nexodine_restaurant.db');
 
-    if (await File(legacyPath).exists() && !await File(dineMasterPath).exists()) {
+    if (await File(legacyPath).exists() &&
+        !await File(dineMasterPath).exists()) {
       try {
         await File(legacyPath).copy(dineMasterPath);
       } catch (_) {}
@@ -1034,7 +1103,10 @@ CREATE TABLE suppliers (
     String? archivedPath;
 
     if (await File(dineMasterPath).exists()) {
-      archivedPath = join(dbPath, 'dinemaster_restaurant_archive_$timestamp.db');
+      archivedPath = join(
+        dbPath,
+        'dinemaster_restaurant_archive_$timestamp.db',
+      );
       try {
         await File(dineMasterPath).rename(archivedPath);
       } catch (_) {
@@ -1050,7 +1122,10 @@ CREATE TABLE suppliers (
       } catch (_) {}
     }
     if (await File(legacyPath).exists()) {
-      final legacyArchive = join(dbPath, 'nexodine_restaurant_archive_$timestamp.db');
+      final legacyArchive = join(
+        dbPath,
+        'nexodine_restaurant_archive_$timestamp.db',
+      );
       try {
         await File(legacyPath).rename(legacyArchive);
       } catch (_) {
@@ -1092,7 +1167,11 @@ CREATE TABLE suppliers (
       // 2. Remove dummy/sample tables (T1..T10 created without custom name/section changes)
       final dummyTableNumbers = List.generate(10, (i) => 'T${i + 1}');
       for (final num in dummyTableNumbers) {
-        await db.delete('tables', where: 'table_number = ? AND (name IS NULL OR name = \'\')', whereArgs: [num]);
+        await db.delete(
+          'tables',
+          where: 'table_number = ? AND (name IS NULL OR name = \'\')',
+          whereArgs: [num],
+        );
       }
 
       // 3. Remove dummy/sample users (manager, cashier, waiters, chefs seeded in initial demo)
@@ -1109,9 +1188,19 @@ CREATE TABLE suppliers (
       }
 
       // 4. Ensure default categories exist if categories table is empty
-      final catCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM categories')) ?? 0;
+      final catCount =
+          Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM categories'),
+          ) ??
+          0;
       if (catCount == 0) {
-        final defaultCategories = ['Starters', 'Main Course', 'Breads', 'Beverages', 'Desserts'];
+        final defaultCategories = [
+          'Starters',
+          'Main Course',
+          'Breads',
+          'Beverages',
+          'Desserts',
+        ];
         for (var cat in defaultCategories) {
           try {
             await db.insert('categories', {'name': cat, 'restaurant_id': 1});
@@ -1138,5 +1227,3 @@ CREATE TABLE suppliers (
     }
   }
 }
-
-

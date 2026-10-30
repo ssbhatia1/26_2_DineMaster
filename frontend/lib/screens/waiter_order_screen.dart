@@ -1,9 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
 import '../core/database/database_helper.dart';
+import '../core/database/network_database.dart';
 import '../models/product_model.dart';
 import '../models/table_model.dart';
 import '../repositories/product_repository.dart';
@@ -13,6 +16,7 @@ import 'waiter/components/waiter_cart_panel.dart';
 import 'waiter/components/waiter_menu_view.dart';
 import 'waiter/components/waiter_floor_plan_view.dart';
 import 'waiter/components/item_customization_dialog.dart';
+import '../services/backend_api_client.dart';
 
 class WaiterOrderScreen extends StatefulWidget {
   final int? selectedTableId;
@@ -22,7 +26,8 @@ class WaiterOrderScreen extends StatefulWidget {
   State<WaiterOrderScreen> createState() => _WaiterOrderScreenState();
 }
 
-class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTickerProviderStateMixin {
+class _WaiterOrderScreenState extends State<WaiterOrderScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ProductRepository _productRepository = ProductRepository();
 
@@ -57,8 +62,11 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   String _selectedTableDisplayName = 'Select';
   String _orderType = 'Dine-In';
   int? _currentOrderGuestCount;
-  final TextEditingController _customerNameController = TextEditingController(text: 'Walking Customer');
-  final TextEditingController _customerPhoneController = TextEditingController();
+  final TextEditingController _customerNameController = TextEditingController(
+    text: 'Walking Customer',
+  );
+  final TextEditingController _customerPhoneController =
+      TextEditingController();
 
   bool _showWaiterAssignment = true;
   bool _showChefAssignment = true;
@@ -119,13 +127,16 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
         // Check active order (unpaid and active)
         final List<Map<String, dynamic>> activeOrders = await db.query(
           'orders',
-          where: 'table_id = ? AND status IN (\'Received\', \'Sent to Kitchen\', \'In Kitchen\', \'Preparing\', \'Ready\', \'Served\', \'Billing Pending\', \'Held\') AND payment_status != ? AND (restaurant_id = ? OR restaurant_id IS NULL)',
+          where:
+              'table_id = ? AND status IN (\'Received\', \'Sent to Kitchen\', \'In Kitchen\', \'Preparing\', \'Ready\', \'Served\', \'Billing Pending\', \'Held\') AND payment_status != ? AND (restaurant_id = ? OR restaurant_id IS NULL)',
           whereArgs: [table.id, 'Paid', restaurantId],
           orderBy: 'id DESC',
           limit: 1,
         );
 
-        Map<String, dynamic>? activeOrder = activeOrders.isNotEmpty ? activeOrders.first : null;
+        Map<String, dynamic>? activeOrder = activeOrders.isNotEmpty
+            ? activeOrders.first
+            : null;
         int itemsCount = 0;
 
         if (activeOrder != null) {
@@ -134,14 +145,18 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
             where: 'order_id = ?',
             whereArgs: [activeOrder['id']],
           );
-          itemsCount = items.fold(0, (sum, it) => sum + (it['quantity'] as int? ?? 1));
+          itemsCount = items.fold(
+            0,
+            (sum, it) => sum + (it['quantity'] as int? ?? 1),
+          );
         }
 
         // Check active booking (reservation active within current hour window)
         final now = DateTime.now();
         final List<Map<String, dynamic>> bookingMaps = await db.query(
           'bookings',
-          where: 'table_id = ? AND status = ? AND (restaurant_id = ? OR restaurant_id IS NULL)',
+          where:
+              'table_id = ? AND status = ? AND (restaurant_id = ? OR restaurant_id IS NULL)',
           whereArgs: [table.id, 'Confirmed', restaurantId],
         );
 
@@ -160,17 +175,25 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
 
         // Keep status as Occupied if order or booking is active
         TableModel displayTable = table;
-        if ((activeOrder != null || currentBooking != null) && table.status == 'Available') {
-          await db.update('tables', {'status': 'Occupied'}, where: 'id = ?', whereArgs: [table.id]);
+        if ((activeOrder != null || currentBooking != null) &&
+            table.status == 'Available') {
+          await db.update(
+            'tables',
+            {'status': 'Occupied'},
+            where: 'id = ?',
+            whereArgs: [table.id],
+          );
           displayTable = table.copyWith(status: 'Occupied');
         }
 
-        enrichedTables.add(WaiterTableInfo(
-          table: displayTable,
-          activeOrder: activeOrder,
-          activeBooking: currentBooking,
-          orderItemsCount: itemsCount,
-        ));
+        enrichedTables.add(
+          WaiterTableInfo(
+            table: displayTable,
+            activeOrder: activeOrder,
+            activeBooking: currentBooking,
+            orderItemsCount: itemsCount,
+          ),
+        );
       }
 
       _tableInfoList = enrichedTables;
@@ -185,7 +208,10 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       }
 
       if (_selectedTableId != null) {
-        final tableInfo = _tableInfoList.firstWhere((t) => t.table.id == _selectedTableId, orElse: () => _tableInfoList.first);
+        final tableInfo = _tableInfoList.firstWhere(
+          (t) => t.table.id == _selectedTableId,
+          orElse: () => _tableInfoList.first,
+        );
         _selectedTableDisplayName = tableInfo.displayNameForOrder;
       }
 
@@ -203,45 +229,80 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       _categories = catSet.toList();
 
       // 3. Fetch waiter active orders
-      final List<Map<String, dynamic>> ordersResult = await db.rawQuery('''
+      final List<Map<String, dynamic>> ordersResult = await db.rawQuery(
+        '''
         SELECT o.*, t.table_number, t.name as table_name, t.section as table_section
         FROM orders o
         LEFT JOIN tables t ON o.table_id = t.id
         WHERE o.status IN ('Received', 'Sent to Kitchen', 'Preparing', 'Ready', 'Served', 'Billing Pending', 'Confirmed', 'Held')
         AND o.restaurant_id = ?
         ORDER BY o.id DESC
-      ''', [restaurantId]);
+      ''',
+        [restaurantId],
+      );
       _waiterOrdersList = List<Map<String, dynamic>>.from(ordersResult);
 
       final prefs = await SharedPreferences.getInstance();
       _showWaiterAssignment = prefs.getBool('show_waiter_assignment') ?? true;
       _showChefAssignment = prefs.getBool('show_chef_assignment') ?? true;
 
-      // 4. Fetch chefs and waiters list
-      final List<Map<String, dynamic>> chefsResult = await db.query(
-        'users',
-        where: 'role = ? AND is_active = 1',
-        whereArgs: ['Chef'],
-      );
-      _chefsList = List<Map<String, dynamic>>.from(chefsResult);
+      // 4. Fetch active chefs and waiters
+      List<Map<String, dynamic>> allUsers = [];
 
-      final List<Map<String, dynamic>> waitersResult = await db.query(
-        'users',
-        where: 'role = ? AND is_active = 1',
-        whereArgs: ['Waiter'],
-      );
-      _waitersList = List<Map<String, dynamic>>.from(waitersResult);
+      if (kIsWeb || db is NetworkDatabase) {
+        final response = await const BackendApiClient().getJson('/api/users');
 
+        if (response is List) {
+          allUsers = response
+              .whereType<Map>()
+              .map((user) => Map<String, dynamic>.from(user))
+              .where((user) {
+                final active = user['active'] ?? user['is_active'];
+                return active == true || active == 1;
+              })
+              .toList();
+        }
+      } else {
+        final usersResult = await db.query(
+          'users',
+          where: 'is_active = ?',
+          whereArgs: [1],
+        );
+
+        allUsers = List<Map<String, dynamic>>.from(usersResult);
+      }
+
+      _chefsList = allUsers.where((user) {
+        final role = user['role']?.toString().trim().toUpperCase();
+        return role == 'CHEF' || role == 'COOK';
+      }).toList();
+
+      _waitersList = allUsers.where((user) {
+        final role = user['role']?.toString().trim().toUpperCase();
+        return role == 'WAITER';
+      }).toList();
+
+      // Auto-select logged-in waiter
       final username = prefs.getString('username');
+
       if (username != null && _selectedWaiterId == null) {
-        final matchedWaiters = _waitersList.where((w) => w['username'] == username);
+        final matchedWaiters = _waitersList.where(
+          (w) => w['username']?.toString() == username,
+        );
+
         if (matchedWaiters.isNotEmpty) {
-          _selectedWaiterId = matchedWaiters.first['id'] as int?;
-          _selectedWaiterName = matchedWaiters.first['name'] as String?;
+          _selectedWaiterId = (matchedWaiters.first['id'] as num?)?.toInt();
+          _selectedWaiterName = matchedWaiters.first['name']?.toString();
         }
       }
-    } catch (e) {
+
+      debugPrint('Loaded ${_waitersList.length} waiters');
+      debugPrint('Loaded ${_chefsList.length} chefs');
+
+      // --- CART MANAGEMENT ---
+    } catch (e, stackTrace) {
       debugPrint('Error loading waiter configurations: $e');
+      debugPrintStack(stackTrace: stackTrace);
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -249,13 +310,13 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
     }
   }
 
-  // --- CART MANAGEMENT ---
   Future<void> _handleProductTap(ProductModel product) async {
     if (product.hasPreferences) {
       final res = await showDialog<Map<String, dynamic>>(
         context: context,
         builder: (context) => ItemCustomizationDialog(product: product),
       );
+
       if (res != null) {
         _addToCart(
           product,
@@ -289,13 +350,15 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       if (index >= 0) {
         _cartItems[index].quantity += qty;
       } else {
-        _cartItems.add(WaiterCartItem(
-          product: product,
-          quantity: qty,
-          dietaryPreference: dietaryPreference,
-          tastePreference: tastePreference,
-          notes: notes,
-        ));
+        _cartItems.add(
+          WaiterCartItem(
+            product: product,
+            quantity: qty,
+            dietaryPreference: dietaryPreference,
+            tastePreference: tastePreference,
+            notes: notes,
+          ),
+        );
       }
     });
   }
@@ -323,7 +386,11 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   void _editCartItem(int index) {
     if (index >= 0 && index < _cartItems.length) {
       final item = _cartItems[index];
-      _showPreferenceCustomizationDialog(item.product, existingItem: item, existingIndex: index);
+      _showPreferenceCustomizationDialog(
+        item.product,
+        existingItem: item,
+        existingIndex: index,
+      );
     }
   }
 
@@ -332,7 +399,11 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   }
 
   // --- ITEM CUSTOMIZATION DIALOG ---
-  void _showPreferenceCustomizationDialog(ProductModel product, {WaiterCartItem? existingItem, int? existingIndex}) {
+  void _showPreferenceCustomizationDialog(
+    ProductModel product, {
+    WaiterCartItem? existingItem,
+    int? existingIndex,
+  }) {
     String? selectedDietary = existingItem?.dietaryPreference;
     String? selectedTaste = existingItem?.tastePreference;
     int quantity = existingItem?.quantity ?? 1;
@@ -342,7 +413,9 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDlgState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               const Icon(Icons.tune, color: AppColors.primary),
@@ -350,7 +423,10 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
               Expanded(
                 child: Text(
                   product.name,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -363,7 +439,10 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
               children: [
                 // Dietary Preferences (Filtered to only what is configured for this dish)
                 if (product.dietaryPreferences.isNotEmpty) ...[
-                  const Text('Dietary Preference', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const Text(
+                    'Dietary Preference',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
@@ -372,14 +451,17 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                       ChoiceChip(
                         label: const Text('Regular'),
                         selected: selectedDietary == null,
-                        onSelected: (val) => setDlgState(() => selectedDietary = null),
+                        onSelected: (val) =>
+                            setDlgState(() => selectedDietary = null),
                       ),
                       ...product.dietaryPreferences.map((pref) {
                         return ChoiceChip(
                           label: Text(pref),
                           selected: selectedDietary == pref,
                           selectedColor: Colors.green.shade100,
-                          onSelected: (val) => setDlgState(() => selectedDietary = val ? pref : null),
+                          onSelected: (val) => setDlgState(
+                            () => selectedDietary = val ? pref : null,
+                          ),
                         );
                       }),
                     ],
@@ -389,7 +471,10 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
 
                 // Taste Profile (Filtered to only what is configured for this dish)
                 if (product.tastePreferences.isNotEmpty) ...[
-                  const Text('Taste Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const Text(
+                    'Taste Profile',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 8,
@@ -398,14 +483,17 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                       ChoiceChip(
                         label: const Text('Default'),
                         selected: selectedTaste == null,
-                        onSelected: (val) => setDlgState(() => selectedTaste = null),
+                        onSelected: (val) =>
+                            setDlgState(() => selectedTaste = null),
                       ),
                       ...product.tastePreferences.map((taste) {
                         return ChoiceChip(
                           label: Text(taste),
                           selected: selectedTaste == taste,
                           selectedColor: Colors.deepOrange.shade100,
-                          onSelected: (val) => setDlgState(() => selectedTaste = val ? taste : null),
+                          onSelected: (val) => setDlgState(
+                            () => selectedTaste = val ? taste : null,
+                          ),
                         );
                       }),
                     ],
@@ -414,7 +502,8 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                 ],
 
                 // Custom Dietary Notes from Admin
-                if (product.customDietaryNotes != null && product.customDietaryNotes!.trim().isNotEmpty) ...[
+                if (product.customDietaryNotes != null &&
+                    product.customDietaryNotes!.trim().isNotEmpty) ...[
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -423,12 +512,19 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.info_outline, size: 16, color: Colors.purple),
+                        const Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: Colors.purple,
+                        ),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             product.customDietaryNotes!,
-                            style: const TextStyle(fontSize: 12, color: Colors.purple),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.purple,
+                            ),
                           ),
                         ),
                       ],
@@ -453,14 +549,25 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Quantity:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Quantity:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     Row(
                       children: [
                         IconButton(
                           icon: const Icon(Icons.remove_circle_outline),
-                          onPressed: quantity > 1 ? () => setDlgState(() => quantity--) : null,
+                          onPressed: quantity > 1
+                              ? () => setDlgState(() => quantity--)
+                              : null,
                         ),
-                        Text('$quantity', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(
+                          '$quantity',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.add_circle_outline),
                           onPressed: () => setDlgState(() => quantity++),
@@ -486,9 +593,13 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                 Navigator.pop(context);
                 if (existingItem != null && existingIndex != null) {
                   setState(() {
-                    _cartItems[existingIndex].dietaryPreference = selectedDietary;
+                    _cartItems[existingIndex].dietaryPreference =
+                        selectedDietary;
                     _cartItems[existingIndex].tastePreference = selectedTaste;
-                    _cartItems[existingIndex].notes = notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null;
+                    _cartItems[existingIndex].notes =
+                        notesCtrl.text.trim().isNotEmpty
+                        ? notesCtrl.text.trim()
+                        : null;
                     _cartItems[existingIndex].quantity = quantity;
                   });
                 } else {
@@ -496,12 +607,16 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                     product,
                     dietaryPreference: selectedDietary,
                     tastePreference: selectedTaste,
-                    notes: notesCtrl.text.trim().isNotEmpty ? notesCtrl.text.trim() : null,
+                    notes: notesCtrl.text.trim().isNotEmpty
+                        ? notesCtrl.text.trim()
+                        : null,
                     qty: quantity,
                   );
                 }
               },
-              child: Text(existingItem != null ? 'Update Order' : 'Add to Order'),
+              child: Text(
+                existingItem != null ? 'Update Order' : 'Add to Order',
+              ),
             ),
           ],
         ),
@@ -511,13 +626,9 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
 
   // --- SUBMIT WAITER ORDER (KOT) ---
   Future<void> _submitWaiterOrder() async {
-    if (_cartItems.isEmpty) {
-
-      return;
-    }
+    if (_cartItems.isEmpty) return;
 
     if (_orderType == 'Dine-In' && _selectedTableId == null) {
-
       return;
     }
 
@@ -528,103 +639,154 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       final restaurantId = DatabaseHelper.currentRestaurantId;
       final String now = DateTime.now().toIso8601String();
 
-      // Check if table already has an active order
-      int orderId;
-      List<Map<String, dynamic>> existingOrder = [];
+      // All order-related database operations use the same executor.
+      Future<int> persistOrder(DatabaseExecutor executor) async {
+        int orderId;
 
-      if (_orderType == 'Dine-In' && _selectedTableId != null) {
-        existingOrder = await db.query(
-          'orders',
-          where: 'table_id = ? AND status IN (\'Received\', \'Sent to Kitchen\', \'Preparing\', \'Ready\', \'Served\') AND restaurant_id = ?',
-          whereArgs: [_selectedTableId, restaurantId],
-        );
-      }
+        List<Map<String, Object?>> existingOrder = [];
 
-      if (existingOrder.isNotEmpty) {
-        // Append items to existing order
-        orderId = existingOrder.first['id'] as int;
-
-        for (var item in _cartItems) {
-          final note = item.formattedNotes;
-          await db.insert('order_items', {
-            'order_id': orderId,
-            'product_id': item.product.id,
-            'quantity': item.quantity,
-            'price': item.product.price,
-            'status': 'Pending',
-            'notes': note.isNotEmpty ? note : null,
-          });
-        }
-
-        final double subtotal = _calculateSubtotal();
-        final double prevTotal = (existingOrder.first['total_amount'] as num).toDouble();
-        final double newTotal = prevTotal + (subtotal * 1.05);
-
-        await db.update(
-          'orders',
-          {'total_amount': newTotal},
-          where: 'id = ?',
-          whereArgs: [orderId],
-        );
-      } else {
-        final double subtotal = _calculateSubtotal();
-        final double total = subtotal * 1.05;
-
-        final prefs = await SharedPreferences.getInstance();
-        final username = prefs.getString('username') ?? 'Waiter';
-        final userList = await db.query('users', where: 'username = ?', whereArgs: [username]);
-        String orderTakerName = username;
-        int? orderTakerId;
-        if (userList.isNotEmpty) {
-          orderTakerName = userList.first['name'] as String? ?? username;
-          orderTakerId = userList.first['id'] as int?;
-        }
-
-        orderId = await db.insert('orders', {
-          'total_amount': total,
-          'status': 'Sent to Kitchen',
-          'type': _orderType,
-          'order_time': now,
-          'restaurant_id': restaurantId,
-          'table_id': _selectedTableId,
-          'customer_name': _customerNameController.text.trim().isNotEmpty ? _customerNameController.text.trim() : 'Guest',
-          'customer_phone': _customerPhoneController.text.trim().isNotEmpty ? _customerPhoneController.text.trim() : null,
-          'payment_status': 'Unpaid',
-          'discount_amount': 0.0,
-          'order_taker_name': _selectedWaiterName ?? orderTakerName,
-          'order_taker_id': _selectedWaiterId ?? orderTakerId,
-          'guest_count': _currentOrderGuestCount,
-        });
-
-        for (var item in _cartItems) {
-          final note = item.formattedNotes;
-          await db.insert('order_items', {
-            'order_id': orderId,
-            'product_id': item.product.id,
-            'quantity': item.quantity,
-            'price': item.product.price,
-            'status': 'Pending',
-            'notes': note.isNotEmpty ? note : null,
-          });
-        }
-
-        if (_selectedTableId != null) {
-          // Mark the whole merged group (anchor + members) as Occupied.
-          final groupIds = <int>[_selectedTableId!];
-          groupIds.addAll(_tableInfoList
-              .where((t) => t.table.mergedWithId == _selectedTableId)
-              .map((t) => t.table.id!));
-          await db.update(
-            'tables',
-            {'status': 'Occupied'},
-            where: 'id IN (${groupIds.map((_) => '?').join(', ')})',
-            whereArgs: groupIds,
+        // Check whether the table already has an active order.
+        if (_orderType == 'Dine-In' && _selectedTableId != null) {
+          existingOrder = await executor.query(
+            'orders',
+            where:
+                "table_id = ? AND status IN "
+                "('Received', 'Sent to Kitchen', 'Preparing', 'Ready', 'Served') "
+                "AND restaurant_id = ?",
+            whereArgs: [_selectedTableId, restaurantId],
           );
         }
+
+        if (existingOrder.isNotEmpty) {
+          // Append items to the existing order.
+          orderId = (existingOrder.first['id'] as num).toInt();
+
+          for (final item in _cartItems) {
+            final note = item.formattedNotes;
+
+            await executor.insert('order_items', {
+              'order_id': orderId,
+              'product_id': item.product.id,
+              'quantity': item.quantity,
+              'price': item.product.price,
+              'status': 'Pending',
+              'notes': note.isNotEmpty ? note : null,
+            });
+          }
+
+          final double subtotal = _calculateSubtotal();
+
+          final double prevTotal = (existingOrder.first['total_amount'] as num)
+              .toDouble();
+
+          final double newTotal = prevTotal + (subtotal * 1.05);
+
+          await executor.update(
+            'orders',
+            {'total_amount': newTotal},
+            where: 'id = ?',
+            whereArgs: [orderId],
+          );
+        } else {
+          // Create a new order.
+          final double subtotal = _calculateSubtotal();
+          final double total = subtotal * 1.05;
+
+          final prefs = await SharedPreferences.getInstance();
+          final username = prefs.getString('username') ?? 'Waiter';
+
+          final userList = await executor.query(
+            'users',
+            where: 'username = ?',
+            whereArgs: [username],
+          );
+
+          String orderTakerName = username;
+          int? orderTakerId;
+
+          if (userList.isNotEmpty) {
+            orderTakerName = userList.first['name'] as String? ?? username;
+
+            final userId = userList.first['id'];
+            orderTakerId = userId is num ? userId.toInt() : null;
+          }
+
+          orderId = await executor.insert('orders', {
+            'total_amount': total,
+            'status': 'Sent to Kitchen',
+            'type': _orderType,
+            'order_time': now,
+            'restaurant_id': restaurantId,
+            'table_id': _selectedTableId,
+            'customer_name': _customerNameController.text.trim().isNotEmpty
+                ? _customerNameController.text.trim()
+                : 'Guest',
+            'customer_phone': _customerPhoneController.text.trim().isNotEmpty
+                ? _customerPhoneController.text.trim()
+                : null,
+            'payment_status': 'Unpaid',
+            'discount_amount': 0.0,
+            'order_taker_name': _selectedWaiterName ?? orderTakerName,
+            'order_taker_id': _selectedWaiterId ?? orderTakerId,
+            'guest_count': _currentOrderGuestCount,
+          });
+
+          // Insert order items.
+          for (final item in _cartItems) {
+            final note = item.formattedNotes;
+
+            await executor.insert('order_items', {
+              'order_id': orderId,
+              'product_id': item.product.id,
+              'quantity': item.quantity,
+              'price': item.product.price,
+              'status': 'Pending',
+              'notes': note.isNotEmpty ? note : null,
+            });
+          }
+
+          // Mark merged table group as occupied.
+          if (_selectedTableId != null) {
+            final groupIds = <int>[_selectedTableId!];
+
+            groupIds.addAll(
+              _tableInfoList
+                  .where((t) => t.table.mergedWithId == _selectedTableId)
+                  .map((t) => t.table.id!),
+            );
+
+            await executor.update(
+              'tables',
+              {'status': 'Occupied'},
+              where: 'id IN (${groupIds.map((_) => '?').join(', ')})',
+              whereArgs: groupIds,
+            );
+          }
+        }
+
+        // Generate KOT using the same database executor.
+        await DatabaseHelper.instance.generateKOTForOrder(
+          orderId,
+          _selectedChefName,
+          executor,
+        );
+
+        return orderId;
       }
 
-      // Generate KOT Ticket
-      await DatabaseHelper.instance.generateKOTForOrder(orderId, _selectedChefName);
+      // NetworkDatabase does not provide real transaction semantics.
+      // Preserve sequential execution for network-backed databases.
+      if (db is NetworkDatabase) {
+        await persistOrder(db);
+      } else {
+        // Native SQLite: order, items, table status and KOT
+        // are committed together or rolled back together.
+        await db.transaction<int>((txn) async {
+          return await persistOrder(txn);
+        });
+      }
+
+      if (!mounted) return;
 
       setState(() {
         _cartItems.clear();
@@ -637,14 +799,12 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
         _selectedChefName = null;
       });
 
-      if (!mounted) return;
-
-
       _loadDashboardAndProducts();
-      SyncService.instance.broadcastEvent('database_update', {});
-    } catch (e) {
-      if (!mounted) return;
 
+      SyncService.instance.broadcastEvent('database_update', {});
+    } catch (e, stackTrace) {
+      debugPrint('Waiter order submission failed: $e');
+      debugPrintStack(stackTrace: stackTrace);
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -660,10 +820,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
 
       await db.update(
         'kot',
-        {
-          'status': 'Served',
-          'served_at': DateTime.now().toIso8601String(),
-        },
+        {'status': 'Served', 'served_at': DateTime.now().toIso8601String()},
         where: 'order_id = ?',
         whereArgs: [orderId],
       );
@@ -677,7 +834,11 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
 
       final prefs = await SharedPreferences.getInstance();
       final username = prefs.getString('username') ?? 'Waiter';
-      final userList = await db.query('users', where: 'username = ?', whereArgs: [username]);
+      final userList = await db.query(
+        'users',
+        where: 'username = ?',
+        whereArgs: [username],
+      );
       String deliveredByName = username;
       int? deliveredById;
       if (userList.isNotEmpty) {
@@ -706,7 +867,11 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
         );
       }
 
-      await DatabaseHelper.instance.logOrderStatus(orderId, 'Served', notes: 'Food successfully served to customer by Waiter.');
+      await DatabaseHelper.instance.logOrderStatus(
+        orderId,
+        'Served',
+        notes: 'Food successfully served to customer by Waiter.',
+      );
 
       if (!mounted) return;
 
@@ -742,7 +907,11 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
         );
       }
 
-      await DatabaseHelper.instance.logOrderStatus(orderId, 'Billing Pending', notes: 'Waiter requested checkout and billing.');
+      await DatabaseHelper.instance.logOrderStatus(
+        orderId,
+        'Billing Pending',
+        notes: 'Waiter requested checkout and billing.',
+      );
 
       if (!mounted) return;
 
@@ -757,11 +926,18 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
     }
   }
 
-  void _showTransferTableDialog(int orderId, int currentTableId, String currentDisplayName) {
+  void _showTransferTableDialog(
+    int orderId,
+    int currentTableId,
+    String currentDisplayName,
+  ) {
     int? targetTableId;
 
     final availableTables = _tableInfoList
-        .where((ti) => ti.table.status == 'Available' && ti.table.id != currentTableId)
+        .where(
+          (ti) =>
+              ti.table.status == 'Available' && ti.table.id != currentTableId,
+        )
         .map((ti) => ti.table)
         .toList();
 
@@ -773,17 +949,27 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Select destination empty table to transfer this active order:'),
+              const Text(
+                'Select destination empty table to transfer this active order:',
+              ),
               const SizedBox(height: 16),
               if (availableTables.isEmpty)
-                const Text('No available empty tables to transfer to.', style: TextStyle(color: Colors.red))
+                const Text(
+                  'No available empty tables to transfer to.',
+                  style: TextStyle(color: Colors.red),
+                )
               else
                 DropdownButtonFormField<int>(
-                  decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Destination Table'),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Destination Table',
+                  ),
                   items: availableTables.map((t) {
                     return DropdownMenuItem<int>(
                       value: t.id,
-                      child: Text('${t.displayName} • ${t.section} (Cap: ${t.capacity})'),
+                      child: Text(
+                        '${t.displayName} • ${t.section} (Cap: ${t.capacity})',
+                      ),
                     );
                   }).toList(),
                   onChanged: (val) {
@@ -795,15 +981,25 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: targetTableId == null
                   ? null
                   : () async {
                       Navigator.pop(context);
-                      await _executeTableTransfer(orderId, currentTableId, targetTableId!);
+                      await _executeTableTransfer(
+                        orderId,
+                        currentTableId,
+                        targetTableId!,
+                      );
                     },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Transfer Order'),
             ),
           ],
@@ -812,7 +1008,11 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
     );
   }
 
-  Future<void> _executeTableTransfer(int orderId, int sourceTableId, int targetTableId) async {
+  Future<void> _executeTableTransfer(
+    int orderId,
+    int sourceTableId,
+    int targetTableId,
+  ) async {
     setState(() => _isLoading = true);
     try {
       final db = await DatabaseHelper.instance.database;
@@ -846,7 +1046,6 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       SyncService.instance.broadcastEvent('database_update', {});
     } catch (e) {
       if (!mounted) return;
-
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -888,12 +1087,19 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Take Order', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Take Order',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         bottom: _isTakingOrder
             ? null
             : TabBar(
@@ -902,7 +1108,10 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                 unselectedLabelColor: Colors.grey,
                 indicatorColor: AppColors.primary,
                 tabs: const [
-                  Tab(icon: Icon(Icons.grid_view), text: 'Floor Plan (Live Tables)'),
+                  Tab(
+                    icon: Icon(Icons.grid_view),
+                    text: 'Floor Plan (Live Tables)',
+                  ),
                   Tab(icon: Icon(Icons.receipt_long), text: 'Kitchen Orders'),
                 ],
               ),
@@ -924,10 +1133,16 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                 }
               });
             },
-            icon: Icon(_isTakingOrder ? Icons.arrow_back : Icons.add_shopping_cart),
-            label: Text(_isTakingOrder ? 'Back to Dashboard' : 'Take Customer Order'),
+            icon: Icon(
+              _isTakingOrder ? Icons.arrow_back : Icons.add_shopping_cart,
+            ),
+            label: Text(
+              _isTakingOrder ? 'Back to Dashboard' : 'Take Customer Order',
+            ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _isTakingOrder ? Colors.grey.shade700 : AppColors.primary,
+              backgroundColor: _isTakingOrder
+                  ? Colors.grey.shade700
+                  : AppColors.primary,
               foregroundColor: Colors.white,
             ),
           ),
@@ -938,10 +1153,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
           ? _buildOrderTakingPanel()
           : TabBarView(
               controller: _tabController,
-              children: [
-                _buildFloorPlanTab(),
-                _buildKitchenOrdersTab(),
-              ],
+              children: [_buildFloorPlanTab(), _buildKitchenOrdersTab()],
             ),
     );
   }
@@ -953,14 +1165,19 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
       sectionsList: _sectionsList,
       selectedSectionFilter: _selectedSectionFilter,
       selectedStatusFilter: _selectedStatusFilter,
-      onSectionFilterChanged: (val) => setState(() => _selectedSectionFilter = val),
-      onStatusFilterChanged: (val) => setState(() => _selectedStatusFilter = val),
+      onSectionFilterChanged: (val) =>
+          setState(() => _selectedSectionFilter = val),
+      onStatusFilterChanged: (val) =>
+          setState(() => _selectedStatusFilter = val),
       onTableCardTap: _handleTableCardTap,
     );
   }
 
   Future<void> _promptGuestCountAndTakeOrder(TableModel table) async {
-    final tableInfo = _tableInfoList.firstWhere((t) => t.table.id == table.id, orElse: () => _tableInfoList.first);
+    final tableInfo = _tableInfoList.firstWhere(
+      (t) => t.table.id == table.id,
+      orElse: () => _tableInfoList.first,
+    );
     setState(() {
       _selectedTableId = table.id;
       _selectedTableDisplayName = tableInfo.displayNameForOrder;
@@ -973,11 +1190,15 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
 
   Future<void> _showMergeTableDialog(TableModel primaryTable) async {
     final availableTables = _tableInfoList
-        .where((t) => t.table.id != primaryTable.id && t.table.mergedWithId == null && t.table.status == 'Available')
+        .where(
+          (t) =>
+              t.table.id != primaryTable.id &&
+              t.table.mergedWithId == null &&
+              t.table.status == 'Available',
+        )
         .toList();
 
     if (availableTables.isEmpty) {
-
       return;
     }
 
@@ -998,7 +1219,12 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                 onTap: () async {
                   Navigator.pop(context);
                   final db = await DatabaseHelper.instance.database;
-                  await db.update('tables', {'merged_with_id': primaryTable.id}, where: 'id = ?', whereArgs: [tableToMerge.id]);
+                  await db.update(
+                    'tables',
+                    {'merged_with_id': primaryTable.id},
+                    where: 'id = ?',
+                    whereArgs: [tableToMerge.id],
+                  );
                   _loadDashboardAndProducts();
                 },
               );
@@ -1006,7 +1232,10 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
         ],
       ),
     );
@@ -1020,13 +1249,20 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
     if (table.mergedWithId != null) {
       targetIds.add(table.id!);
     } else {
-      targetIds.addAll(_tableInfoList
-          .where((t) => t.table.mergedWithId == table.id)
-          .map((t) => t.table.id!));
+      targetIds.addAll(
+        _tableInfoList
+            .where((t) => t.table.mergedWithId == table.id)
+            .map((t) => t.table.id!),
+      );
     }
 
     for (final tid in targetIds) {
-      await db.update('tables', {'merged_with_id': null}, where: 'id = ?', whereArgs: [tid]);
+      await db.update(
+        'tables',
+        {'merged_with_id': null},
+        where: 'id = ?',
+        whereArgs: [tid],
+      );
     }
     _loadDashboardAndProducts();
   }
@@ -1054,7 +1290,10 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                     ),
                   ),
                 ListTile(
-                  leading: const Icon(Icons.add_shopping_cart, color: AppColors.primary),
+                  leading: const Icon(
+                    Icons.add_shopping_cart,
+                    color: AppColors.primary,
+                  ),
                   title: const Text('Take Order'),
                   onTap: () {
                     Navigator.pop(context);
@@ -1064,7 +1303,9 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                 if (isMergedGroup)
                   ListTile(
                     leading: const Icon(Icons.call_split, color: Colors.red),
-                    title: Text('Unmerge merged tables (${tableInfo.mergedTableNumbers})'),
+                    title: Text(
+                      'Unmerge merged tables (${tableInfo.mergedTableNumbers})',
+                    ),
                     onTap: () {
                       Navigator.pop(context);
                       _unmergeTable(table);
@@ -1121,26 +1362,45 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                   children: [
                     Text(
                       tableInfo.displayNameForOrder,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: _getStatusColor(table.status).withValues(alpha: 0.1),
+                        color: _getStatusColor(
+                          table.status,
+                        ).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'Status: ${table.status}',
-                        style: TextStyle(color: _getStatusColor(table.status), fontWeight: FontWeight.bold, fontSize: 12),
+                        style: TextStyle(
+                          color: _getStatusColor(table.status),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 ListTile(
-                  leading: const Icon(Icons.receipt_long, color: AppColors.primary),
-                  title: Text('Active Order #$orderId (${activeOrder['type'] ?? "Dine-In"})'),
-                  subtitle: Text('Guest: $customerName • Waiter: $waiterName • Items: ${tableInfo.orderItemsCount}'),
+                  leading: const Icon(
+                    Icons.receipt_long,
+                    color: AppColors.primary,
+                  ),
+                  title: Text(
+                    'Active Order #$orderId (${activeOrder['type'] ?? "Dine-In"})',
+                  ),
+                  subtitle: Text(
+                    'Guest: $customerName • Waiter: $waiterName • Items: ${tableInfo.orderItemsCount}',
+                  ),
                   dense: true,
                 ),
                 const SizedBox(height: 16),
@@ -1151,12 +1411,16 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                     ElevatedButton.icon(
                       icon: const Icon(Icons.add_shopping_cart, size: 16),
                       label: const Text('Add Items'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
                       onPressed: () {
                         Navigator.pop(context);
                         setState(() {
                           _selectedTableId = table.id;
-                          _selectedTableDisplayName = tableInfo.displayNameForOrder;
+                          _selectedTableDisplayName =
+                              tableInfo.displayNameForOrder;
                           _orderType = 'Dine-In';
                           _isTakingOrder = true;
                           _cartItems.clear();
@@ -1166,17 +1430,27 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                     ElevatedButton.icon(
                       icon: const Icon(Icons.move_down, size: 16),
                       label: const Text('Transfer'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.indigo,
+                        foregroundColor: Colors.white,
+                      ),
                       onPressed: () {
                         Navigator.pop(context);
-                        _showTransferTableDialog(orderId, table.id!, table.displayName);
+                        _showTransferTableDialog(
+                          orderId,
+                          table.id!,
+                          table.displayName,
+                        );
                       },
                     ),
                     if (orderStatus != 'Billing Pending')
                       ElevatedButton.icon(
                         icon: const Icon(Icons.request_page_outlined, size: 16),
                         label: const Text('Bill Request'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade800,
+                          foregroundColor: Colors.white,
+                        ),
                         onPressed: () {
                           Navigator.pop(context);
                           _requestBilling(orderId, table.id);
@@ -1195,9 +1469,15 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   // --- KITCHEN ORDERS TAB ---
   Widget _buildKitchenOrdersTab() {
     final activeOrdersCount = _waiterOrdersList.length;
-    final readyCount = _waiterOrdersList.where((o) => o['status'] == 'Ready').length;
-    final servedCount = _waiterOrdersList.where((o) => o['status'] == 'Served').length;
-    final billingCount = _waiterOrdersList.where((o) => o['status'] == 'Billing Pending').length;
+    final readyCount = _waiterOrdersList
+        .where((o) => o['status'] == 'Ready')
+        .length;
+    final servedCount = _waiterOrdersList
+        .where((o) => o['status'] == 'Served')
+        .length;
+    final billingCount = _waiterOrdersList
+        .where((o) => o['status'] == 'Billing Pending')
+        .length;
 
     return Padding(
       padding: const EdgeInsets.all(20.0),
@@ -1208,35 +1488,63 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildStatsChip(Icons.circle, Colors.blue, 'Active: $activeOrdersCount'),
-              _buildStatsChip(Icons.restaurant_menu, Colors.purple, 'Ready: $readyCount'),
-              _buildStatsChip(Icons.check_circle, const Color(0xFF00897B), 'Served: $servedCount'),
-              _buildStatsChip(Icons.request_quote, Colors.orange, 'Billing: $billingCount'),
+              _buildStatsChip(
+                Icons.circle,
+                Colors.blue,
+                'Active: $activeOrdersCount',
+              ),
+              _buildStatsChip(
+                Icons.restaurant_menu,
+                Colors.purple,
+                'Ready: $readyCount',
+              ),
+              _buildStatsChip(
+                Icons.check_circle,
+                const Color(0xFF00897B),
+                'Served: $servedCount',
+              ),
+              _buildStatsChip(
+                Icons.request_quote,
+                Colors.orange,
+                'Billing: $billingCount',
+              ),
             ],
           ),
           const SizedBox(height: 20),
-          const Text('Live Kitchen Orders Tracking', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text(
+            'Live Kitchen Orders Tracking',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 12),
 
           Expanded(
             child: _waiterOrdersList.isEmpty
                 ? const Center(
-                    child: Text('No active kitchen orders taken.', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                    child: Text(
+                      'No active kitchen orders taken.',
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
                   )
                 : ListView.builder(
                     itemCount: _waiterOrdersList.length,
                     itemBuilder: (context, index) {
                       final order = _waiterOrdersList[index];
                       final orderId = order['id'] as int;
-                      final tableNum = order['table_number'] as String? ?? 'Takeaway';
+                      final tableNum =
+                          order['table_number'] as String? ?? 'Takeaway';
                       final tableName = order['table_name'] as String?;
-                      final tableDisplay = tableName != null && tableName.isNotEmpty ? 'T-$tableNum ($tableName)' : 'Table $tableNum';
-                      final customer = order['customer_name'] as String? ?? 'N/A';
+                      final tableDisplay =
+                          tableName != null && tableName.isNotEmpty
+                          ? 'T-$tableNum ($tableName)'
+                          : 'Table $tableNum';
+                      final customer =
+                          order['customer_name'] as String? ?? 'N/A';
                       final total = order['total_amount'] as num? ?? 0.0;
                       final type = order['type'] as String? ?? 'Dine-In';
                       final status = order['status'] as String? ?? 'Received';
                       final orderTime = order['order_time'] as String? ?? '';
-                      final parsedTime = DateTime.tryParse(orderTime) ?? DateTime.now();
+                      final parsedTime =
+                          DateTime.tryParse(orderTime) ?? DateTime.now();
 
                       final statusColor = _getStatusColor(status);
 
@@ -1252,9 +1560,17 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                           child: Row(
                             children: [
                               CircleAvatar(
-                                backgroundColor: statusColor.withValues(alpha: 0.12),
+                                backgroundColor: statusColor.withValues(
+                                  alpha: 0.12,
+                                ),
                                 radius: 26,
-                                child: Text(tableNum, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold)),
+                                child: Text(
+                                  tableNum,
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                               const SizedBox(width: 16),
                               Expanded(
@@ -1263,31 +1579,63 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                                   children: [
                                     Row(
                                       children: [
-                                        Text('Order #$orderId', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                        Text(
+                                          'Order #$orderId',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                          ),
+                                        ),
                                         const SizedBox(width: 8),
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: statusColor.withValues(alpha: 0.12),
-                                            borderRadius: BorderRadius.circular(4),
+                                            color: statusColor.withValues(
+                                              alpha: 0.12,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                           ),
                                           child: Text(
                                             status,
-                                            style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11),
+                                            style: TextStyle(
+                                              color: statusColor,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 11,
+                                            ),
                                           ),
                                         ),
                                         const SizedBox(width: 8),
                                         Text(
                                           tableDisplay,
-                                          style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade700,
+                                            fontWeight: FontWeight.w500,
+                                          ),
                                         ),
                                       ],
                                     ),
                                     const SizedBox(height: 6),
-                                    Text('Customer: $customer • Type: $type • Time: ${DateFormat('hh:mm a').format(parsedTime)}',
-                                        style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-                                    Text('Total: ₹${total.toStringAsFixed(2)}',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary)),
+                                    Text(
+                                      'Customer: $customer • Type: $type • Time: ${DateFormat('hh:mm a').format(parsedTime)}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Total: ₹${total.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -1297,29 +1645,49 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                                 children: [
                                   if (status == 'Ready')
                                     ElevatedButton.icon(
-                                      onPressed: () => _markOrderAsServed(orderId, order['table_id'] as int?),
+                                      onPressed: () => _markOrderAsServed(
+                                        orderId,
+                                        order['table_id'] as int?,
+                                      ),
                                       icon: const Icon(Icons.check, size: 14),
                                       label: const Text('Mark Served'),
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF00897B),
+                                        backgroundColor: const Color(
+                                          0xFF00897B,
+                                        ),
                                         foregroundColor: Colors.white,
                                       ),
                                     ),
                                   if (status == 'Served')
                                     ElevatedButton.icon(
-                                      onPressed: () => _requestBilling(orderId, order['table_id'] as int?),
-                                      icon: const Icon(Icons.request_page_outlined, size: 14),
+                                      onPressed: () => _requestBilling(
+                                        orderId,
+                                        order['table_id'] as int?,
+                                      ),
+                                      icon: const Icon(
+                                        Icons.request_page_outlined,
+                                        size: 14,
+                                      ),
                                       label: const Text('Request Bill'),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: Colors.orange.shade800,
                                         foregroundColor: Colors.white,
                                       ),
                                     ),
-                                  if (type == 'Dine-In' && status != 'Billing Pending' && status != 'Served')
+                                  if (type == 'Dine-In' &&
+                                      status != 'Billing Pending' &&
+                                      status != 'Served')
                                     IconButton(
-                                      icon: const Icon(Icons.move_down, color: Colors.blue),
+                                      icon: const Icon(
+                                        Icons.move_down,
+                                        color: Colors.blue,
+                                      ),
                                       // tooltip disabled,
-                                      onPressed: () => _showTransferTableDialog(orderId, order['table_id'] as int, tableDisplay),
+                                      onPressed: () => _showTransferTableDialog(
+                                        orderId,
+                                        order['table_id'] as int,
+                                        tableDisplay,
+                                      ),
                                     ),
                                 ],
                               ),
@@ -1348,7 +1716,14 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
         children: [
           Icon(icon, color: color, size: 16),
           const SizedBox(width: 6),
-          Text(text, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12)),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
@@ -1357,8 +1732,11 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
   // --- ORDER TAKING PANEL ---
   Widget _buildOrderTakingPanel() {
     final filteredProducts = _products.where((p) {
-      final matchesCat = _selectedCategory == 'All' || p.category == _selectedCategory;
-      final matchesSearch = p.name.toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesCat =
+          _selectedCategory == 'All' || p.category == _selectedCategory;
+      final matchesSearch = p.name.toLowerCase().contains(
+        _searchQuery.toLowerCase(),
+      );
       return matchesCat && matchesSearch;
     }).toList();
 
@@ -1377,7 +1755,10 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                     prefixIcon: const Icon(Icons.search),
                     fillColor: Colors.white,
                     filled: true,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
                   onChanged: (val) {
                     setState(() => _searchQuery = val);
@@ -1388,7 +1769,8 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
                 child: WaiterMenuView(
                   categories: _categories,
                   selectedCategory: _selectedCategory,
-                  onCategorySelected: (cat) => setState(() => _selectedCategory = cat),
+                  onCategorySelected: (cat) =>
+                      setState(() => _selectedCategory = cat),
                   filteredProducts: filteredProducts,
                   cartItems: _cartItems,
                   onProductTap: _handleProductTap,
@@ -1397,7 +1779,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
             ],
           ),
         ),
-        
+
         // Right Side: Cart Panel
         Expanded(
           flex: 3,
@@ -1413,8 +1795,14 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
             chefsList: _chefsList,
             selectedWaiterId: _selectedWaiterId,
             selectedChefId: _selectedChefId,
-            onWaiterSelected: (id, name) => setState(() { _selectedWaiterId = id; _selectedWaiterName = name; }),
-            onChefSelected: (id, name) => setState(() { _selectedChefId = id; _selectedChefName = name; }),
+            onWaiterSelected: (id, name) => setState(() {
+              _selectedWaiterId = id;
+              _selectedWaiterName = name;
+            }),
+            onChefSelected: (id, name) => setState(() {
+              _selectedChefId = id;
+              _selectedChefName = name;
+            }),
             showWaiterAssignment: _showWaiterAssignment,
             showChefAssignment: _showChefAssignment,
             onOrderTypeChanged: (val) {
@@ -1430,7 +1818,9 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen> with SingleTicker
               setState(() {
                 _selectedTableId = tableId;
                 if (tableId != null) {
-                  final tableInfo = _tableInfoList.firstWhere((t) => t.table.id == tableId);
+                  final tableInfo = _tableInfoList.firstWhere(
+                    (t) => t.table.id == tableId,
+                  );
                   _selectedTableDisplayName = tableInfo.displayNameForOrder;
                   _orderType = 'Dine-In';
                   _currentOrderGuestCount = tableInfo.combinedCapacity;
