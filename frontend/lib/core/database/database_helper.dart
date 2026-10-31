@@ -931,10 +931,8 @@ CREATE TABLE suppliers (
       );
 
       if (productMaps.isNotEmpty) {
-        final prep =
-            (productMaps.first['prep_time'] as num?)?.toInt() ?? 5;
-        final cook =
-            (productMaps.first['cook_time'] as num?)?.toInt() ?? 10;
+        final prep = (productMaps.first['prep_time'] as num?)?.toInt() ?? 5;
+        final cook = (productMaps.first['cook_time'] as num?)?.toInt() ?? 10;
 
         final total = prep + cook;
         if (total > maxProductTime) maxProductTime = total;
@@ -961,6 +959,7 @@ CREATE TABLE suppliers (
 
     if (orderMaps.isNotEmpty &&
         (orderMaps.first['type'] == 'Dine-in' ||
+            orderMaps.first['type'] == 'Dine-In' ||
             orderMaps.first['type'] == 'Table Order')) {
       priority = 'High';
     }
@@ -990,6 +989,7 @@ CREATE TABLE suppliers (
       executor: db,
     );
   }
+
   Future<String> backupDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'dinemaster_restaurant.db');
