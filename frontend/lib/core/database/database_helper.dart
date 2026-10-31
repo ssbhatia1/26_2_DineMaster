@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -605,7 +605,7 @@ CREATE TABLE orders (
   waiter_id INTEGER,
   total_amount $realType,
   status $textType, -- Received, Preparing, Ready, Served, Completed
-  type $textType, -- Dine-in, Parcel, Delivery
+  type $textType, -- Dine-In, Parcel, Delivery
   order_time $textType,
   notes $textNullable,
   restaurant_id INTEGER,

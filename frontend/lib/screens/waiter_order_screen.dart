@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
@@ -106,7 +106,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
     setState(() => _isLoading = true);
     try {
       final db = await DatabaseHelper.instance.database;
-      final restaurantId = DatabaseHelper.currentRestaurantId;
+      final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
 
       // 1. Fetch tables and active orders
       final List<Map<String, dynamic>> tablesResult = await db.query(
@@ -398,6 +398,14 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
     return _cartItems.fold(0.0, (sum, it) => sum + it.subtotal);
   }
 
+  /// Calculates GST using each product's individual gst_percentage field.
+  double _calculateTax() {
+    return _cartItems.fold(0.0, (sum, it) {
+      final gst = (it.product.gstPercentage > 0) ? it.product.gstPercentage : 5.0;
+      return sum + (it.subtotal * gst / 100);
+    });
+  }
+
   // --- ITEM CUSTOMIZATION DIALOG ---
   void _showPreferenceCustomizationDialog(
     ProductModel product, {
@@ -679,7 +687,8 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
           final double prevTotal = (existingOrder.first['total_amount'] as num)
               .toDouble();
 
-          final double newTotal = prevTotal + (subtotal * 1.05);
+          final double tax = _calculateTax();
+          final double newTotal = prevTotal + subtotal + tax;
 
           await executor.update(
             'orders',
@@ -690,7 +699,8 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
         } else {
           // Create a new order.
           final double subtotal = _calculateSubtotal();
-          final double total = subtotal * 1.05;
+          final double tax = _calculateTax();
+          final double total = subtotal + tax;
 
           final prefs = await SharedPreferences.getInstance();
           final username = prefs.getString('username') ?? 'Waiter';
@@ -861,7 +871,8 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
       if (tableId != null) {
         await db.update(
           'tables',
-          {'status': 'Served'},
+          // Food served: table stays 'Occupied' until billing completes.
+          {'status': 'Occupied'},
           where: 'id = ?',
           whereArgs: [tableId],
         );
@@ -1820,6 +1831,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
                 if (tableId != null) {
                   final tableInfo = _tableInfoList.firstWhere(
                     (t) => t.table.id == tableId,
+                    orElse: () => _tableInfoList.first,
                   );
                   _selectedTableDisplayName = tableInfo.displayNameForOrder;
                   _orderType = 'Dine-In';
@@ -1832,8 +1844,32 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
             onEditCartItem: _editCartItem,
             onClearCart: () => setState(() => _cartItems.clear()),
             onSendKOT: _submitWaiterOrder,
-            onPrintBill: () {},
-            onCheckout: () {},
+            onPrintBill: () {
+              if (_selectedTableId == null) return;
+              final billMatch = _tableInfoList.where((t) => t.table.id == _selectedTableId);
+              final billOrder = billMatch.isNotEmpty ? billMatch.first.activeOrder : null;
+              final billOrderId = billOrder == null ? null : (billOrder['id'] as num?)?.toInt();
+              if (billOrderId != null) {
+                _requestBilling(billOrderId, _selectedTableId);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('No active order to bill for this table.')),
+                );
+              }
+            },
+            onCheckout: () {
+              if (_selectedTableId == null) return;
+              final checkMatch = _tableInfoList.where((t) => t.table.id == _selectedTableId);
+              final checkOrder = checkMatch.isNotEmpty ? checkMatch.first.activeOrder : null;
+              final checkOrderId = checkOrder == null ? null : (checkOrder['id'] as num?)?.toInt();
+              if (checkOrderId != null) {
+                _requestBilling(checkOrderId, _selectedTableId);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('No active order to checkout for this table.')),
+                );
+              }
+            },
           ),
         ),
       ],
