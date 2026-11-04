@@ -1,13 +1,18 @@
 package com.dinemaster;
 
-import com.dinemaster.entity.Order;
-import com.dinemaster.entity.OrderItem;
-import com.dinemaster.entity.Product;
-import com.dinemaster.entity.Restaurant;
-import com.dinemaster.repository.OrderItemRepository;
-import com.dinemaster.repository.OrderRepository;
-import com.dinemaster.repository.ProductRepository;
-import com.dinemaster.repository.RestaurantRepository;
+
+import com.dinemaster.catalog.entity.Category;
+import com.dinemaster.catalog.entity.Product;
+import com.dinemaster.catalog.repository.ProductRepository;
+import com.dinemaster.orders.controller.OrderController;
+import com.dinemaster.orders.entity.Order;
+import com.dinemaster.orders.entity.OrderItem;
+import com.dinemaster.orders.repository.OrderItemRepository;
+import com.dinemaster.orders.repository.OrderRepository;
+import com.dinemaster.restaurant.entity.Restaurant;
+import com.dinemaster.restaurant.repository.RestaurantRepository;
+import com.dinemaster.user.entity.User;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

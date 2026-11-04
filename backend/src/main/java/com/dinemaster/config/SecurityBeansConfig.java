@@ -1,7 +1,11 @@
 package com.dinemaster.config;
 
-import com.dinemaster.repository.UserRepository;
-import com.dinemaster.security.Roles;
+
+
+import com.dinemaster.role.Roles;
+import com.dinemaster.user.entity.User;
+import com.dinemaster.user.repository.UserRepository;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.userdetails.UserDetailsService;

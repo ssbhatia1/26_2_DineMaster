@@ -1,5 +1,10 @@
 package com.dinemaster.config;
 
+
+
+
+import com.dinemaster.user.entity.User;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
