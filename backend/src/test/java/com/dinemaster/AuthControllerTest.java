@@ -1,7 +1,8 @@
 package com.dinemaster;
+import com.dinemaster.user.entity.User;
+import com.dinemaster.user.repository.UserRepository;
 
-import com.dinemaster.entity.User;
-import com.dinemaster.repository.UserRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

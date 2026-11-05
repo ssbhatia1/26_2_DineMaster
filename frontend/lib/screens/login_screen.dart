@@ -295,8 +295,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                     'remember_me',
                                     _rememberMe,
                                   );
-                                  if (context.mounted)
+                                  if (context.mounted) {
                                     context.go('/branch_selection');
+                                  }
                                   return;
                                 }
 

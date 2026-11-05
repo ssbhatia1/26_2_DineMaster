@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +10,10 @@ import '../core/database/network_database.dart';
 import '../models/product_model.dart';
 import '../models/table_model.dart';
 import '../repositories/product_repository.dart';
+import '../repositories/table_repository.dart';
+import '../repositories/order_api_repository.dart';
+import '../models/order_model.dart';
+import '../core/api/api_mode.dart';
 import '../services/sync_service.dart';
 import 'waiter/waiter_models.dart';
 import 'waiter/components/waiter_cart_panel.dart';
@@ -30,6 +34,8 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ProductRepository _productRepository = ProductRepository();
+  final TableRepository _tableRepository = TableRepository();
+  final OrderApiRepository _orderApiRepository = OrderApiRepository();
 
   bool _isLoading = true;
   bool _isTakingOrder = false;
@@ -105,6 +111,11 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
   Future<void> _loadDashboardAndProducts() async {
     setState(() => _isLoading = true);
     try {
+      if (await ApiMode.useBackendApi()) {
+        await _loadBackendDashboardAndProducts();
+        return;
+      }
+
       final db = await DatabaseHelper.instance.database;
       final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
 
@@ -208,11 +219,16 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
       }
 
       if (_selectedTableId != null) {
-        final tableInfo = _tableInfoList.firstWhere(
-          (t) => t.table.id == _selectedTableId,
-          orElse: () => _tableInfoList.first,
-        );
-        _selectedTableDisplayName = tableInfo.displayNameForOrder;
+        final matchingTables = _tableInfoList
+            .where((t) => t.table.id == _selectedTableId)
+            .toList();
+
+        if (matchingTables.isNotEmpty) {
+          _selectedTableDisplayName = matchingTables.first.displayNameForOrder;
+        } else {
+          _selectedTableId = null;
+          _selectedTableDisplayName = 'Select';
+        }
       }
 
       // 2. Fetch products
@@ -258,7 +274,9 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
               .map((user) => Map<String, dynamic>.from(user))
               .where((user) {
                 final active = user['active'] ?? user['is_active'];
-                return active == true || active == 1;
+                return active == true ||
+                    active == 1 ||
+                    active?.toString().toLowerCase() == 'true';
               })
               .toList();
         }
@@ -273,13 +291,12 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
       }
 
       _chefsList = allUsers.where((user) {
-        final role = user['role']?.toString().trim().toUpperCase();
+        final role = RoleNames.canonical(user['role']?.toString() ?? '');
         return role == 'CHEF' || role == 'COOK';
       }).toList();
 
       _waitersList = allUsers.where((user) {
-        final role = user['role']?.toString().trim().toUpperCase();
-        return role == 'WAITER';
+        return RoleNames.canonical(user['role']?.toString() ?? '') == 'WAITER';
       }).toList();
 
       // Auto-select logged-in waiter
@@ -303,9 +320,157 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
     } catch (e, stackTrace) {
       debugPrint('Error loading waiter configurations: $e');
       debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        final message = e is BackendApiException && e.message.isNotEmpty
+            ? e.message
+            : 'Could not load menu and tables. Please sign in again or check the server.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.red.shade700,
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: _loadDashboardAndProducts,
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadBackendDashboardAndProducts() async {
+    final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
+    final tables = await _tableRepository.getTables();
+    final orders = await _orderApiRepository.getOrders(restaurantId);
+    final activeStatuses = {
+      'Pending',
+      'Received',
+      'Preparing',
+      'Ready',
+      'Served',
+      'Billing Pending',
+      'Held',
+    };
+    final activeOrders = orders
+        .where(
+          (order) =>
+              activeStatuses.contains(order.status) &&
+              order.paymentStatus.toLowerCase() != 'paid',
+        )
+        .toList();
+    final tableNumbers = {
+      for (final table in tables)
+        if (table.id != null) table.id!: table.tableNumber,
+    };
+    final enrichedTables = <WaiterTableInfo>[];
+    final sections = <String>{'All'};
+
+    for (final table in tables.where((table) => table.isActive)) {
+      if (table.section.isNotEmpty) sections.add(table.section);
+      final matchingOrders = activeOrders
+          .where((order) => order.tableId == table.id)
+          .toList();
+      final tableOrder = matchingOrders.isEmpty ? null : matchingOrders.first;
+      final orderMap = tableOrder == null
+          ? null
+          : <String, dynamic>{
+              ...tableOrder.toMap(),
+              'id': tableOrder.id,
+              'table_number': tableNumbers[tableOrder.tableId],
+              'order_taker_name': tableOrder.orderTakerName,
+              'customer_name': tableOrder.customerName,
+            };
+      final displayTable =
+          tableOrder == null || table.status == 'Out of Service'
+          ? table
+          : table.copyWith(status: 'Occupied');
+      final itemCount = tableOrder?.id == null
+          ? 0
+          : (await _orderApiRepository.getOrderItems(
+              tableOrder!.id!,
+            )).fold<int>(0, (sum, item) => sum + item.quantity);
+      enrichedTables.add(
+        WaiterTableInfo(
+          table: displayTable,
+          activeOrder: orderMap,
+          orderItemsCount: itemCount,
+        ),
+      );
+    }
+
+    final orderMaps = activeOrders
+        .map(
+          (order) => <String, dynamic>{
+            ...order.toMap(),
+            'id': order.id,
+            'table_number': tableNumbers[order.tableId],
+            'table_name': null,
+            'order_taker_name': order.orderTakerName,
+            'customer_name': order.customerName,
+          },
+        )
+        .toList();
+    final products = await _productRepository.getProducts();
+    final prefs = await SharedPreferences.getInstance();
+    var allUsers = <Map<String, dynamic>>[];
+    try {
+      final usersResponse = await const BackendApiClient().getJson(
+        '/api/users/assignable?restaurantId=$restaurantId',
+      );
+      if (usersResponse is List) {
+        allUsers = usersResponse
+            .whereType<Map>()
+            .map((user) => Map<String, dynamic>.from(user))
+            .where((user) {
+              final active = user['active'] ?? user['is_active'];
+              return active == true ||
+                  active == 1 ||
+                  active?.toString().toLowerCase() == 'true';
+            })
+            .toList();
+      }
+    } on BackendApiException catch (error) {
+      debugPrint('Waiter assignment list unavailable: $error');
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _tableInfoList = enrichedTables;
+      _sectionsList = sections.toList()..sort();
+      _waiterOrdersList = orderMaps;
+      _products = products.where((product) => product.isAvailable).toList();
+      _categories = {
+        'All',
+        ..._products
+            .where((product) => product.category.isNotEmpty)
+            .map((product) => product.category),
+      }.toList();
+      _chefsList = allUsers.where((user) {
+        final role = RoleNames.canonical(user['role']?.toString() ?? '');
+        return role == 'CHEF' || role == 'COOK';
+      }).toList();
+      _waitersList = allUsers.where((user) {
+        return RoleNames.canonical(user['role']?.toString() ?? '') == 'WAITER';
+      }).toList();
+      _showWaiterAssignment = prefs.getBool('show_waiter_assignment') ?? true;
+      _showChefAssignment = prefs.getBool('show_chef_assignment') ?? true;
+    });
+
+    final username = prefs.getString('username');
+    if (username != null && _selectedWaiterId == null && mounted) {
+      final matches = _waitersList.where(
+        (waiter) => waiter['username']?.toString() == username,
+      );
+      if (matches.isNotEmpty) {
+        setState(() {
+          _selectedWaiterId = (matches.first['id'] as num?)?.toInt();
+          _selectedWaiterName = matches.first['name']?.toString();
+        });
       }
     }
   }
@@ -401,7 +566,9 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
   /// Calculates GST using each product's individual gst_percentage field.
   double _calculateTax() {
     return _cartItems.fold(0.0, (sum, it) {
-      final gst = (it.product.gstPercentage > 0) ? it.product.gstPercentage : 5.0;
+      final gst = (it.product.gstPercentage > 0)
+          ? it.product.gstPercentage
+          : 5.0;
       return sum + (it.subtotal * gst / 100);
     });
   }
@@ -634,15 +801,30 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
 
   // --- SUBMIT WAITER ORDER (KOT) ---
   Future<void> _submitWaiterOrder() async {
-    if (_cartItems.isEmpty) return;
+    if (_cartItems.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Add at least one item.')));
+      return;
+    }
 
     if (_orderType == 'Dine-In' && _selectedTableId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select a table before sending the order.'),
+        ),
+      );
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
+      if (await ApiMode.useBackendApi()) {
+        await _submitBackendWaiterOrder();
+        return;
+      }
+
       final db = await DatabaseHelper.instance.database;
       final restaurantId = DatabaseHelper.currentRestaurantId;
       final String now = DateTime.now().toIso8601String();
@@ -815,11 +997,92 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
     } catch (e, stackTrace) {
       debugPrint('Waiter order submission failed: $e');
       debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        final message = e is BackendApiException && e.message.isNotEmpty
+            ? e.message
+            : 'Could not send order. Please check the server connection and try again.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.red.shade700,
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: _submitWaiterOrder,
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  Future<void> _submitBackendWaiterOrder() async {
+    final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
+    final items = _cartItems
+        .map(
+          (item) => OrderItemModel(
+            productId: item.product.id!,
+            quantity: item.quantity,
+            price: item.product.price,
+            notes: item.formattedNotes.isEmpty ? null : item.formattedNotes,
+          ),
+        )
+        .toList();
+    final matchingTableInfo = _selectedTableId == null
+        ? <WaiterTableInfo>[]
+        : _tableInfoList
+              .where((info) => info.table.id == _selectedTableId)
+              .toList();
+    final tableInfo = matchingTableInfo.isEmpty
+        ? null
+        : matchingTableInfo.first;
+    final activeOrderId = tableInfo?.activeOrder?['id'];
+    final orderId = activeOrderId is num ? activeOrderId.toInt() : null;
+
+    if (orderId == null) {
+      final createdOrder = await _orderApiRepository.createOrder(
+        restaurantId: restaurantId,
+        items: items,
+        tableId: _selectedTableId,
+        waiterId: _selectedWaiterId,
+        type: _orderType,
+        guestCount: _currentOrderGuestCount,
+      );
+      if (createdOrder.id == null) {
+        throw const FormatException('The backend did not return an order ID');
+      }
+      await _orderApiRepository.createKot(
+        orderId: createdOrder.id!,
+        chefId: _selectedChefId,
+      );
+    } else {
+      await _orderApiRepository.addItems(orderId, items);
+      await _orderApiRepository.createKot(
+        orderId: orderId,
+        chefId: _selectedChefId,
+      );
+    }
+
+    if (_selectedTableId != null) {
+      await _tableRepository.updateTableStatus(_selectedTableId!, 'Occupied');
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _cartItems.clear();
+      _selectedTableId = null;
+      _selectedTableDisplayName = 'Select';
+      _customerNameController.clear();
+      _customerPhoneController.clear();
+      _isTakingOrder = false;
+      _selectedChefId = null;
+      _selectedChefName = null;
+    });
+    await _loadDashboardAndProducts();
   }
 
   // --- ACTIONS: SERVE, BILL, TRANSFER ---
@@ -1846,27 +2109,45 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
             onSendKOT: _submitWaiterOrder,
             onPrintBill: () {
               if (_selectedTableId == null) return;
-              final billMatch = _tableInfoList.where((t) => t.table.id == _selectedTableId);
-              final billOrder = billMatch.isNotEmpty ? billMatch.first.activeOrder : null;
-              final billOrderId = billOrder == null ? null : (billOrder['id'] as num?)?.toInt();
+              final billMatch = _tableInfoList.where(
+                (t) => t.table.id == _selectedTableId,
+              );
+              final billOrder = billMatch.isNotEmpty
+                  ? billMatch.first.activeOrder
+                  : null;
+              final billOrderId = billOrder == null
+                  ? null
+                  : (billOrder['id'] as num?)?.toInt();
               if (billOrderId != null) {
                 _requestBilling(billOrderId, _selectedTableId);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('No active order to bill for this table.')),
+                  const SnackBar(
+                    content: Text('No active order to bill for this table.'),
+                  ),
                 );
               }
             },
             onCheckout: () {
               if (_selectedTableId == null) return;
-              final checkMatch = _tableInfoList.where((t) => t.table.id == _selectedTableId);
-              final checkOrder = checkMatch.isNotEmpty ? checkMatch.first.activeOrder : null;
-              final checkOrderId = checkOrder == null ? null : (checkOrder['id'] as num?)?.toInt();
+              final checkMatch = _tableInfoList.where(
+                (t) => t.table.id == _selectedTableId,
+              );
+              final checkOrder = checkMatch.isNotEmpty
+                  ? checkMatch.first.activeOrder
+                  : null;
+              final checkOrderId = checkOrder == null
+                  ? null
+                  : (checkOrder['id'] as num?)?.toInt();
               if (checkOrderId != null) {
                 _requestBilling(checkOrderId, _selectedTableId);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('No active order to checkout for this table.')),
+                  const SnackBar(
+                    content: Text(
+                      'No active order to checkout for this table.',
+                    ),
+                  ),
                 );
               }
             },

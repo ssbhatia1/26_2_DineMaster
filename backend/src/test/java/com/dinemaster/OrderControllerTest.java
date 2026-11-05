@@ -1,13 +1,15 @@
 package com.dinemaster;
+import com.dinemaster.orders.entity.Order;
+import com.dinemaster.orders.entity.OrderItem;
+import com.dinemaster.catalog.entity.Product;
+import com.dinemaster.restaurant.entity.Restaurant;
+import com.dinemaster.orders.repository.OrderItemRepository;
+import com.dinemaster.orders.repository.OrderRepository;
+import com.dinemaster.catalog.repository.ProductRepository;
+import com.dinemaster.restaurant.repository.RestaurantRepository;
+import com.dinemaster.role.Roles;
 
-import com.dinemaster.entity.Order;
-import com.dinemaster.entity.OrderItem;
-import com.dinemaster.entity.Product;
-import com.dinemaster.entity.Restaurant;
-import com.dinemaster.repository.OrderItemRepository;
-import com.dinemaster.repository.OrderRepository;
-import com.dinemaster.repository.ProductRepository;
-import com.dinemaster.repository.RestaurantRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -86,7 +88,7 @@ class OrderControllerTest {
         }
 
         @Test
-        @WithMockUser
+        @WithMockUser(roles = {"WAITER", "CASHIER", "MANAGER", "OWNER", "CHEF"})
         void orderEndpointsSerializeLazyRelationshipsWithoutServerError() throws Exception {
                 mockMvc.perform(get("/api/orders")
                                 .param("restaurantId", restaurantId.toString())
@@ -109,7 +111,7 @@ class OrderControllerTest {
         }
 
         @Test
-        @WithMockUser
+        @WithMockUser(roles = {"WAITER", "CASHIER", "MANAGER", "OWNER", "CHEF"})
         void missingOrderAndRestaurantReturnNotFound() throws Exception {
                 mockMvc.perform(get("/api/orders")
                                 .param("restaurantId", "999999")
@@ -126,7 +128,7 @@ class OrderControllerTest {
         }
 
         @Test
-        @WithMockUser
+        @WithMockUser(roles = {"WAITER", "CASHIER", "MANAGER", "OWNER", "CHEF"})
         void orderLifecycleEndpointsPersistStatusAndPayment() throws Exception {
                 mockMvc.perform(post("/api/orders/{id}/hold", orderId))
                                 .andExpect(status().isOk())

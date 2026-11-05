@@ -62,12 +62,13 @@ class BackendApiClient {
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? prefs.getString('flutter.token');
-    debugPrint('AUTH CHECK: token found = ${token != null && token.isNotEmpty}');
+    debugPrint(
+      'AUTH CHECK: token found = ${token != null && token.isNotEmpty}',
+    );
 
     final headers = <String, String>{
       'Accept': 'application/json',
-      if (token != null && token.isNotEmpty)
-        'Authorization': 'Bearer $token',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       if (body != null) 'Content-Type': 'application/json',
     };
 
@@ -78,9 +79,9 @@ class BackendApiClient {
       request.body = jsonEncode(body);
     }
 
-    final streamedResponse = await http.Client().send(request).timeout(
-      const Duration(seconds: 10),
-    );
+    final streamedResponse = await http.Client()
+        .send(request)
+        .timeout(const Duration(seconds: 10));
 
     final response = await http.Response.fromStream(streamedResponse);
 
@@ -100,4 +101,3 @@ class BackendApiClient {
     return decoded;
   }
 }
-

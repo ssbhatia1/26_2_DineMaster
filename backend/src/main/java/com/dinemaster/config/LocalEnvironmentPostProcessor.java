@@ -1,4 +1,6 @@
 package com.dinemaster.config;
+import com.dinemaster.user.entity.User;
+
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.env.EnvironmentPostProcessor;

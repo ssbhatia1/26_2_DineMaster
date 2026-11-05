@@ -407,7 +407,7 @@ class SettingsScreen extends StatelessWidget {
           children: [
             Text('Dine Master ERP & POS'),
             Text('Version: 1.0.0'),
-            Text('Developed by: Antigravity'),
+            Text('Developed by: Complex Innovators'),
           ],
         ),
         actions: [

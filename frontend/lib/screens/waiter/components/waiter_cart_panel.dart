@@ -17,7 +17,7 @@ class WaiterCartPanel extends StatelessWidget {
   final int? selectedChefId;
   final Function(int?, String?) onWaiterSelected;
   final Function(int?, String?) onChefSelected;
-  
+
   // Callbacks
   final Function(String) onOrderTypeChanged;
   final Function(int?) onTableSelected;
@@ -59,8 +59,14 @@ class WaiterCartPanel extends StatelessWidget {
     this.showChefAssignment = true,
   });
 
+  int? _idOf(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
+  }
+
   double get subtotal => cartItems.fold(0.0, (sum, it) => sum + it.subtotal);
-  double get total => subtotal; // Assuming no extra taxes calculated here for now
+  double get total =>
+      subtotal; // Assuming no extra taxes calculated here for now
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +79,7 @@ class WaiterCartPanel extends StatelessWidget {
             color: Colors.black.withAlpha(10),
             blurRadius: 10,
             offset: const Offset(-2, 0),
-          )
+          ),
         ],
       ),
       padding: const EdgeInsets.all(16),
@@ -82,8 +88,14 @@ class WaiterCartPanel extends StatelessWidget {
         children: [
           // Order Setup Header
           Text(
-            orderType == 'Dine-In' ? 'Order: $selectedTableDisplayName' : 'New Order - Takeaway',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary),
+            orderType == 'Dine-In'
+                ? 'Order: $selectedTableDisplayName'
+                : 'New Order - Takeaway',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              color: AppColors.primary,
+            ),
           ),
           const SizedBox(height: 16),
 
@@ -94,9 +106,16 @@ class WaiterCartPanel extends StatelessWidget {
                 child: DropdownButtonFormField<String>(
                   isExpanded: true,
                   value: orderType,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Type', isDense: true),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Type',
+                    isDense: true,
+                  ),
                   items: ['Dine-In', 'Takeaway', 'Delivery'].map((type) {
-                    return DropdownMenuItem<String>(value: type, child: Text(type, overflow: TextOverflow.ellipsis));
+                    return DropdownMenuItem<String>(
+                      value: type,
+                      child: Text(type, overflow: TextOverflow.ellipsis),
+                    );
                   }).toList(),
                   onChanged: (val) {
                     if (val != null) onOrderTypeChanged(val);
@@ -109,16 +128,26 @@ class WaiterCartPanel extends StatelessWidget {
                   child: SearchableDropdown<WaiterTableInfo>(
                     // Show only merged group anchors so a merged group is picked
                     // as a single entity for order taking.
-                    items: tableInfoList.where((ti) => ti.table.mergedWithId == null).toList(),
-                    value: selectedTableId != null && tableInfoList.any((ti) => ti.table.id == selectedTableId)
-                        ? tableInfoList.firstWhere((ti) => ti.table.id == selectedTableId)
+                    items: tableInfoList
+                        .where((ti) => ti.table.mergedWithId == null)
+                        .toList(),
+                    value:
+                        selectedTableId != null &&
+                            tableInfoList.any(
+                              (ti) => ti.table.id == selectedTableId,
+                            )
+                        ? tableInfoList.firstWhere(
+                            (ti) => ti.table.id == selectedTableId,
+                          )
                         : null,
                     labelText: 'Table',
                     hintText: 'Select...',
                     itemToString: (ti) => ti.mergedTables.isNotEmpty
                         ? '${ti.mergedTableNumbers} (Merged • ${ti.table.status})'
                         : '${ti.table.displayName} (${ti.table.status})',
-                    filterFn: (ti, query) => (ti.displayNameForOrder).toLowerCase().contains(query.toLowerCase()),
+                    filterFn: (ti, query) => (ti.displayNameForOrder)
+                        .toLowerCase()
+                        .contains(query.toLowerCase()),
                     onChanged: (val) {
                       onTableSelected(val?.table.id);
                     },
@@ -135,7 +164,11 @@ class WaiterCartPanel extends StatelessWidget {
                 Expanded(
                   child: TextField(
                     controller: customerNameController,
-                    decoration: const InputDecoration(labelText: 'Customer Name', border: OutlineInputBorder(), isDense: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Customer Name',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -143,14 +176,17 @@ class WaiterCartPanel extends StatelessWidget {
                   child: TextField(
                     controller: customerPhoneController,
                     keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder(), isDense: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Phone',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
           ],
-
 
           // Waiter & Chef assignment
           if (showWaiterAssignment || showChefAssignment) ...[
@@ -160,14 +196,25 @@ class WaiterCartPanel extends StatelessWidget {
                   Expanded(
                     child: SearchableDropdown<Map<String, dynamic>>(
                       items: waitersList,
-                      value: selectedWaiterId != null && waitersList.any((w) => w['id'] == selectedWaiterId)
-                          ? waitersList.firstWhere((w) => w['id'] == selectedWaiterId)
+                      value:
+                          selectedWaiterId != null &&
+                              waitersList.any(
+                                (w) => _idOf(w['id']) == selectedWaiterId,
+                              )
+                          ? waitersList.firstWhere(
+                              (w) => _idOf(w['id']) == selectedWaiterId,
+                            )
                           : null,
                       labelText: 'Waiter',
                       hintText: 'Select Waiter',
                       itemToString: (w) => w['name'] as String? ?? '',
-                      filterFn: (w, query) => (w['name'] as String? ?? '').toLowerCase().contains(query.toLowerCase()),
-                      onChanged: (val) => onWaiterSelected(val?['id'] as int?, val?['name'] as String?),
+                      filterFn: (w, query) => (w['name'] as String? ?? '')
+                          .toLowerCase()
+                          .contains(query.toLowerCase()),
+                      onChanged: (val) => onWaiterSelected(
+                        _idOf(val?['id']),
+                        val?['name']?.toString(),
+                      ),
                       prefixIcon: const Icon(Icons.person_outline),
                     ),
                   ),
@@ -177,14 +224,25 @@ class WaiterCartPanel extends StatelessWidget {
                   Expanded(
                     child: SearchableDropdown<Map<String, dynamic>>(
                       items: chefsList,
-                      value: selectedChefId != null && chefsList.any((c) => c['id'] == selectedChefId)
-                          ? chefsList.firstWhere((c) => c['id'] == selectedChefId)
+                      value:
+                          selectedChefId != null &&
+                              chefsList.any(
+                                (c) => _idOf(c['id']) == selectedChefId,
+                              )
+                          ? chefsList.firstWhere(
+                              (c) => _idOf(c['id']) == selectedChefId,
+                            )
                           : null,
                       labelText: 'Chef',
                       hintText: 'Select Chef',
                       itemToString: (c) => c['name'] as String? ?? '',
-                      filterFn: (c, query) => (c['name'] as String? ?? '').toLowerCase().contains(query.toLowerCase()),
-                      onChanged: (val) => onChefSelected(val?['id'] as int?, val?['name'] as String?),
+                      filterFn: (c, query) => (c['name'] as String? ?? '')
+                          .toLowerCase()
+                          .contains(query.toLowerCase()),
+                      onChanged: (val) => onChefSelected(
+                        _idOf(val?['id']),
+                        val?['name']?.toString(),
+                      ),
                       prefixIcon: const Icon(Icons.restaurant_menu),
                     ),
                   ),
@@ -192,13 +250,18 @@ class WaiterCartPanel extends StatelessWidget {
             ),
             const SizedBox(height: 16),
           ],
-          
+
           const Divider(),
 
           // Cart Items List
           Expanded(
             child: cartItems.isEmpty
-                ? const Center(child: Text('Cart is empty', style: TextStyle(color: Colors.grey)))
+                ? const Center(
+                    child: Text(
+                      'Cart is empty',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
                 : ListView.builder(
                     itemCount: cartItems.length,
                     itemBuilder: (context, index) {
@@ -218,10 +281,19 @@ class WaiterCartPanel extends StatelessWidget {
                               children: [
                                 InkWell(
                                   onTap: () => onDecrementCart(index),
-                                  child: const Icon(Icons.remove_circle_outline, color: AppColors.primary, size: 20),
+                                  child: const Icon(
+                                    Icons.remove_circle_outline,
+                                    color: AppColors.primary,
+                                    size: 20,
+                                  ),
                                 ),
                                 const SizedBox(height: 4),
-                                Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text(
+                                  '${item.quantity}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ],
                             ),
                             const SizedBox(width: 12),
@@ -229,18 +301,35 @@ class WaiterCartPanel extends StatelessWidget {
                             // Item Details
                             Expanded(
                               child: InkWell(
-                                onTap: onEditCartItem != null ? () => onEditCartItem!(index) : null,
+                                onTap: onEditCartItem != null
+                                    ? () => onEditCartItem!(index)
+                                    : null,
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(item.product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    Text(
+                                      item.product.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
                                     if (item.formattedNotes.isNotEmpty)
                                       Text(
                                         item.formattedNotes,
-                                        style: TextStyle(color: Colors.orange.shade800, fontSize: 11),
+                                        style: TextStyle(
+                                          color: Colors.orange.shade800,
+                                          fontSize: 11,
+                                        ),
                                       ),
                                     const SizedBox(height: 4),
-                                    const Text('Tap to edit notes/preferences', style: TextStyle(color: Colors.grey, fontSize: 9)),
+                                    const Text(
+                                      'Tap to edit notes/preferences',
+                                      style: TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 9,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -250,10 +339,19 @@ class WaiterCartPanel extends StatelessWidget {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text('₹${item.subtotal}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text(
+                                  '₹${item.subtotal}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                                 InkWell(
                                   onTap: () => onRemoveCartItem(index),
-                                  child: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
+                                  child: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.red,
+                                    size: 18,
+                                  ),
                                 ),
                               ],
                             ),
@@ -269,8 +367,18 @@ class WaiterCartPanel extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Total:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              Text('₹${total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.primary)),
+              const Text(
+                'Total:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              Text(
+                '₹${total.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  color: AppColors.primary,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),

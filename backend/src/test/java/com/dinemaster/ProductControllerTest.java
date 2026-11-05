@@ -1,10 +1,11 @@
 package com.dinemaster;
+import com.dinemaster.catalog.entity.Category;
+import com.dinemaster.catalog.entity.Product;
+import com.dinemaster.catalog.repository.CategoryRepository;
+import com.dinemaster.orders.repository.OrderItemRepository;
+import com.dinemaster.catalog.repository.ProductRepository;
 
-import com.dinemaster.entity.Category;
-import com.dinemaster.entity.Product;
-import com.dinemaster.repository.CategoryRepository;
-import com.dinemaster.repository.OrderItemRepository;
-import com.dinemaster.repository.ProductRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

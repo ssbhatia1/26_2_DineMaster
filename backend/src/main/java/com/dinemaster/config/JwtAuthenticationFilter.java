@@ -1,6 +1,8 @@
 package com.dinemaster.config;
+import com.dinemaster.user.entity.User;
+import com.dinemaster.auth.service.JwtService;
 
-import com.dinemaster.service.JwtService;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

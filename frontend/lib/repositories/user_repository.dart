@@ -67,8 +67,9 @@ class UserRepository {
 
   Future<int> updateUser(UserModel user) async {
     if (await _useBackendApi()) {
-      if (user.id == null)
+      if (user.id == null) {
         throw ArgumentError('User ID is required for update');
+      }
       await _apiClient.putJson('/api/users/${user.id}', _toApiMap(user));
       return 1;
     }
@@ -98,8 +99,9 @@ class UserRepository {
   }
 
   List<UserModel> _parseUsers(dynamic response) {
-    if (response is! List)
+    if (response is! List) {
       throw const FormatException('Expected a user list from the backend');
+    }
     return response
         .map(
           (item) => UserModel.fromMap(Map<String, dynamic>.from(item as Map)),

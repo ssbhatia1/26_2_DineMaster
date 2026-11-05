@@ -60,12 +60,52 @@ class OrderApiRepository {
         'Expected an order item list from the backend',
       );
     }
+
     return response
         .map(
           (item) =>
               OrderItemModel.fromMap(Map<String, dynamic>.from(item as Map)),
         )
         .toList();
+  }
+
+  Future<OrderModel> addItems(int orderId, List<OrderItemModel> items) async {
+    if (items.isEmpty) {
+      throw ArgumentError('At least one order item is required');
+    }
+
+    final response = await _apiClient.postJson('/api/orders/$orderId/items', {
+      'items': items
+          .map(
+            (item) => {
+              'productId': item.productId,
+              'quantity': item.quantity,
+              if (item.notes != null) 'notes': item.notes,
+            },
+          )
+          .toList(),
+    });
+    return OrderModel.fromMap(Map<String, dynamic>.from(response as Map));
+  }
+
+  Future<Map<String, dynamic>> createKot({
+    required int orderId,
+    int? chefId,
+    String? kotNumber,
+    String? priority,
+    int? estimatedTime,
+  }) async {
+    final response = await _apiClient.postJson('/api/kot', {
+      'orderId': orderId,
+      if (chefId != null) 'chefId': chefId,
+      if (kotNumber != null) 'kotNumber': kotNumber,
+      if (priority != null) 'priority': priority,
+      if (estimatedTime != null) 'estimatedTime': estimatedTime,
+    });
+    if (response is! Map) {
+      throw const FormatException('Expected a KOT response from the backend');
+    }
+    return Map<String, dynamic>.from(response);
   }
 
   Future<OrderModel> updateStatus(int orderId, String status) async {
