@@ -18,8 +18,11 @@ public class Category {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, length = 100)
     private String name;
+
+    @Column(name = "tenant_id", nullable = false)
+    private Long tenantId;
 
     public Category() {
     }
@@ -39,4 +42,8 @@ public class Category {
     public void setName(String name) {
         this.name = name;
     }
+
+    public Long getTenantId() { return tenantId; }
+
+    public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
 }

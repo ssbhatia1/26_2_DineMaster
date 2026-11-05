@@ -17,11 +17,13 @@ public final class Roles {
             value = value.substring(5);
         }
         return switch (value) {
-            case "OWNER" -> "OWNER";
+            case "OWNER", "ADMIN", "RESTAURANT_ADMIN" -> "OWNER";
             case "MANAGER" -> "MANAGER";
             case "CASHIER" -> "CASHIER";
             case "WAITER" -> "WAITER";
             case "CHEF", "COOK" -> "CHEF";
+            case "SUPER_ADMIN" -> "SUPER_ADMIN";
+            case "INVENTORY_MANAGER" -> "INVENTORY_MANAGER";
             case "EMPLOYEE", "STAFF" -> "STAFF";
             default -> value;
         };

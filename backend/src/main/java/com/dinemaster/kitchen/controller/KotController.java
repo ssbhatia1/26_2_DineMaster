@@ -14,6 +14,8 @@ import com.dinemaster.restaurant.entity.Restaurant;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.time.OffsetDateTime;
@@ -22,7 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/kot")
+@RequestMapping("/api/v1/kitchen-tickets")
 public class KotController {
     private static final List<String> STATUSES = List.of("Pending", "Cooking", "Ready", "Served", "Cancelled");
     private final KotRepository kotRepository;
@@ -37,6 +39,7 @@ public class KotController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('kot:view')")
     public List<Map<String, Object>> listByRestaurant(@RequestParam Long restaurantId) {
         return kotRepository.findByOrder_Restaurant_IdOrderByCreatedAtDesc(restaurantId)
                 .stream()
@@ -45,6 +48,7 @@ public class KotController {
     }
 
     @GetMapping("/order/{orderId}")
+    @PreAuthorize("hasAuthority('kot:view')")
     public List<Map<String, Object>> list(@PathVariable Long orderId) {
         return kotRepository.findByOrder_IdOrderByCreatedAtAsc(orderId)
                 .stream()
@@ -53,6 +57,7 @@ public class KotController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('order:create')")
     @Transactional
     public ResponseEntity<?> create(@Valid @RequestBody CreateKotRequest request) {
         return orderRepository.findById(request.orderId()).map(order -> {
@@ -70,12 +75,33 @@ public class KotController {
     }
 
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAuthority('kot:update_status')")
     @Transactional
-    public ResponseEntity<?> updateStatus(@PathVariable Long id, @RequestParam String value) {
+    public ResponseEntity<?> updateStatus(@PathVariable Long id, @RequestParam String value,
+            Authentication authentication) {
         if (value == null || !STATUSES.contains(value)) {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid KOT status"));
         }
         return kotRepository.findById(id).map(kot -> {
+            String current = kot.getStatus();
+            boolean waiter = hasRole(authentication, "WAITER");
+            boolean chef = hasRole(authentication, "CHEF");
+            boolean manager = hasRole(authentication, "MANAGER") || hasRole(authentication, "OWNER");
+            boolean allowedTransition = switch (current) {
+                case "Pending" -> value.equals("Cooking") || (manager && value.equals("Cancelled"));
+                case "Cooking" -> value.equals("Ready") || (manager && value.equals("Cancelled"));
+                case "Ready" -> value.equals("Served") || (manager && value.equals("Cancelled"));
+                default -> false;
+            };
+            boolean allowedByRole = waiter
+                    ? current.equals("Ready") && value.equals("Served")
+                    : chef
+                            ? (current.equals("Pending") && value.equals("Cooking"))
+                                    || (current.equals("Cooking") && value.equals("Ready"))
+                            : manager;
+            if (!allowedTransition || !allowedByRole) {
+                return ResponseEntity.status(409).body(Map.of("error", "Invalid or unauthorized KOT transition"));
+            }
             kot.setStatus(value);
             OffsetDateTime now = OffsetDateTime.now();
             if ("Cooking".equals(value))
@@ -88,7 +114,13 @@ public class KotController {
         }).orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    private boolean hasRole(Authentication authentication, String role) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + role));
+    }
+
     @PostMapping("/{kotId}/items/{itemId}")
+    @PreAuthorize("hasAuthority('kot:update_status')")
     @Transactional
     public ResponseEntity<?> assignItem(@PathVariable Long kotId, @PathVariable Long itemId) {
         Kot kot = kotRepository.findById(kotId).orElse(null);
@@ -103,6 +135,7 @@ public class KotController {
     }
 
     @DeleteMapping("/{kotId}/items/{itemId}")
+    @PreAuthorize("hasAuthority('kot:update_status')")
     @Transactional
     public ResponseEntity<?> unassignItem(@PathVariable Long kotId, @PathVariable Long itemId) {
         OrderItem item = orderItemRepository.findById(itemId).orElse(null);

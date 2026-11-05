@@ -15,6 +15,15 @@ import jakarta.persistence.Table;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -32,6 +41,8 @@ public class Product {
     private Long id;
 
     @Column(nullable = false, length = 150)
+    @NotBlank(message = "Product name is required")
+    @Size(max = 150, message = "Product name cannot exceed 150 characters")
     private String name;
 
     @Column(columnDefinition = "TEXT")
@@ -41,13 +52,21 @@ public class Product {
     private String ingredients;
 
     @Column(nullable = false, precision = 12, scale = 2)
+    @NotNull(message = "Product price is required")
+    @DecimalMin(value = "0.00", message = "Product price cannot be negative")
+    @Digits(integer = 10, fraction = 2, message = "Product price supports up to 10 integer and 2 decimal digits")
     private BigDecimal price;
 
     @Column(nullable = false, length = 100)
+    @NotBlank(message = "Product category is required")
+    @Size(max = 100, message = "Product category cannot exceed 100 characters")
     private String category;
 
     @JdbcTypeCode(SqlTypes.SMALLINT)
     @Column(name = "is_veg", nullable = false)
+    @NotNull(message = "is_veg is required")
+    @Min(value = 0, message = "is_veg must be between 0 and 3")
+    @Max(value = 3, message = "is_veg must be between 0 and 3")
     private Integer veg;
 
     @Column(name = "image_path", columnDefinition = "TEXT")
@@ -57,6 +76,9 @@ public class Product {
     private boolean available = true;
 
     @Column(name = "gst_percentage", nullable = false, precision = 5, scale = 2)
+    @DecimalMin(value = "0.00", message = "GST percentage must be between 0 and 100")
+    @DecimalMax(value = "100.00", message = "GST percentage must be between 0 and 100")
+    @Digits(integer = 3, fraction = 2, message = "GST percentage supports up to 2 decimal places")
     private BigDecimal gstPercentage = new BigDecimal("5.00");
 
     @Column(name = "dietary_preferences", columnDefinition = "TEXT")
@@ -75,11 +97,14 @@ public class Product {
     private String recipeSteps;
 
     @Column(name = "prep_time")
+    @Min(value = 0, message = "Preparation time cannot be negative")
     private Integer prepTime;
 
     @Column(name = "cook_time")
+    @Min(value = 0, message = "Cooking time cannot be negative")
     private Integer cookTime;
 
+    @Positive(message = "Servings must be positive")
     private Integer servings;
 
     @Column(length = 30)

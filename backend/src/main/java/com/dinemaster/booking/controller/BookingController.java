@@ -16,13 +16,14 @@ import com.dinemaster.restaurant.repository.RestaurantRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/bookings")
+@RequestMapping("/api/v1/reservations")
 public class BookingController {
     private final BookingRepository bookingRepository;
     private final RestaurantRepository restaurantRepository;
@@ -38,11 +39,13 @@ public class BookingController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('reservation:view')")
     public List<Booking> list(@RequestParam Long restaurantId) {
         return bookingRepository.findByRestaurant_IdOrderByBookingTimeAsc(restaurantId);
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('reservation:create')")
     @Transactional
     public ResponseEntity<?> create(@Valid @RequestBody BookingRequest request) {
         Values values = resolve(request).orElse(null);
@@ -54,6 +57,7 @@ public class BookingController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('reservation:update')")
     @Transactional
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody BookingRequest request) {
         return bookingRepository.findById(id).flatMap(existing -> resolve(request).map(values -> {
@@ -63,6 +67,7 @@ public class BookingController {
     }
 
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAuthority('reservation:update')")
     @Transactional
     public ResponseEntity<?> status(@PathVariable Long id, @RequestParam String value) {
         if (value == null || !List.of("Pending", "Confirmed", "Cancelled", "Completed").contains(value)) {
@@ -75,6 +80,7 @@ public class BookingController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('reservation:update')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         if (!bookingRepository.existsById(id))
             return ResponseEntity.notFound().build();
@@ -86,12 +92,13 @@ public class BookingController {
         return restaurantRepository.findById(request.restaurantId())
                 .flatMap(
                         restaurant -> tableRepository.findById(request.tableId())
-                                .filter(table -> table.getRestaurant() == null
-                                        || request.restaurantId().equals(table.getRestaurant().getId()))
+                                .filter(table -> table.getRestaurant() != null
+                                        && request.restaurantId().equals(table.getRestaurant().getId()))
                                 .flatMap(table -> {
                                     if (request.customerId() == null)
                                         return java.util.Optional.of(new Values(restaurant, table, null));
                                     return customerRepository.findById(request.customerId())
+                                            .filter(customer -> restaurant.getTenantId().equals(customer.getTenantId()))
                                             .map(customer -> new Values(restaurant, table, customer));
                                 }));
     }

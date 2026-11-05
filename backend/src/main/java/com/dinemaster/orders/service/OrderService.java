@@ -23,6 +23,7 @@ import com.dinemaster.restaurant.entity.Restaurant;
 import com.dinemaster.restaurant.repository.RestaurantRepository;
 import com.dinemaster.user.entity.User;
 import com.dinemaster.user.repository.UserRepository;
+import com.dinemaster.user.repository.UserBranchRepository;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -48,6 +49,7 @@ public class OrderService {
         private final DiningTableRepository diningTableRepository;
         private final CustomerRepository customerRepository;
         private final UserRepository userRepository;
+        private final UserBranchRepository userBranches;
 
         public OrderService(
                         OrderRepository orderRepository,
@@ -56,7 +58,8 @@ public class OrderService {
                         RestaurantRepository restaurantRepository,
                         DiningTableRepository diningTableRepository,
                         CustomerRepository customerRepository,
-                        UserRepository userRepository) {
+                        UserRepository userRepository,
+                        UserBranchRepository userBranches) {
                 this.orderRepository = orderRepository;
                 this.orderItemRepository = orderItemRepository;
                 this.productRepository = productRepository;
@@ -64,6 +67,7 @@ public class OrderService {
                 this.diningTableRepository = diningTableRepository;
                 this.customerRepository = customerRepository;
                 this.userRepository = userRepository;
+                this.userBranches = userBranches;
         }
 
         @Transactional
@@ -105,6 +109,9 @@ public class OrderService {
                                         .findById(request.getCustomerId())
                                         .orElseThrow(() -> new ResponseStatusException(
                                                         HttpStatus.NOT_FOUND, "Customer not found"));
+                        if (!restaurant.getTenantId().equals(customer.getTenantId())) {
+                                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found");
+                        }
                         order.setCustomer(customer);
                         order.setCustomerName(customer.getName());
                         order.setCustomerPhone(customer.getPhone());
@@ -115,6 +122,10 @@ public class OrderService {
                                         .findById(request.getWaiterId())
                                         .orElseThrow(() -> new ResponseStatusException(
                                                         HttpStatus.NOT_FOUND, "Waiter not found"));
+                        if (!waiter.isActive() || !restaurant.getTenantId().equals(waiter.getTenantId())
+                                        || !userBranches.isAssigned(waiter.getId(), restaurant.getId())) {
+                                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Waiter not found");
+                        }
                         order.setWaiter(waiter);
                         order.setOrderTaker(waiter.getName());
                 }
@@ -128,6 +139,11 @@ public class OrderService {
                                         .orElseThrow(() -> new ResponseStatusException(
                                                         HttpStatus.NOT_FOUND,
                                                         "Product not found: " + itemRequest.getProductId()));
+
+                        if (!restaurant.getId().equals(product.getRestaurantId())) {
+                                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                                "Every product must belong to the order's restaurant");
+                        }
 
                         if (!product.isAvailable()) {
                                 throw new ResponseStatusException(

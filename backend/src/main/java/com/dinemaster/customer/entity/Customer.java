@@ -10,6 +10,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.time.OffsetDateTime;
 
@@ -22,13 +25,22 @@ public class Customer {
     private Long id;
 
     @Column(nullable = false, length = 150)
+    @NotBlank(message = "Customer name is required")
+    @Size(max = 150, message = "Customer name cannot exceed 150 characters")
     private String name;
 
-    @Column(nullable = false, unique = true, length = 30)
+    @Column(nullable = false, length = 30)
+    @NotBlank(message = "Customer phone is required")
+    @Size(max = 30, message = "Customer phone cannot exceed 30 characters")
     private String phone;
 
     @Column(length = 255)
+    @Email(message = "Customer email must be valid")
+    @Size(max = 255, message = "Customer email cannot exceed 255 characters")
     private String email;
+
+    @Column(name = "tenant_id", nullable = false)
+    private Long tenantId;
 
     @Column(name = "loyalty_points", nullable = false)
     private Integer loyaltyPoints = 0;
@@ -80,6 +92,10 @@ public class Customer {
     public void setEmail(String email) {
         this.email = email;
     }
+
+    public Long getTenantId() { return tenantId; }
+
+    public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
 
     public Integer getLoyaltyPoints() {
         return loyaltyPoints;

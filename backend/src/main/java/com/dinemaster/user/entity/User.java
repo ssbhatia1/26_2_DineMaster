@@ -31,11 +31,23 @@ public class User {
     @Column(nullable = false, length = 255)
     private String password;
 
-    @Column(nullable = false, length = 30)
+    @Column(nullable = false, length = 50)
     private String role;
+
+    @Column(name = "tenant_id")
+    private Long tenantId;
+
+    @Column(name = "permission_version", nullable = false)
+    private int permissionVersion = 1;
 
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
+
+    @Column(name = "failed_login_attempts", nullable = false)
+    private short failedLoginAttempts;
+
+    @Column(name = "locked_until")
+    private OffsetDateTime lockedUntil;
 
     @Column(name = "contact_details", length = 255)
     private String contactDetails;
@@ -97,6 +109,14 @@ public class User {
         this.role = role;
     }
 
+    public Long getTenantId() { return tenantId; }
+
+    public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
+
+    public int getPermissionVersion() { return permissionVersion; }
+
+    public void setPermissionVersion(int permissionVersion) { this.permissionVersion = permissionVersion; }
+
     public boolean isActive() {
         return isActive;
     }
@@ -104,6 +124,14 @@ public class User {
     public void setActive(boolean active) {
         isActive = active;
     }
+
+    public short getFailedLoginAttempts() { return failedLoginAttempts; }
+
+    public void setFailedLoginAttempts(short failedLoginAttempts) { this.failedLoginAttempts = failedLoginAttempts; }
+
+    public OffsetDateTime getLockedUntil() { return lockedUntil; }
+
+    public void setLockedUntil(OffsetDateTime lockedUntil) { this.lockedUntil = lockedUntil; }
 
     public String getContactDetails() {
         return contactDetails;

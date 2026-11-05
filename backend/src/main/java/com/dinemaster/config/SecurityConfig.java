@@ -70,8 +70,10 @@ public class SecurityConfig {
                         }))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/", "/api/health", "/error", "/api/auth/**").permitAll()
-                        .anyRequest().authenticated())
+                        .requestMatchers("/", "/api/v1/health", "/error", "/api/v1/auth/**").permitAll()
+                        // Protected controller methods enforce authorization with @PreAuthorize.
+                        // Let unmatched paths reach MVC so invalid URLs return 404, not 401.
+                        .anyRequest().permitAll())
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable());
 

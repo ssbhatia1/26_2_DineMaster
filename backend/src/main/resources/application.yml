@@ -26,9 +26,10 @@ spring:
 
 app:
   jwt:
-    # Replace with a strong secret via environment variable before enabling JWT authentication.
     secret: ${JWT_SECRET:}
-    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+    expiration-ms: ${JWT_EXPIRATION_MS:900000}
+    private-key-pem: ${JWT_PRIVATE_KEY_PEM:}
+    public-key-pem: ${JWT_PUBLIC_KEY_PEM:}
 
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME:}

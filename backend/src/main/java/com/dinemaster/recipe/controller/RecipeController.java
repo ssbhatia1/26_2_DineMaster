@@ -13,13 +13,14 @@ import com.dinemaster.restaurant.entity.Restaurant;
 
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/recipes")
+@RequestMapping("/api/v1/recipes")
 public class RecipeController {
     private final RecipeRepository recipeRepository;
     private final ProductRepository productRepository;
@@ -33,11 +34,13 @@ public class RecipeController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('recipe:view')")
     public List<Recipe> list(@RequestParam Long productId) {
         return recipeRepository.findByProduct_Id(productId);
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('recipe:manage')")
     @Transactional
     public ResponseEntity<?> create(@Valid @RequestBody RecipeRequest request) {
         Product product = productRepository.findById(request.productId()).orElse(null);
@@ -57,6 +60,7 @@ public class RecipeController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('recipe:manage')")
     @Transactional
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody RecipeRequest request) {
         Recipe recipe = recipeRepository.findById(id).orElse(null);
@@ -66,6 +70,10 @@ public class RecipeController {
             return ResponseEntity.notFound().build();
         if (product == null || ingredient == null)
             return ResponseEntity.badRequest().body(Map.of("error", "Product or ingredient not found"));
+        if (product.getRestaurant() == null || ingredient.getRestaurant() == null
+                || !product.getRestaurantId().equals(ingredient.getRestaurant().getId())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Product and ingredient must share a restaurant"));
+        }
         recipe.setProduct(product);
         recipe.setIngredient(ingredient);
         recipe.setQuantityUsed(request.quantityUsed());
@@ -73,6 +81,7 @@ public class RecipeController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('recipe:manage')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         if (!recipeRepository.existsById(id))
             return ResponseEntity.notFound().build();

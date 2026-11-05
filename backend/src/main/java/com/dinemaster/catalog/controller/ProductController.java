@@ -5,14 +5,17 @@ package com.dinemaster.catalog.controller;
 
 import com.dinemaster.catalog.entity.Category;
 import com.dinemaster.catalog.entity.Product;
+import com.dinemaster.catalog.dto.ProductAvailabilityRequest;
 import com.dinemaster.catalog.repository.CategoryRepository;
 import com.dinemaster.catalog.repository.ProductRepository;
 import com.dinemaster.recipe.entity.Recipe;
 import com.dinemaster.restaurant.entity.Restaurant;
 import com.dinemaster.restaurant.repository.RestaurantRepository;
+import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -20,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/products")
+@RequestMapping("/api/v1/products")
 public class ProductController {
 
     private final ProductRepository productRepository;
@@ -38,6 +41,7 @@ public class ProductController {
 
     // GET: Fetch available products
     @GetMapping
+    @PreAuthorize("hasAuthority('menu:view')")
     public ResponseEntity<List<Product>> getAllProducts(
             @RequestParam(required = false) Long restaurantId) {
         return ResponseEntity.ok(restaurantId == null
@@ -47,12 +51,14 @@ public class ProductController {
 
     // GET: Fetch all products, including unavailable products
     @GetMapping("/all")
-    public ResponseEntity<List<Product>> getAllProductsForManagement() {
-        return ResponseEntity.ok(productRepository.findAll());
+    @PreAuthorize("hasAuthority('menu:view')")
+    public ResponseEntity<List<Product>> getAllProductsForManagement(@RequestParam Long restaurantId) {
+        return ResponseEntity.ok(productRepository.findByRestaurant_Id(restaurantId));
     }
 
     // GET: Fetch a product by ID
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('menu:view')")
     public ResponseEntity<?> getProductById(@PathVariable Long id) {
         return productRepository.findById(id)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
@@ -62,6 +68,7 @@ public class ProductController {
 
     // GET: Fetch products by category name
     @GetMapping("/category/{category}")
+    @PreAuthorize("hasAuthority('menu:view')")
     public ResponseEntity<List<Product>> getProductsByCategory(
             @PathVariable String category,
             @RequestParam(required = false) Long restaurantId) {
@@ -73,14 +80,15 @@ public class ProductController {
 
     // POST: Create a product
     @PostMapping
-    public ResponseEntity<?> createProduct(@RequestBody Product product) {
+    @PreAuthorize("hasAuthority('menu:manage')")
+    public ResponseEntity<?> createProduct(@Valid @RequestBody Product product) {
         ResponseEntity<Map<String, String>> validation = validateProduct(product);
 
         if (validation != null) {
             return ResponseEntity.badRequest().body(validation.getBody());
         }
 
-        String categoryName = findCategoryName(product.getCategory());
+        String categoryName = findCategoryName(product.getCategory(), product.getRestaurantId());
 
         if (categoryName == null) {
             return ResponseEntity.badRequest().body(
@@ -106,9 +114,10 @@ public class ProductController {
 
     // PUT: Update a product
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('menu:manage')")
     public ResponseEntity<?> updateProduct(
             @PathVariable Long id,
-            @RequestBody Product request) {
+            @Valid @RequestBody Product request) {
 
         ResponseEntity<Map<String, String>> validation = validateProduct(request);
 
@@ -118,7 +127,9 @@ public class ProductController {
 
         return productRepository.findById(id)
                 .<ResponseEntity<?>>map(existingProduct -> {
-                    String categoryName = findCategoryName(request.getCategory());
+                    Long branchId = request.getRestaurantId() == null
+                            ? existingProduct.getRestaurantId() : request.getRestaurantId();
+                    String categoryName = findCategoryName(request.getCategory(), branchId);
 
                     if (categoryName == null) {
                         return ResponseEntity.badRequest().body(
@@ -144,19 +155,14 @@ public class ProductController {
 
     // PATCH: Update only product availability
     @PatchMapping("/{id}/availability")
+    @PreAuthorize("hasAnyAuthority('menu:manage','menu:toggle_availability')")
     public ResponseEntity<?> updateAvailability(
             @PathVariable Long id,
-            @RequestBody Map<String, Boolean> request) {
-
-        Boolean available = request.get("is_available");
-        if (available == null) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "is_available is required"));
-        }
+            @Valid @RequestBody ProductAvailabilityRequest request) {
 
         return productRepository.findById(id)
                 .<ResponseEntity<?>>map(product -> {
-                    product.setAvailable(available);
+                    product.setAvailable(request.available());
                     return ResponseEntity.ok(productRepository.save(product));
                 })
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -164,6 +170,7 @@ public class ProductController {
     }
     // DELETE: Delete a product
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('menu:manage')")
     public ResponseEntity<?> deleteProduct(@PathVariable Long id) {
         if (!productRepository.existsById(id)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -233,16 +240,14 @@ public class ProductController {
         return null;
     }
 
-    private String findCategoryName(String requestedName) {
-        if (requestedName == null || requestedName.isBlank()) {
+    private String findCategoryName(String requestedName, Long restaurantId) {
+        if (requestedName == null || requestedName.isBlank() || restaurantId == null) {
             return null;
         }
-
-        return categoryRepository.findAll().stream()
-                .map(Category::getName)
-                .filter(name -> name.equalsIgnoreCase(requestedName.trim()))
-                .findFirst()
-                .orElse(null);
+        return restaurantRepository.findById(restaurantId)
+                .flatMap(restaurant -> categoryRepository.findFirstByNameIgnoreCaseAndTenantId(
+                        requestedName.trim(), restaurant.getTenantId()))
+                .map(Category::getName).orElse(null);
     }
 
     private void copyProductFields(Product source, Product target) {

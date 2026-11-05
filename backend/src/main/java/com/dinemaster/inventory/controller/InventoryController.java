@@ -13,6 +13,7 @@ import com.dinemaster.restaurant.repository.RestaurantRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
@@ -20,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/inventory")
+@RequestMapping("/api/v1/inventory")
 public class InventoryController {
     private final InventoryRepository inventoryRepository;
     private final RestaurantRepository restaurantRepository;
@@ -31,11 +32,13 @@ public class InventoryController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('inventory:view')")
     public List<InventoryItem> list(@RequestParam Long restaurantId) {
         return inventoryRepository.findByRestaurant_IdOrderByItemNameAsc(restaurantId);
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('inventory:receive')")
     @Transactional
     public ResponseEntity<?> create(@Valid @RequestBody InventoryRequest request) {
         Restaurant restaurant = restaurantRepository.findById(request.restaurantId()).orElse(null);
@@ -47,6 +50,7 @@ public class InventoryController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('inventory:receive')")
     @Transactional
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody InventoryRequest request) {
         InventoryItem item = inventoryRepository.findById(id).orElse(null);
@@ -60,6 +64,7 @@ public class InventoryController {
     }
 
     @PatchMapping("/{id}/stock")
+    @PreAuthorize("hasAuthority('inventory:adjust')")
     @Transactional
     public ResponseEntity<?> adjustStock(@PathVariable Long id, @Valid @RequestBody StockAdjustmentRequest request) {
         InventoryItem item = inventoryRepository.findById(id).orElse(null);
@@ -81,6 +86,7 @@ public class InventoryController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         if (!inventoryRepository.existsById(id))
             return ResponseEntity.notFound().build();

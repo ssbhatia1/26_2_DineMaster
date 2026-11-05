@@ -13,6 +13,7 @@ import com.dinemaster.restaurant.repository.RestaurantRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -21,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/tables")
+@RequestMapping("/api/v1/tables")
 public class TableController {
 
     private final DiningTableRepository diningTableRepository;
@@ -35,6 +36,7 @@ public class TableController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('table:view')")
     public ResponseEntity<List<Map<String, Object>>> getAllTables(
             @RequestParam(required = false) Long restaurantId) {
         List<Map<String, Object>> response = new ArrayList<>();
@@ -50,6 +52,7 @@ public class TableController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('table:view')")
     public ResponseEntity<?> getTableById(@PathVariable Long id) {
         return diningTableRepository.findById(id)
                 .<ResponseEntity<?>>map(table -> ResponseEntity.ok(toTableResponse(table)))
@@ -58,6 +61,7 @@ public class TableController {
     }
 
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAuthority('table:update_status')")
     public ResponseEntity<?> updateStatus(
             @PathVariable Long id,
             @RequestParam String status) {
@@ -76,6 +80,7 @@ public class TableController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('table:manage_layout')")
     public ResponseEntity<?> createTable(
             @Valid @RequestBody TableRequest request) {
 
@@ -99,6 +104,7 @@ public class TableController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('table:manage_layout')")
     public ResponseEntity<?> updateTable(
             @PathVariable Long id,
             @Valid @RequestBody TableRequest request) {
@@ -132,6 +138,7 @@ public class TableController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('table:manage_layout')")
     public ResponseEntity<?> deleteTable(@PathVariable Long id) {
         if (!diningTableRepository.existsById(id)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)

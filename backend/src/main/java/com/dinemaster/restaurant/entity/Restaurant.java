@@ -10,6 +10,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 import java.time.OffsetDateTime;
 
@@ -22,13 +24,20 @@ public class Restaurant {
     private Long id;
 
     @Column(nullable = false, length = 150)
+    @NotBlank(message = "Branch name is required")
+    @Size(max = 150, message = "Branch name cannot exceed 150 characters")
     private String name;
 
     @Column(columnDefinition = "TEXT")
+    @Size(max = 5000, message = "Branch address cannot exceed 5000 characters")
     private String address;
 
     @Column(length = 30)
+    @Size(max = 30, message = "Branch phone cannot exceed 30 characters")
     private String phone;
+
+    @Column(name = "tenant_id", nullable = false)
+    private Long tenantId;
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
@@ -78,6 +87,10 @@ public class Restaurant {
     public void setPhone(String phone) {
         this.phone = phone;
     }
+
+    public Long getTenantId() { return tenantId; }
+
+    public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
 
     public OffsetDateTime getCreatedAt() {
         return createdAt;
