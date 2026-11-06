@@ -1,0 +1,35 @@
+package com.dinemaster.role;
+
+
+
+import java.util.Locale;
+
+public final class Roles {
+    private Roles() {
+    }
+
+    public static String canonical(String role) {
+        if (role == null || role.isBlank()) {
+            return "STAFF";
+        }
+        String value = role.trim().toUpperCase(Locale.ROOT).replace(' ', '_');
+        if (value.startsWith("ROLE_")) {
+            value = value.substring(5);
+        }
+        return switch (value) {
+            case "OWNER", "ADMIN", "RESTAURANT_ADMIN" -> "OWNER";
+            case "MANAGER" -> "MANAGER";
+            case "CASHIER" -> "CASHIER";
+            case "WAITER" -> "WAITER";
+            case "CHEF", "COOK" -> "CHEF";
+            case "SUPER_ADMIN" -> "SUPER_ADMIN";
+            case "INVENTORY_MANAGER" -> "INVENTORY_MANAGER";
+            case "EMPLOYEE", "STAFF" -> "STAFF";
+            default -> value;
+        };
+    }
+
+    public static boolean matches(String actualRole, String selectedRole) {
+        return canonical(actualRole).equals(canonical(selectedRole));
+    }
+}

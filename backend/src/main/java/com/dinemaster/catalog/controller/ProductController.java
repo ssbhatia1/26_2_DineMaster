@@ -1,0 +1,286 @@
+package com.dinemaster.catalog.controller;
+
+
+
+
+import com.dinemaster.catalog.entity.Category;
+import com.dinemaster.catalog.entity.Product;
+import com.dinemaster.catalog.dto.ProductAvailabilityRequest;
+import com.dinemaster.catalog.repository.CategoryRepository;
+import com.dinemaster.catalog.repository.ProductRepository;
+import com.dinemaster.recipe.entity.Recipe;
+import com.dinemaster.restaurant.entity.Restaurant;
+import com.dinemaster.restaurant.repository.RestaurantRepository;
+import com.dinemaster.security.BranchScopeService;
+import jakarta.validation.Valid;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/v1/products")
+public class ProductController {
+
+    private final ProductRepository productRepository;
+    private final CategoryRepository categoryRepository;
+    private final RestaurantRepository restaurantRepository;
+    private final BranchScopeService branchScope;
+
+    public ProductController(
+            ProductRepository productRepository,
+            CategoryRepository categoryRepository,
+            RestaurantRepository restaurantRepository,
+            BranchScopeService branchScope) {
+        this.productRepository = productRepository;
+        this.categoryRepository = categoryRepository;
+        this.restaurantRepository = restaurantRepository;
+        this.branchScope = branchScope;
+    }
+
+    // GET: Fetch available products
+    @GetMapping
+    @PreAuthorize("hasAuthority('menu:view')")
+    public ResponseEntity<List<Product>> getAllProducts(
+            @RequestParam(required = false) Long restaurantId) {
+        return ResponseEntity.ok(restaurantId == null
+                ? productRepository.findByAvailableTrue()
+                : productRepository.findByRestaurant_IdAndAvailableTrue(restaurantId));
+    }
+
+    // GET: Fetch all products, including unavailable products
+    @GetMapping("/all")
+    @PreAuthorize("hasAuthority('menu:view')")
+    public ResponseEntity<List<Product>> getAllProductsForManagement(@RequestParam Long restaurantId) {
+        return ResponseEntity.ok(productRepository.findByRestaurant_Id(restaurantId));
+    }
+
+    // GET: Fetch a product by ID
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('menu:view')")
+    public ResponseEntity<?> getProductById(@PathVariable Long id) {
+        return productRepository.findById(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Product not found")));
+    }
+
+    // GET: Fetch products by category name
+    @GetMapping("/category/{category}")
+    @PreAuthorize("hasAuthority('menu:view')")
+    public ResponseEntity<List<Product>> getProductsByCategory(
+            @PathVariable String category,
+            @RequestParam(required = false) Long restaurantId) {
+        return ResponseEntity.ok(restaurantId == null
+                ? productRepository.findByCategoryIgnoreCase(category)
+                : productRepository.findByRestaurant_IdAndCategoryIgnoreCase(
+                        restaurantId, category));
+    }
+
+    // POST: Create a product
+    @PostMapping
+    @PreAuthorize("hasAuthority('menu:manage')")
+    public ResponseEntity<?> createProduct(
+            @Valid @RequestBody Product product, Authentication authentication) {
+        ResponseEntity<Map<String, String>> validation = validateProduct(product);
+
+        if (validation != null) {
+            return ResponseEntity.badRequest().body(validation.getBody());
+        }
+        branchScope.requireBranch(authentication, product.getRestaurantId());
+
+        String categoryName = findCategoryName(product.getCategory(), product.getRestaurantId());
+
+        if (categoryName == null) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("error", "Category does not exist. Create the category first."));
+        }
+
+        product.setId(null);
+        product.setName(product.getName().trim());
+        product.setCategory(categoryName);
+        ResponseEntity<?> restaurantError = attachRestaurant(product);
+        if (restaurantError != null) {
+            return restaurantError;
+        }
+
+        if (product.getGstPercentage() == null) {
+            product.setGstPercentage(new BigDecimal("5.00"));
+        }
+
+        Product savedProduct = productRepository.save(product);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedProduct);
+    }
+
+    // PUT: Update a product
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('menu:manage')")
+    public ResponseEntity<?> updateProduct(
+            @PathVariable Long id,
+            @Valid @RequestBody Product request, Authentication authentication) {
+
+        ResponseEntity<Map<String, String>> validation = validateProduct(request);
+
+        if (validation != null) {
+            return ResponseEntity.badRequest().body(validation.getBody());
+        }
+        if (request.getRestaurantId() != null) {
+            branchScope.requireBranch(authentication, request.getRestaurantId());
+        }
+
+        return productRepository.findById(id)
+                .<ResponseEntity<?>>map(existingProduct -> {
+                    Long branchId = request.getRestaurantId() == null
+                            ? existingProduct.getRestaurantId() : request.getRestaurantId();
+                    String categoryName = findCategoryName(request.getCategory(), branchId);
+
+                    if (categoryName == null) {
+                        return ResponseEntity.badRequest().body(
+                                Map.of("error", "Category does not exist."));
+                    }
+
+                    copyProductFields(request, existingProduct);
+                    existingProduct.setCategory(categoryName);
+                    if (request.getRestaurantId() != null) {
+                        ResponseEntity<?> restaurantError = attachRestaurant(request);
+                        if (restaurantError != null) {
+                            return restaurantError;
+                        }
+                        existingProduct.setRestaurant(request.getRestaurant());
+                    }
+
+                    return ResponseEntity.ok(
+                            productRepository.save(existingProduct));
+                })
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Product not found")));
+    }
+
+    // PATCH: Update only product availability
+    @PatchMapping("/{id}/availability")
+    @PreAuthorize("hasAnyAuthority('menu:manage','menu:toggle_availability')")
+    public ResponseEntity<?> updateAvailability(
+            @PathVariable Long id,
+            @Valid @RequestBody ProductAvailabilityRequest request) {
+
+        return productRepository.findById(id)
+                .<ResponseEntity<?>>map(product -> {
+                    product.setAvailable(request.available());
+                    return ResponseEntity.ok(productRepository.save(product));
+                })
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Product not found")));
+    }
+    // DELETE: Delete a product
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('menu:manage')")
+    public ResponseEntity<?> deleteProduct(@PathVariable Long id) {
+        if (!productRepository.existsById(id)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Product not found"));
+        }
+
+        productRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    private ResponseEntity<Map<String, String>> validateProduct(
+            Product product) {
+
+        if (product == null) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Product data is required"));
+        }
+
+        if (product.getName() == null || product.getName().isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Product name is required"));
+        }
+
+        if (product.getName().trim().length() > 150) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Product name cannot exceed 150 characters"));
+        }
+
+        if (product.getPrice() == null
+                || product.getPrice().compareTo(BigDecimal.ZERO) < 0) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "A non-negative product price is required"));
+        }
+
+        if (product.getCategory() == null
+                || product.getCategory().isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Product category is required"));
+        }
+
+        if (product.getVeg() == null || product.getVeg() < 0 || product.getVeg() > 3) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "is_veg must be one of 0, 1, 2, or 3"));
+        }
+
+        if (product.getGstPercentage() != null
+                && (product.getGstPercentage().compareTo(BigDecimal.ZERO) < 0
+                        || product.getGstPercentage()
+                                .compareTo(new BigDecimal("100")) > 0)) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "GST percentage must be between 0 and 100"));
+        }
+
+        return null;
+    }
+
+    private ResponseEntity<?> attachRestaurant(Product product) {
+        Long restaurantId = product.getRestaurantId();
+        if (restaurantId == null) {
+            return null;
+        }
+        Restaurant restaurant = restaurantRepository.findById(restaurantId).orElse(null);
+        if (restaurant == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Restaurant not found"));
+        }
+        product.setRestaurant(restaurant);
+        return null;
+    }
+
+    private String findCategoryName(String requestedName, Long restaurantId) {
+        if (requestedName == null || requestedName.isBlank() || restaurantId == null) {
+            return null;
+        }
+        return restaurantRepository.findById(restaurantId)
+                .flatMap(restaurant -> categoryRepository.findFirstByNameIgnoreCaseAndTenantId(
+                        requestedName.trim(), restaurant.getTenantId()))
+                .map(Category::getName).orElse(null);
+    }
+
+    private void copyProductFields(Product source, Product target) {
+        target.setName(source.getName().trim());
+        target.setDescription(source.getDescription());
+        target.setIngredients(source.getIngredients());
+        target.setPrice(source.getPrice());
+        target.setVeg(source.getVeg());
+        target.setImagePath(source.getImagePath());
+        target.setAvailable(source.isAvailable());
+        target.setGstPercentage(
+                source.getGstPercentage() == null
+                        ? new BigDecimal("5.00")
+                        : source.getGstPercentage());
+        target.setDietaryPreferences(source.getDietaryPreferences());
+        target.setTastePreferences(source.getTastePreferences());
+        target.setAttributes(source.getAttributes());
+        target.setCustomDietaryNotes(source.getCustomDietaryNotes());
+        target.setRecipeSteps(source.getRecipeSteps());
+        target.setPrepTime(source.getPrepTime());
+        target.setCookTime(source.getCookTime());
+        target.setServings(source.getServings());
+        target.setDifficulty(source.getDifficulty());
+        target.setVideoPath(source.getVideoPath());
+    }
+}

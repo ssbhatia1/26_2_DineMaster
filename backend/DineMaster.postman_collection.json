@@ -1,0 +1,49 @@
+﻿{
+  "info": {"name":"DineMaster Backend API","description":"Current backend API requests. Login stores JWT. Replace IDs with existing database IDs.","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+  "auth":{"type":"bearer","bearer":[{"key":"token","value":"{{token}}","type":"string"}]},
+  "variable":[{"key":"baseUrl","value":"http://localhost:8081"},{"key":"username","value":"owner"},{"key":"password","value":"ChangeMe123!"},{"key":"token","value":""},{"key":"restaurantId","value":"1"},{"key":"productId","value":"1"},{"key":"tableId","value":"1"},{"key":"customerId","value":"1"},{"key":"inventoryId","value":"1"},{"key":"orderId","value":"1"},{"key":"id","value":"1"}],
+  "item":[
+    {"name":"Auth and health","item":[
+      {"name":"Health","request":{"method":"GET","url":"{{baseUrl}}/api/v1/health","auth":{"type":"noauth"}}},
+      {"name":"Login (auto saves token)","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/auth/login","auth":{"type":"noauth"}},"event":[{"listen":"test","script":{"type":"text/javascript","exec":["const data = pm.response.json();","if (data.token) pm.collectionVariables.set('token', data.token);"]}}]}
+    ]},
+    {"name":"Users","item":[
+      {"name":"List users","request":{"method":"GET","url":"{{baseUrl}}/api/v1/users"}},
+      {"name":"Create user","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"Asha Sharma\",\"username\":\"asha\",\"password\":\"ChangeMe123!\",\"role\":\"MANAGER\",\"active\":true,\"contactDetails\":\"asha@example.com\",\"shiftTiming\":\"09:00-17:00\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/users"}},
+      {"name":"Get user","request":{"method":"GET","url":"{{baseUrl}}/api/v1/users/{{id}}"}},
+      {"name":"Update user","request":{"method":"PUT","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"Asha Sharma\",\"username\":\"asha\",\"password\":\"\",\"role\":\"MANAGER\",\"active\":true,\"contactDetails\":\"asha@example.com\",\"shiftTiming\":\"09:00-17:00\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/users/{{id}}"}},
+      {"name":"Delete user","request":{"method":"DELETE","url":"{{baseUrl}}/api/v1/users/{{id}}"}}
+    ]},
+    {"name":"Restaurants and catalog","item":[
+      {"name":"List restaurants","request":{"method":"GET","url":"{{baseUrl}}/api/v1/branches"}},
+      {"name":"Create restaurant","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"DineMaster Demo\",\"address\":\"Main Street\",\"phone\":\"+91-9000000000\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/branches"}},
+      {"name":"List categories","request":{"method":"GET","url":"{{baseUrl}}/api/v1/categories"}},
+      {"name":"Create category","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"Starters\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/categories"}},
+      {"name":"List products","request":{"method":"GET","url":"{{baseUrl}}/api/v1/products"}},
+      {"name":"Create product","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"Paneer Tikka\",\"description\":\"Grilled paneer starter\",\"ingredients\":\"Paneer, spices\",\"price\":249,\"category\":\"Starters\",\"veg\":1,\"imagePath\":\"\",\"available\":true,\"gstPercentage\":5,\"dietaryPreferences\":\"Vegetarian\",\"tastePreferences\":\"Spicy\",\"attributes\":\"\",\"customDietaryNotes\":\"\",\"recipeSteps\":\"Marinate and grill\",\"prepTime\":15,\"cookTime\":20,\"servings\":2,\"difficulty\":\"Easy\",\"videoPath\":\"\",\"restaurantId\":{{restaurantId}}}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/products"}},
+      {"name":"Set product availability","request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"is_available\":true}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/products/{{id}}/availability"}},
+      {"name":"List customers","request":{"method":"GET","url":"{{baseUrl}}/api/v1/customers"}},
+      {"name":"Create customer","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"Ravi Kumar\",\"phone\":\"+91-9888888888\",\"email\":\"ravi@example.com\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/customers"}}
+    ]},
+    {"name":"Tables and orders","item":[
+      {"name":"List tables","request":{"method":"GET","url":"{{baseUrl}}/api/v1/tables?restaurantId={{restaurantId}}"}},
+      {"name":"Create table","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"tableNumber\":\"T-01\",\"name\":\"Table 1\",\"capacity\":4,\"status\":\"Available\",\"section\":\"Main Hall\",\"tableType\":\"Standard Table\",\"restaurantId\":{{restaurantId}},\"active\":true,\"reservable\":true,\"notes\":\"\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/tables"}},
+      {"name":"Create order","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"restaurantId\":{{restaurantId}},\"tableId\":{{tableId}},\"customerId\":{{customerId}},\"type\":\"Dine In\",\"notes\":\"\",\"guestCount\":2,\"discountAmount\":0,\"items\":[{\"productId\":{{productId}},\"quantity\":2,\"notes\":\"Less spicy\"}]}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/orders"}},
+      {"name":"List orders","request":{"method":"GET","url":"{{baseUrl}}/api/v1/orders?restaurantId={{restaurantId}}"}},
+      {"name":"Change order status","request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"status\":\"Preparing\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/orders/{{id}}/status"}},
+      {"name":"Record payment","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"paymentMethod\":\"CASH\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/orders/{{id}}/payment"}}
+    ]},
+    {"name":"Bookings, inventory, recipes and KOT","item":[
+      {"name":"List bookings","request":{"method":"GET","url":"{{baseUrl}}/api/v1/reservations?restaurantId={{restaurantId}}"}},
+      {"name":"Create booking","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"tableId\":{{tableId}},\"customerId\":{{customerId}},\"customerName\":\"Ravi Kumar\",\"customerPhone\":\"+91-9888888888\",\"guestCount\":2,\"bookingTime\":\"2026-12-01T19:30:00+05:30\",\"status\":\"Pending\",\"notes\":\"Window seat\",\"restaurantId\":{{restaurantId}}}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/reservations"}},
+      {"name":"List inventory","request":{"method":"GET","url":"{{baseUrl}}/api/v1/inventory?restaurantId={{restaurantId}}"}},
+      {"name":"Create inventory item","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"itemName\":\"Paneer\",\"currentStock\":20,\"unit\":\"kg\",\"lowStockThreshold\":5,\"expiryDate\":\"2026-12-31\",\"restaurantId\":{{restaurantId}}}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/inventory"}},
+      {"name":"Adjust stock","request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"mode\":\"add\",\"quantity\":5}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/inventory/{{id}}/stock"}},
+      {"name":"List recipes","request":{"method":"GET","url":"{{baseUrl}}/api/v1/recipes?productId={{productId}}"}},
+      {"name":"Create recipe line","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"productId\":{{productId}},\"ingredientId\":{{inventoryId}},\"quantityUsed\":0.2}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/recipes"}},
+      {"name":"List KOTs","request":{"method":"GET","url":"{{baseUrl}}/api/v1/kitchen-tickets?restaurantId={{restaurantId}}"}},
+      {"name":"Create KOT","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"orderId\":{{orderId}},\"kotNumber\":\"KOT-001\",\"priority\":\"Normal\",\"estimatedTime\":20}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/kitchen-tickets"}}
+    ]}
+  ]
+}
+
