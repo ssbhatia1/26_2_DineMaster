@@ -26,7 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.Authentication;
 
 @RestController
-@RequestMapping("/api/v1/tenants")
+@RequestMapping({"/api/v1/super-admin/tenants", "/api/v1/tenants"})
 public class TenantController {
     private final TenantRepository tenants;
     private final UserRepository users;
@@ -52,14 +52,14 @@ public class TenantController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAuthority('tenant:view')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') and hasAuthority('tenant:view')")
     public java.util.List<Tenant> list() {
         return tenants.findAll();
     }
 
     @PostMapping
     @Transactional
-    @PreAuthorize("hasAuthority('tenant:create')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') and hasAuthority('tenant:create')")
     public ResponseEntity<?> create(@Valid @RequestBody TenantCreateRequest request, Authentication authentication) {
         String username = request.ownerUsername().trim();
         if (users.existsByUsername(username)) {
@@ -85,7 +85,7 @@ public class TenantController {
 
     @PatchMapping("/{tenantId}/suspend")
     @Transactional
-    @PreAuthorize("hasAuthority('tenant:suspend')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') and hasAuthority('tenant:suspend')")
     public ResponseEntity<?> suspend(@PathVariable Long tenantId, Authentication authentication) {
         Tenant tenant = tenants.findById(tenantId).orElse(null);
         if (tenant == null) return ResponseEntity.notFound().build();
@@ -109,7 +109,7 @@ public class TenantController {
 
     @PatchMapping("/{tenantId}/activate")
     @Transactional
-    @PreAuthorize("hasAuthority('tenant:activate')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') and hasAuthority('tenant:activate')")
     public ResponseEntity<?> activate(@PathVariable Long tenantId, Authentication authentication) {
         Tenant tenant = tenants.findById(tenantId).orElse(null);
         if (tenant == null) return ResponseEntity.notFound().build();

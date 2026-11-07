@@ -174,6 +174,20 @@ public class AuthService {
         users.findById(userId).ifPresent(user -> audit.record(userId, user.getUsername(), "LOGOUT", true));
     }
 
+    @Transactional
+    public void logoutAll(Long userId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        refreshTokens.findAllByUserIdAndRevokedAtIsNull(userId).forEach(token -> {
+            token.setRevokedAt(now);
+            refreshTokens.save(token);
+        });
+        users.findById(userId).ifPresent(user -> {
+            user.setPermissionVersion(user.getPermissionVersion() + 1);
+            users.save(user);
+            audit.record(userId, user.getUsername(), "LOGOUT_ALL", true);
+        });
+    }
+
     @Transactional(noRollbackFor = AuthFailure.class)
     public void changePassword(Long userId, String currentPassword, String newPassword) {
         User user = users.findById(userId).filter(User::isActive)

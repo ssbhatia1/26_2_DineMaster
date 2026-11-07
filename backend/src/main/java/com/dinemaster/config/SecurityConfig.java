@@ -4,11 +4,13 @@ package com.dinemaster.config;
 
 
 import com.dinemaster.user.entity.User;
+import com.dinemaster.common.exception.ApiErrorResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -19,7 +21,6 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Configuration
@@ -27,9 +28,11 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
+    private final ObjectMapper objectMapper;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtFilter, ObjectMapper objectMapper) {
         this.jwtFilter = jwtFilter;
+        this.objectMapper = objectMapper;
     }
 
     @Bean
@@ -57,16 +60,12 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint((request, response, exception) -> {
-                            response.setStatus(401);
-                            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                            response.getWriter().write("{\"error\":\"Unauthorized\"}");
+                            writeSecurityError(response, HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_INVALID",
+                                    "Authentication is required.", request);
                         })
                         .accessDeniedHandler((request, response, exception) -> {
-                            response.setStatus(403);
-                            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-                            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                            response.getWriter().write("{\"error\":\"Forbidden\"}");
+                            writeSecurityError(response, HttpStatus.FORBIDDEN, "PERMISSION_DENIED",
+                                    "You do not have permission to access this resource.", request);
                         }))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
@@ -79,5 +78,16 @@ public class SecurityConfig {
 
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
+    }
+
+    private void writeSecurityError(jakarta.servlet.http.HttpServletResponse response,
+            HttpStatus status, String code, String message, jakarta.servlet.http.HttpServletRequest request)
+            throws java.io.IOException {
+        var entity = ApiErrorResponse.of(status, code, message, null, request);
+        response.setStatus(status.value());
+        response.setContentType("application/json");
+        response.setCharacterEncoding(java.nio.charset.StandardCharsets.UTF_8.name());
+        response.setHeader("X-Request-Id", entity.getHeaders().getFirst("X-Request-Id"));
+        objectMapper.writeValue(response.getWriter(), entity.getBody());
     }
 }

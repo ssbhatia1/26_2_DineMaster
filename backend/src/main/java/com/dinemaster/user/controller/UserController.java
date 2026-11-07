@@ -29,7 +29,7 @@ import com.dinemaster.auth.service.AuthAuditService;
 import java.time.OffsetDateTime;
 
 @RestController
-@RequestMapping("/api/v1/users")
+@RequestMapping({"/api/v1/admin/staff", "/api/v1/users"})
 public class UserController {
     private final UserRepository repository;
     private final PasswordEncoder encoder;
@@ -57,7 +57,7 @@ public class UserController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAuthority('user:view')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER') and hasAuthority('user:view')")
     public java.util.List<UserResponse> list(Authentication authentication) {
         User actor = branchScope.requireUser(authentication);
         return repository.findAll().stream().filter(user -> java.util.Objects.equals(user.getTenantId(), actor.getTenantId()))
@@ -65,7 +65,7 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('user:view')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER') and hasAuthority('user:view')")
     public ResponseEntity<?> get(@PathVariable Long id, Authentication authentication) {
         User actor = branchScope.requireUser(authentication);
         return repository.findById(id).filter(user -> java.util.Objects.equals(user.getTenantId(), actor.getTenantId()))
@@ -76,7 +76,7 @@ public class UserController {
 
     @PostMapping
     @Transactional
-    @PreAuthorize("hasAuthority('user:create')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER') and hasAuthority('user:create')")
     public ResponseEntity<?> create(@Valid @RequestBody UserRequest request, Authentication authentication) {
         if (request.password() == null || request.password().isBlank())
             return ResponseEntity.badRequest().body(Map.of("error", "Password is required"));
@@ -100,7 +100,7 @@ public class UserController {
 
     @PutMapping("/{id}")
     @Transactional
-    @PreAuthorize("hasAuthority('user:update')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER') and hasAuthority('user:update')")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody UserRequest request, Authentication authentication) {
         User user = repository.findById(id).orElse(null);
         if (user == null)
@@ -149,14 +149,14 @@ public class UserController {
 
     @DeleteMapping("/{id}")
     @Transactional
-    @PreAuthorize("hasAuthority('user:deactivate')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER') and hasAuthority('user:deactivate')")
     public ResponseEntity<?> delete(@PathVariable Long id, Authentication authentication) {
         return deactivateUser(id, authentication);
     }
 
     @PostMapping("/{id}/deactivate")
     @Transactional
-    @PreAuthorize("hasAuthority('user:deactivate')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER') and hasAuthority('user:deactivate')")
     public ResponseEntity<?> deactivate(@PathVariable Long id, Authentication authentication) {
         return deactivateUser(id, authentication);
     }
@@ -185,7 +185,7 @@ public class UserController {
 
     @PostMapping("/{id}/reset-password")
     @Transactional
-    @PreAuthorize("hasAuthority('role:assign')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER') and hasAuthority('role:assign')")
     public ResponseEntity<?> resetPassword(@PathVariable Long id,
             @Valid @RequestBody PasswordResetRequest request, Authentication authentication) {
         User user = repository.findById(id).orElse(null);
@@ -206,7 +206,7 @@ public class UserController {
 
     @PostMapping("/{id}/sessions/revoke")
     @Transactional
-    @PreAuthorize("hasAuthority('session:revoke')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER') and hasAuthority('session:revoke')")
     public ResponseEntity<?> revokeSessions(@PathVariable Long id, Authentication authentication) {
         User user = repository.findById(id).orElse(null);
         if (user == null) return ResponseEntity.notFound().build();
@@ -221,7 +221,7 @@ public class UserController {
 
     @PatchMapping("/{id}/branches")
     @Transactional
-    @PreAuthorize("hasAuthority('user:update')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER') and hasAuthority('user:update')")
     public ResponseEntity<?> assignBranches(@PathVariable Long id,
             @Valid @RequestBody UserBranchUpdateRequest request, Authentication authentication) {
         User actor = branchScope.requireUser(authentication);

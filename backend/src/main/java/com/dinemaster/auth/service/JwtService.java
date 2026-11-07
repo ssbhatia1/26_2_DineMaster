@@ -15,12 +15,14 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
 
 @Service
 public class JwtService {
@@ -28,13 +30,16 @@ public class JwtService {
     private final long expirationMs;
     private final PrivateKey privateKey;
     private final PublicKey publicKey;
+    private final String keyId;
 
     public JwtService(@Value("${app.jwt.secret:}") String secret,
             @Value("${app.jwt.expiration-ms:900000}") long expirationMs,
             @Value("${app.jwt.private-key-pem:}") String privateKeyPem,
-            @Value("${app.jwt.public-key-pem:}") String publicKeyPem) {
+            @Value("${app.jwt.public-key-pem:}") String publicKeyPem,
+            @Value("${app.jwt.key-id:dinemaster-rsa-1}") String keyId) {
         this.secret = secret == null ? "" : secret;
         this.expirationMs = expirationMs;
+        this.keyId = keyId;
         boolean hasPrivate = privateKeyPem != null && !privateKeyPem.isBlank();
         boolean hasPublic = publicKeyPem != null && !publicKeyPem.isBlank();
         if (hasPrivate != hasPublic) {
@@ -66,7 +71,7 @@ public class JwtService {
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs));
         if (privateKey == null) builder.signWith(key(), Jwts.SIG.HS256);
-        else builder.signWith(privateKey, Jwts.SIG.RS256);
+        else builder.header().keyId(keyId).and().signWith(privateKey, Jwts.SIG.RS256);
         return builder.compact();
     }
 
@@ -82,6 +87,23 @@ public class JwtService {
     }
 
     public long getAccessLifetimeSeconds() { return expirationMs / 1000; }
+
+    public Map<String, Object> jwks() {
+        if (!(publicKey instanceof RSAPublicKey rsaKey)) {
+            throw new IllegalStateException("JWKS is available only when RSA JWT keys are configured");
+        }
+        return Map.of("keys", java.util.List.of(Map.of(
+                "kty", "RSA",
+                "use", "sig",
+                "alg", "RS256",
+                "kid", keyId,
+                "n", Base64.getUrlEncoder().withoutPadding().encodeToString(unsigned(rsaKey.getModulus().toByteArray())),
+                "e", Base64.getUrlEncoder().withoutPadding().encodeToString(unsigned(rsaKey.getPublicExponent().toByteArray())))));
+    }
+
+    private byte[] unsigned(byte[] value) {
+        return value.length > 1 && value[0] == 0 ? java.util.Arrays.copyOfRange(value, 1, value.length) : value;
+    }
 
     private SecretKey key() {
         if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {

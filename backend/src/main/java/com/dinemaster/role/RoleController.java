@@ -42,6 +42,22 @@ public class RoleController {
                 "permissions", rolePermissionService.permissionsFor(role.getCode(), actor.getTenantId()))).toList();
     }
 
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('role:view') or hasAuthority('role:assign')")
+    public ResponseEntity<?> get(@PathVariable Long id, Authentication authentication) {
+        User actor = branchScope.requireUser(authentication);
+        Role role = roles.findById(id).filter(Role::isActive)
+                .filter(value -> value.getTenantId() == null
+                        || java.util.Objects.equals(value.getTenantId(), actor.getTenantId()))
+                .orElse(null);
+        if (role == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(Map.of(
+                "id", role.getId(),
+                "code", role.getCode(),
+                "name", role.getName(),
+                "permissions", role.getPermissions().stream().map(Permission::getCode).sorted().toList()));
+    }
+
     @GetMapping("/permissions")
     @PreAuthorize("hasAuthority('role:assign')")
     public java.util.List<String> permissionCodes() {
