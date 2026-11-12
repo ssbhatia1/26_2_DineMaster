@@ -11,9 +11,11 @@ import java.util.UUID;
 @Table(name = "auth_devices")
 public class AuthDevice {
     @Id private UUID id;
-    @Column(name = "user_id", nullable = false) private Long userId;
+    @Column(name = "user_id") private Long userId;
     @Column(name = "tenant_id") private Long tenantId;
+    @Column(name = "branch_id") private Long branchId;
     @Column(nullable = false, length = 100) private String label = "Unknown device";
+    @Column(nullable = false, length = 50) private String platform = "UNKNOWN";
     @Column(nullable = false) private boolean active = true;
     @Column(name = "created_at", nullable = false) private OffsetDateTime createdAt;
     @Column(name = "last_seen_at") private OffsetDateTime lastSeenAt;
@@ -27,7 +29,14 @@ public class AuthDevice {
     public UUID getId() { return id; }
     public Long getUserId() { return userId; }
     public Long getTenantId() { return tenantId; }
+    public Long getBranchId() { return branchId; }
+    public void setBranchId(Long branchId) { this.branchId = branchId; }
+    public void setUserId(Long userId) { this.userId = userId; }
     public String getLabel() { return label; }
+    public String getPlatform() { return platform; }
+    public void setPlatform(String platform) {
+        this.platform = platform == null || platform.isBlank() ? "UNKNOWN" : platform.trim();
+    }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }

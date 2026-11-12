@@ -14,7 +14,7 @@ public final class RolePermissions {
             case "OWNER" -> permissions.addAll(Set.of(
                     "branch:view", "branch:create", "branch:update", "settings:view", "settings:update",
                     "backup:create", "backup:restore", "user:view", "user:create", "user:update",
-                    "user:deactivate", "role:assign", "audit:view", "session:revoke", "table:view",
+                    "user:deactivate", "role:assign", "audit:view", "session:revoke", "device:activate", "table:view",
                     "table:update_status", "table:manage_layout", "table:assign_waiter", "reservation:view",
                     "reservation:create", "reservation:update", "menu:view", "menu:manage",
                     "menu:toggle_availability", "recipe:view", "recipe:manage", "order:create", "order:view",
@@ -31,7 +31,7 @@ public final class RolePermissions {
                     "licence:manage", "support:grant_access"));
             case "MANAGER" -> permissions.addAll(Set.of(
                     "branch:view", "settings:view", "settings:update", "backup:create", "user:view", "user:create",
-                    "user:update", "user:deactivate", "audit:view", "session:revoke", "table:view",
+                    "user:update", "user:deactivate", "audit:view", "session:revoke", "device:activate", "table:view",
                     "table:update_status", "table:manage_layout", "table:assign_waiter", "reservation:view",
                     "reservation:create", "reservation:update", "menu:view", "menu:manage", "menu:toggle_availability",
                     "recipe:view", "recipe:manage", "order:create", "order:view", "order:update", "order:cancel",

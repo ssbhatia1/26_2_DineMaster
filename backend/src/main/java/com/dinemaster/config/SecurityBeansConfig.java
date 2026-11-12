@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -19,7 +20,20 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 public class SecurityBeansConfig {
     @Bean
     PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        Argon2PasswordEncoder argon2 = Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
+        BCryptPasswordEncoder legacyBcrypt = new BCryptPasswordEncoder();
+        return new PasswordEncoder() {
+            @Override public String encode(CharSequence rawPassword) { return argon2.encode(rawPassword); }
+            @Override public boolean matches(CharSequence rawPassword, String encodedPassword) {
+                if (encodedPassword != null && encodedPassword.startsWith("$2"))
+                    return legacyBcrypt.matches(rawPassword, encodedPassword);
+                return argon2.matches(rawPassword, encodedPassword);
+            }
+            @Override public boolean upgradeEncoding(String encodedPassword) {
+                return encodedPassword == null || encodedPassword.startsWith("$2")
+                        || argon2.upgradeEncoding(encodedPassword);
+            }
+        };
     }
 
     @Bean

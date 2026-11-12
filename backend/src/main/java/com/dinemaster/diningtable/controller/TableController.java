@@ -129,8 +129,7 @@ public class TableController {
                     boolean duplicate = !existing.getTableNumber().equals(
                             request.getTableNumber())
                             && diningTableRepository.existsByRestaurant_IdAndTableNumber(
-                            existing.getRestaurant().getId(), request.getTableNumber())) {
-                                    request.getTableNumber());
+                                    existing.getRestaurant().getId(), request.getTableNumber());
 
                     if (duplicate) {
                         return ResponseEntity.status(HttpStatus.CONFLICT)

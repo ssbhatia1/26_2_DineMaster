@@ -13,6 +13,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 import java.time.OffsetDateTime;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "users")
@@ -54,6 +55,15 @@ public class User {
 
     @Column(name = "contact_details", length = 255)
     private String contactDetails;
+
+    @Column(length = 255)
+    private String email;
+
+    @Column(name = "employee_code", length = 40)
+    private String employeeCode;
+
+    @Column(name = "joined_on")
+    private LocalDate joinedOn;
 
     @Column(name = "shift_timing", length = 50)
     private String shiftTiming;
@@ -143,6 +153,13 @@ public class User {
     public String getContactDetails() {
         return contactDetails;
     }
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getEmployeeCode() { return employeeCode; }
+    public void setEmployeeCode(String employeeCode) { this.employeeCode = employeeCode; }
+    public LocalDate getJoinedOn() { return joinedOn; }
+    public void setJoinedOn(LocalDate joinedOn) { this.joinedOn = joinedOn; }
 
     public void setContactDetails(String contactDetails) {
         this.contactDetails = contactDetails;

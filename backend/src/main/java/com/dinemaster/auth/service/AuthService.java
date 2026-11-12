@@ -59,15 +59,18 @@ public class AuthService {
     }
 
     @Transactional(noRollbackFor = AuthFailure.class)
-    public AuthSession login(String rawUsername, String password, String deviceLabel) {
+    public AuthSession login(String tenantCode, String rawUsername, String password, UUID requestedDeviceId) {
         String username = rawUsername == null ? "" : rawUsername.trim();
+        var tenant = tenants.findByCodeIgnoreCase(tenantCode == null ? "" : tenantCode.trim()).orElse(null);
         User user = users.findForAuthenticationByUsername(username).orElse(null);
-        if (user == null || !user.isActive()) {
+        boolean tenantUser = tenant != null && tenant.isActive() && user != null
+                && java.util.Objects.equals(user.getTenantId(), tenant.getId());
+        if (user == null || !user.isActive() || !tenantUser) {
             audit.record(user == null ? null : user.getId(), username, "LOGIN", false);
             throw new AuthFailure(401, "Invalid username or password");
         }
-        if (!isPlatformAdmin(user) && (user.getTenantId() == null || tenants.findById(user.getTenantId())
-                .filter(com.dinemaster.tenant.Tenant::isActive).isEmpty())) {
+        if (user.getTenantId() == null || tenants.findById(user.getTenantId())
+                .filter(com.dinemaster.tenant.Tenant::isActive).isEmpty()) {
             audit.record(user.getId(), username, "LOGIN_TENANT_SUSPENDED", false);
             throw new AuthFailure(403, "Tenant is suspended");
         }
@@ -97,13 +100,76 @@ public class AuthService {
             throw new AuthFailure(401, "Invalid username or password");
         }
 
+        AuthDevice registeredDevice = requestedDeviceId == null ? null : devices.findById(requestedDeviceId)
+                .filter(device -> device.isActive()
+                        && (device.getUserId() == null || device.getUserId().equals(user.getId()))
+                        && java.util.Objects.equals(device.getTenantId(), user.getTenantId()))
+                .orElse(null);
+        if (requestedDeviceId != null && (registeredDevice == null || (registeredDevice.getUserId() == null
+                && registeredDevice.getBranchId() != null
+                && !userBranches.findBranchIds(user.getId()).contains(registeredDevice.getBranchId())))) {
+            audit.record(user.getId(), username, "LOGIN_DEVICE_REJECTED", false);
+            throw new AuthFailure(401, "Invalid username or password");
+        }
         user.setFailedLoginAttempts((short) 0);
         user.setLockedUntil(null);
+        if (passwordEncoder.upgradeEncoding(user.getPassword())) {
+            user.setPassword(passwordEncoder.encode(password));
+        }
         users.save(user);
         audit.record(user.getId(), username, "LOGIN", true);
-        UUID deviceId = registerDevice(user, deviceLabel);
+        UUID deviceId = registeredDevice == null ? null : registeredDevice.getId();
+        if (registeredDevice != null) {
+            registeredDevice.setUserId(user.getId());
+            registeredDevice.setLastSeenAt(OffsetDateTime.now());
+            devices.save(registeredDevice);
+        }
         String rawRefresh = issueRefreshToken(user.getId(), UUID.randomUUID(), deviceId);
         return session(user, rawRefresh, deviceId);
+    }
+
+    @Transactional(noRollbackFor = AuthFailure.class)
+    public AuthSession loginSuperAdmin(String rawUsername, String password) {
+        String username = rawUsername == null ? "" : rawUsername.trim();
+        User user = users.findForAuthenticationByUsername(username).orElse(null);
+        if (user == null || !user.isActive() || !isPlatformAdmin(user)) {
+            audit.record(user == null ? null : user.getId(), username, "SUPER_ADMIN_LOGIN", false);
+            throw new AuthFailure(401, "Invalid username or password");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
+            audit.record(user.getId(), username, "SUPER_ADMIN_LOGIN_LOCKED", false);
+            throw new AuthFailure(423, "Account temporarily locked");
+        }
+        if (user.getLockedUntil() != null) {
+            user.setLockedUntil(null);
+            user.setFailedLoginAttempts((short) 0);
+        }
+        if (password == null || !passwordEncoder.matches(password, user.getPassword())) {
+            short failures = (short) (user.getFailedLoginAttempts() + 1);
+            user.setFailedLoginAttempts(failures);
+            if (failures >= MAX_FAILURES) {
+                user.setLockedUntil(now.plusMinutes(LOCK_MINUTES));
+                user.setFailedLoginAttempts((short) 0);
+            }
+            users.save(user);
+            audit.record(user.getId(), username, "SUPER_ADMIN_LOGIN", false);
+            if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(now)) {
+                throw new AuthFailure(423, "Account temporarily locked");
+            }
+            throw new AuthFailure(401, "Invalid username or password");
+        }
+
+        user.setFailedLoginAttempts((short) 0);
+        user.setLockedUntil(null);
+        if (passwordEncoder.upgradeEncoding(user.getPassword())) {
+            user.setPassword(passwordEncoder.encode(password));
+        }
+        users.save(user);
+        audit.record(user.getId(), username, "SUPER_ADMIN_LOGIN", true);
+        String rawRefresh = issueRefreshToken(user.getId(), UUID.randomUUID(), null);
+        return session(user, rawRefresh, null);
     }
 
     @Transactional(noRollbackFor = AuthFailure.class)
@@ -131,7 +197,8 @@ public class AuthService {
             });
             throw new AuthFailure(401, "Account unavailable");
         }
-        if (!isPlatformAdmin(user) && (user.getTenantId() == null || tenants.findById(user.getTenantId())
+        boolean platformAdmin = isPlatformAdmin(user);
+        if (!platformAdmin && (user.getTenantId() == null || tenants.findById(user.getTenantId())
                 .filter(com.dinemaster.tenant.Tenant::isActive).isEmpty())) {
             refreshTokens.findAllByFamilyIdAndRevokedAtIsNull(current.getFamilyId()).forEach(token -> {
                 token.setRevokedAt(OffsetDateTime.now());
@@ -141,16 +208,18 @@ public class AuthService {
         }
         UUID deviceId = current.getDeviceId();
         AuthDevice device = deviceId == null ? null : devices.findById(deviceId).orElse(null);
-        if (device == null) {
-            deviceId = registerDevice(user, null);
-            current.setDeviceId(deviceId);
-        } else if (!device.isActive() || !device.getUserId().equals(user.getId())) {
+        if (deviceId == null) {
+            device = null;
+        } else if (device == null || !device.isActive()
+                || !java.util.Objects.equals(device.getUserId(), user.getId())
+                || !java.util.Objects.equals(device.getTenantId(), user.getTenantId())) {
             refreshTokens.findAllByFamilyIdAndRevokedAtIsNull(current.getFamilyId()).forEach(token -> {
                 token.setRevokedAt(OffsetDateTime.now());
                 refreshTokens.save(token);
             });
             throw new AuthFailure(401, "Device session is no longer active");
-        } else {
+        }
+        if (device != null) {
             device.setLastSeenAt(OffsetDateTime.now());
             devices.save(device);
         }
@@ -223,16 +292,6 @@ public class AuthService {
         return raw;
     }
 
-    private UUID registerDevice(User user, String label) {
-        UUID deviceId = UUID.randomUUID();
-        devices.save(new AuthDevice(deviceId, user.getId(), user.getTenantId(), label));
-        return deviceId;
-    }
-
-    private boolean isPlatformAdmin(User user) {
-        return com.dinemaster.role.Roles.matches(user.getRole(), "SUPER_ADMIN") && user.getTenantId() == null;
-    }
-
     private AuthSession session(User user, String rawRefresh, UUID deviceId) {
         var branches = userBranches.findBranchIds(user.getId());
         return new AuthSession(jwtService.createToken(user, deviceId, branches), rawRefresh,
@@ -249,6 +308,10 @@ public class AuthService {
         } catch (Exception exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
         }
+    }
+
+    private boolean isPlatformAdmin(User user) {
+        return com.dinemaster.role.Roles.matches(user.getRole(), "SUPER_ADMIN") && user.getTenantId() == null;
     }
 
     public static final class AuthFailure extends RuntimeException {

@@ -1,49 +1,2046 @@
-﻿{
-  "info": {"name":"DineMaster Backend API","description":"Current backend API requests. Login stores JWT. Replace IDs with existing database IDs.","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
-  "auth":{"type":"bearer","bearer":[{"key":"token","value":"{{token}}","type":"string"}]},
-  "variable":[{"key":"baseUrl","value":"http://localhost:8081"},{"key":"username","value":"owner"},{"key":"password","value":"ChangeMe123!"},{"key":"token","value":""},{"key":"restaurantId","value":"1"},{"key":"productId","value":"1"},{"key":"tableId","value":"1"},{"key":"customerId","value":"1"},{"key":"inventoryId","value":"1"},{"key":"orderId","value":"1"},{"key":"id","value":"1"}],
-  "item":[
-    {"name":"Auth and health","item":[
-      {"name":"Health","request":{"method":"GET","url":"{{baseUrl}}/api/v1/health","auth":{"type":"noauth"}}},
-      {"name":"Login (auto saves token)","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/auth/login","auth":{"type":"noauth"}},"event":[{"listen":"test","script":{"type":"text/javascript","exec":["const data = pm.response.json();","if (data.token) pm.collectionVariables.set('token', data.token);"]}}]}
-    ]},
-    {"name":"Users","item":[
-      {"name":"List users","request":{"method":"GET","url":"{{baseUrl}}/api/v1/users"}},
-      {"name":"Create user","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"Asha Sharma\",\"username\":\"asha\",\"password\":\"ChangeMe123!\",\"role\":\"MANAGER\",\"active\":true,\"contactDetails\":\"asha@example.com\",\"shiftTiming\":\"09:00-17:00\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/users"}},
-      {"name":"Get user","request":{"method":"GET","url":"{{baseUrl}}/api/v1/users/{{id}}"}},
-      {"name":"Update user","request":{"method":"PUT","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"Asha Sharma\",\"username\":\"asha\",\"password\":\"\",\"role\":\"MANAGER\",\"active\":true,\"contactDetails\":\"asha@example.com\",\"shiftTiming\":\"09:00-17:00\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/users/{{id}}"}},
-      {"name":"Delete user","request":{"method":"DELETE","url":"{{baseUrl}}/api/v1/users/{{id}}"}}
-    ]},
-    {"name":"Restaurants and catalog","item":[
-      {"name":"List restaurants","request":{"method":"GET","url":"{{baseUrl}}/api/v1/branches"}},
-      {"name":"Create restaurant","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"DineMaster Demo\",\"address\":\"Main Street\",\"phone\":\"+91-9000000000\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/branches"}},
-      {"name":"List categories","request":{"method":"GET","url":"{{baseUrl}}/api/v1/categories"}},
-      {"name":"Create category","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"Starters\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/categories"}},
-      {"name":"List products","request":{"method":"GET","url":"{{baseUrl}}/api/v1/products"}},
-      {"name":"Create product","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"Paneer Tikka\",\"description\":\"Grilled paneer starter\",\"ingredients\":\"Paneer, spices\",\"price\":249,\"category\":\"Starters\",\"veg\":1,\"imagePath\":\"\",\"available\":true,\"gstPercentage\":5,\"dietaryPreferences\":\"Vegetarian\",\"tastePreferences\":\"Spicy\",\"attributes\":\"\",\"customDietaryNotes\":\"\",\"recipeSteps\":\"Marinate and grill\",\"prepTime\":15,\"cookTime\":20,\"servings\":2,\"difficulty\":\"Easy\",\"videoPath\":\"\",\"restaurantId\":{{restaurantId}}}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/products"}},
-      {"name":"Set product availability","request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"is_available\":true}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/products/{{id}}/availability"}},
-      {"name":"List customers","request":{"method":"GET","url":"{{baseUrl}}/api/v1/customers"}},
-      {"name":"Create customer","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"name\":\"Ravi Kumar\",\"phone\":\"+91-9888888888\",\"email\":\"ravi@example.com\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/customers"}}
-    ]},
-    {"name":"Tables and orders","item":[
-      {"name":"List tables","request":{"method":"GET","url":"{{baseUrl}}/api/v1/tables?restaurantId={{restaurantId}}"}},
-      {"name":"Create table","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"tableNumber\":\"T-01\",\"name\":\"Table 1\",\"capacity\":4,\"status\":\"Available\",\"section\":\"Main Hall\",\"tableType\":\"Standard Table\",\"restaurantId\":{{restaurantId}},\"active\":true,\"reservable\":true,\"notes\":\"\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/tables"}},
-      {"name":"Create order","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"restaurantId\":{{restaurantId}},\"tableId\":{{tableId}},\"customerId\":{{customerId}},\"type\":\"Dine In\",\"notes\":\"\",\"guestCount\":2,\"discountAmount\":0,\"items\":[{\"productId\":{{productId}},\"quantity\":2,\"notes\":\"Less spicy\"}]}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/orders"}},
-      {"name":"List orders","request":{"method":"GET","url":"{{baseUrl}}/api/v1/orders?restaurantId={{restaurantId}}"}},
-      {"name":"Change order status","request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"status\":\"Preparing\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/orders/{{id}}/status"}},
-      {"name":"Record payment","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"paymentMethod\":\"CASH\"}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/orders/{{id}}/payment"}}
-    ]},
-    {"name":"Bookings, inventory, recipes and KOT","item":[
-      {"name":"List bookings","request":{"method":"GET","url":"{{baseUrl}}/api/v1/reservations?restaurantId={{restaurantId}}"}},
-      {"name":"Create booking","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"tableId\":{{tableId}},\"customerId\":{{customerId}},\"customerName\":\"Ravi Kumar\",\"customerPhone\":\"+91-9888888888\",\"guestCount\":2,\"bookingTime\":\"2026-12-01T19:30:00+05:30\",\"status\":\"Pending\",\"notes\":\"Window seat\",\"restaurantId\":{{restaurantId}}}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/reservations"}},
-      {"name":"List inventory","request":{"method":"GET","url":"{{baseUrl}}/api/v1/inventory?restaurantId={{restaurantId}}"}},
-      {"name":"Create inventory item","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"itemName\":\"Paneer\",\"currentStock\":20,\"unit\":\"kg\",\"lowStockThreshold\":5,\"expiryDate\":\"2026-12-31\",\"restaurantId\":{{restaurantId}}}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/inventory"}},
-      {"name":"Adjust stock","request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"mode\":\"add\",\"quantity\":5}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/inventory/{{id}}/stock"}},
-      {"name":"List recipes","request":{"method":"GET","url":"{{baseUrl}}/api/v1/recipes?productId={{productId}}"}},
-      {"name":"Create recipe line","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"productId\":{{productId}},\"ingredientId\":{{inventoryId}},\"quantityUsed\":0.2}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/recipes"}},
-      {"name":"List KOTs","request":{"method":"GET","url":"{{baseUrl}}/api/v1/kitchen-tickets?restaurantId={{restaurantId}}"}},
-      {"name":"Create KOT","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\"orderId\":{{orderId}},\"kotNumber\":\"KOT-001\",\"priority\":\"Normal\",\"estimatedTime\":20}","options":{"raw":{"language":"json"}}},"url":"{{baseUrl}}/api/v1/kitchen-tickets"}}
-    ]}
+{
+  "info": {
+    "name": "DineMaster Backend - Complete API",
+    "description": "Complete Postman collection generated from the DineMaster Spring Boot controllers (16 controllers, all /api/v1 endpoints).\n\nBase URL defaults to http://localhost:8081 (server.port in application.yml).\n\nQuick start:\n1. Activate a POS device (POST Auth > Activate device) or use an existing auth_devices row UUID for {{deviceId}}.\n2. Run Auth > Login. The test script stores accessToken, refreshToken, tenantId, userId, deviceId and the first branchId automatically.\n3. Run create requests in order; create requests save their new IDs into collection variables.\n\nNotes:\n- Login requires tenantCode (tenant name upper-cased with non-alphanumerics replaced by '-'; the V8 seed tenant 'Default Tenant' becomes DEFAULT-TENANT), a username and password. deviceId is optional; if supplied, it must be active for this tenant.\n- Endpoints are guarded by @PreAuthorize permissions (menu:view, menu:manage, order:create, etc.). Use an OWNER account to exercise everything.\n- Money fields are JSON numbers; dates use ISO-8601 (OffsetDateTime / LocalDate).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenantCode",
+      "value": "DEFAULT-TENANT",
+      "type": "string",
+      "description": "Tenant code. Seed tenant 'Default Tenant' => DEFAULT-TENANT. New tenants derive code from their name."
+    },
+    {
+      "key": "username",
+      "value": "owner",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "ChangeMe123!",
+      "type": "string"
+    },
+    {
+      "key": "deviceId",
+      "value": "00000000-0000-0000-0000-000000000001",
+      "type": "string",
+      "description": "UUID of an active auth_devices row. Generated by Activate device."
+    },
+    {
+      "key": "activationCode",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenantId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "branchId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "restaurantId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "categoryId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "customerId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "tableId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "orderItemId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "reservationId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "inventoryId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "recipeId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "kotId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "roleCode",
+      "value": "CASHIER",
+      "type": "string"
+    },
+    {
+      "key": "superAdminUsername",
+      "value": "",
+      "type": "string",
+      "description": "Username of an existing SUPER_ADMIN account with no tenant."
+    },
+    {
+      "key": "superAdminPassword",
+      "value": "",
+      "type": "string",
+      "description": "Password for the existing SUPER_ADMIN account. Set locally; do not commit credentials."
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - Health & Home",
+      "description": "Public endpoints.",
+      "item": [
+        {
+          "name": "Home",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Service banner. Public."
+          }
+        },
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/health",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Returns status UP, service name and timestamp. Public."
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Auth & Devices",
+      "description": "Shared authentication endpoints. Login requires tenantCode + username + password; deviceId is optional, and if supplied must be registered and active. Device provisioning: OWNER/MANAGER issues a one-time code; the device activates publicly. M1 does not define a separate Super Admin login contract.",
+      "item": [
+        {
+          "name": "Login (saves tokens)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantCode\": \"{{tenantCode}}\",\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Body matches LoginRequest: tenantCode (2-60), username (3-60), password (max 128), optional deviceId (UUID; if supplied, must be active for this tenant). Stores accessToken, refreshToken, tenantId, userId, deviceId and first branchId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "  pm.collectionVariables.set('tenantId', body.tenantId);",
+                  "  pm.collectionVariables.set('deviceId', body.deviceId);",
+                  "}",
+                  "if (body.user && body.user.id) pm.collectionVariables.set('userId', body.user.id);",
+                  "if (body.branchIds && body.branchIds.length) {",
+                  "  pm.collectionVariables.set('branchId', body.branchIds[0]);",
+                  "  pm.collectionVariables.set('restaurantId', body.branchIds[0]);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Super Admin login (saves tokens)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{superAdminUsername}}\",\n  \"password\": \"{{superAdminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/super-admin/login",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Platform login. Requires an existing active SUPER_ADMIN account with tenantId null. No tenantCode or deviceId is used."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "  pm.collectionVariables.unset('tenantId');",
+                  "  pm.collectionVariables.unset('deviceId');",
+                  "  pm.collectionVariables.unset('branchId');",
+                  "  pm.collectionVariables.unset('restaurantId');",
+                  "}",
+                  "if (body.user && body.user.id) pm.collectionVariables.set('userId', body.user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh access token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/refresh",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Rotates the refresh token. Body matches RefreshRequest. Reusing a revoked token revokes the whole token family."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "JWKS (public signing keys)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/jwks",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Returns RSA public keys for access-token verification. Public; 503 when RSA keys are not configured."
+          }
+        },
+        {
+          "name": "Get current profile (/me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/me",
+            "description": "Authenticated user profile including permissions and branchIds."
+          }
+        },
+        {
+          "name": "Get my permissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/me/permissions",
+            "description": "Returns userId, permVersion and the resolved permission codes."
+          }
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{password}}\",\n  \"newPassword\": \"NewChangeMe123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/change-password",
+            "description": "Body matches PasswordChangeRequest: currentPassword + newPassword (10-128). Revokes all refresh tokens. Also available at POST /api/v1/auth/password/change."
+          }
+        },
+        {
+          "name": "Logout (this session)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/logout",
+            "description": "Revokes the supplied refresh token. Body matches RefreshRequest. Returns 204."
+          }
+        },
+        {
+          "name": "Logout all sessions",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/logout-all",
+            "description": "Revokes every active refresh token for the current user. Returns 204."
+          }
+        },
+        {
+          "name": "Create device activation code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchId\": {{branchId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/devices/activation-codes",
+            "description": "Requires device:activate (OWNER/MANAGER). Body matches ActivationCodeCreateRequest. Saves the issued activationCode (valid 15 minutes)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.activationCode) pm.collectionVariables.set('activationCode', body.activationCode);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activate device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activationCode\": \"{{activationCode}}\",\n  \"platform\": \"Windows\",\n  \"deviceName\": \"POS Terminal 1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/auth/devices/activate",
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Public. Body matches DeviceActivationRequest: activationCode (max 100), platform (max 50), deviceName (max 100). Stores deviceId, tenantId, branchId. Rate limited per IP."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.deviceId) pm.collectionVariables.set('deviceId', body.deviceId);",
+                  "if (body.tenantId) pm.collectionVariables.set('tenantId', body.tenantId);",
+                  "if (body.branchId) {",
+                  "  pm.collectionVariables.set('branchId', body.branchId);",
+                  "  pm.collectionVariables.set('restaurantId', body.branchId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List my devices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/devices",
+            "description": "Lists active devices for the current user with label, createdAt and lastSeenAt."
+          }
+        },
+        {
+          "name": "Revoke device",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/devices/{{deviceId}}/revoke",
+            "description": "Deactivates the device and revokes its refresh tokens. Returns 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Tenants (Super Admin)",
+      "description": "SUPER_ADMIN platform APIs: list/create/suspend/activate tenants. Canonical path /api/v1/super-admin/tenants; each route also has the /api/v1/tenants alias. Requires ROLE_SUPER_ADMIN and the matching tenant:* permission.",
+      "item": [
+        {
+          "name": "List tenants",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/super-admin/tenants",
+            "description": "Requires ROLE_SUPER_ADMIN and tenant:view."
+          }
+        },
+        {
+          "name": "Create tenant with owner (saves tenantId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Spice Route\",\n  \"ownerName\": \"Rahul Sharma\",\n  \"ownerUsername\": \"spiceroute.owner\",\n  \"ownerPassword\": \"OwnerPass123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/super-admin/tenants",
+            "description": "Body matches TenantCreateRequest: name, ownerName, ownerUsername, ownerPassword (10-128). Tenant code is derived from name (SPICE-ROUTE). Saves tenantId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.tenant && body.tenant.id) pm.collectionVariables.set('tenantId', body.tenant.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Suspend tenant",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/super-admin/tenants/{{tenantId}}/suspend",
+            "description": "Requires tenant:suspend. Deactivates the tenant, bumps permission versions, revokes tokens and devices. Returns 204."
+          }
+        },
+        {
+          "name": "Activate tenant",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/super-admin/tenants/{{tenantId}}/activate",
+            "description": "Requires tenant:activate. Returns 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Roles & Permissions",
+      "description": "Role catalogue and permission grants. /api/v1/roles. Requires role:assign; custom roles require a tenant OWNER.",
+      "item": [
+        {
+          "name": "List roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/roles",
+            "description": "Lists system + tenant roles with permissions."
+          }
+        },
+        {
+          "name": "List permission codes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/roles/permissions",
+            "description": "All assignable permission codes sorted alphabetically."
+          }
+        },
+        {
+          "name": "Get role",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/roles/{{roleCode}}",
+            "description": "Returns code, name and permissions for the role."
+          }
+        },
+        {
+          "name": "Create custom role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"SHIFT_SUPERVISOR\",\n  \"name\": \"Shift Supervisor\",\n  \"permissions\": [\n    \"menu:view\",\n    \"order:view\",\n    \"order:create\",\n    \"table:view\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/roles",
+            "description": "Body matches RoleCreateRequest: code ([A-Za-z][A-Za-z0-9_]*, max 50), name (max 100), permissions (set of existing codes). Tenant roles may not receive tenant:/licence:/support: permissions."
+          }
+        },
+        {
+          "name": "Replace role permissions (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": [\n    \"menu:view\",\n    \"menu:manage\",\n    \"order:view\",\n    \"order:create\",\n    \"table:view\",\n    \"table:update_status\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/roles/SHIFT_SUPERVISOR/permissions",
+            "description": "Body matches RolePermissionUpdateRequest. Replaces all grants. You cannot modify your own tenant role."
+          }
+        },
+        {
+          "name": "Replace role permissions (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": [\n    \"menu:view\",\n    \"menu:manage\",\n    \"order:view\",\n    \"order:create\",\n    \"table:view\",\n    \"table:update_status\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/roles/SHIFT_SUPERVISOR/permissions",
+            "description": "Alias of the PATCH endpoint."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Branches",
+      "description": "Restaurant branches. /api/v1/branches.",
+      "item": [
+        {
+          "name": "List branches",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/branches",
+            "description": "OWNER sees all tenant branches; other roles see only assigned branches."
+          }
+        },
+        {
+          "name": "Get branch",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/branches/{{branchId}}"
+          }
+        },
+        {
+          "name": "Create branch (saves branchId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Spice Route - MG Road\",\n  \"address\": \"12 MG Road, Bengaluru, Karnataka 560001\",\n  \"phone\": \"+91-9000000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/branches",
+            "description": "Requires branch:create. Body matches the Restaurant entity: name (required, max 150), address (max 5000), phone (max 30). tenantId and createdAt are set by the server. The creator is assigned to the new branch; saves branchId/restaurantId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) {",
+                  "  pm.collectionVariables.set('branchId', body.id);",
+                  "  pm.collectionVariables.set('restaurantId', body.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update branch",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Spice Route - MG Road\",\n  \"address\": \"14 MG Road, Bengaluru, Karnataka 560001\",\n  \"phone\": \"+91-9000000001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/branches/{{branchId}}",
+            "description": "Requires branch:update. Only name, address and phone are updated."
+          }
+        },
+        {
+          "name": "Delete branch",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/branches/{{branchId}}",
+            "description": "Requires branch:update. Returns 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Users & Staff",
+      "description": "OWNER/MANAGER staff APIs. Canonical path /api/v1/users (also /api/v1/admin/staff); tenant and branch scope is enforced. Requires the matching user:* / role:assign permissions. SUPER_ADMIN has no default tenant staff access.",
+      "item": [
+        {
+          "name": "List users (filters)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users?page=0&size=20&sort=createdAt,desc&role=CASHIER&status=ACTIVE&branchId={{branchId}}&q=asha",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                },
+                {
+                  "key": "sort",
+                  "value": "createdAt,desc",
+                  "description": "allowed fields: createdAt|name|username|role with ,asc|,desc"
+                },
+                {
+                  "key": "role",
+                  "value": "CASHIER"
+                },
+                {
+                  "key": "status",
+                  "value": "ACTIVE",
+                  "description": "ACTIVE or INACTIVE"
+                },
+                {
+                  "key": "branchId",
+                  "value": "{{branchId}}"
+                },
+                {
+                  "key": "q",
+                  "value": "asha"
+                }
+              ]
+            },
+            "description": "Paginated search. page>=0, 1<=size<=100, sort=field,asc|desc. Managers only see staff in their own branches."
+          }
+        },
+        {
+          "name": "Create user (saves userId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Asha Sharma\",\n  \"username\": \"asha.cashier\",\n  \"password\": \"ChangeMe123!\",\n  \"role\": \"CASHIER\",\n  \"active\": true,\n  \"contactDetails\": \"+91-9876543210\",\n  \"shiftTiming\": \"09:00-17:00\",\n  \"branchIds\": [{{branchId}}],\n  \"email\": \"asha@example.com\",\n  \"employeeCode\": \"EMP-1001\",\n  \"joinedOn\": \"2026-11-11\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/users",
+            "description": "Body matches UserRequest. name, username, password (min 10) and exactly one role are required. branchIds defaults to the actor's branches. Saves userId. Create a branch first and use its branchId from this same tenant; an unknown or cross-tenant branch returns 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('userId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get user",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}",
+            "description": "Returns UserResponse including permissions and branchIds."
+          }
+        },
+        {
+          "name": "Update user",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Asha Sharma\",\n  \"username\": \"asha.cashier\",\n  \"role\": \"CASHIER\",\n  \"contactDetails\": \"+91-9876543210\",\n  \"shiftTiming\": \"10:00-18:00\",\n  \"email\": \"asha@example.com\",\n  \"employeeCode\": \"EMP-1001\",\n  \"joinedOn\": \"2026-11-11\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}",
+            "description": "Body matches UserRequest but password, active and branchIds must be omitted (dedicated endpoints exist). Role must match the existing role here."
+          }
+        },
+        {
+          "name": "Deactivate user (DELETE)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}",
+            "description": "Soft delete: sets active=false, bumps permission version and revokes tokens. Requires user:deactivate. Returns 204."
+          }
+        },
+        {
+          "name": "Deactivate user (POST with reason)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Resigned from service\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/deactivate",
+            "description": "Body matches UserLifecycleRequest: optional reason (max 500)."
+          }
+        },
+        {
+          "name": "Reactivate user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Returned to work\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/reactivate",
+            "description": "Body matches UserLifecycleRequest: optional reason (max 500)."
+          }
+        },
+        {
+          "name": "Assign user roles",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleCodes\": [\"CASHIER\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/roles",
+            "description": "Body matches UserRoleUpdateRequest. The current identity model accepts exactly one role code. Revokes the user's tokens. Returns 204."
+          }
+        },
+        {
+          "name": "Reset user password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"temporaryPassword\": \"TempPass123!\",\n  \"reason\": \"User forgot password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/reset-password",
+            "description": "Body matches PasswordResetRequest: temporaryPassword (10-128) + optional reason (max 500). Forces password change and revokes tokens."
+          }
+        },
+        {
+          "name": "List user sessions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/sessions",
+            "description": "Active refresh-token sessions. Requires session:revoke."
+          }
+        },
+        {
+          "name": "Revoke user sessions (POST)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/sessions/revoke",
+            "description": "Revokes all refresh tokens for the user and bumps permission version. Returns 204."
+          }
+        },
+        {
+          "name": "Revoke user sessions (DELETE)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/sessions",
+            "description": "DELETE alias for session revocation. Returns 204."
+          }
+        },
+        {
+          "name": "Get user audit history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/audit",
+            "description": "Last 100 audit entries for the user. Requires audit:view."
+          }
+        },
+        {
+          "name": "Update user branches (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchIds\": [{{branchId}}]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/branches",
+            "description": "Body matches UserBranchUpdateRequest. Managers may assign only their own branch. Revokes tokens. Returns 204."
+          }
+        },
+        {
+          "name": "Update user branches (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchIds\": [{{branchId}}]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/users/{{userId}}/branches",
+            "description": "PUT alias of the branches endpoint."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Categories",
+      "description": "Menu categories. /api/v1/categories.",
+      "item": [
+        {
+          "name": "List categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/categories",
+            "description": "Requires menu:view. Tenant scoped."
+          }
+        },
+        {
+          "name": "Get category",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/categories/{{categoryId}}"
+          }
+        },
+        {
+          "name": "Create category (saves categoryId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Starters\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/categories",
+            "description": "Requires menu:manage. Body matches CategoryRequest: name (required, max 100), unique per tenant. Saves categoryId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('categoryId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Starters & Appetizers\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/categories/{{categoryId}}",
+            "description": "Body matches CategoryRequest."
+          }
+        },
+        {
+          "name": "Delete category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/categories/{{categoryId}}",
+            "description": "Requires menu:manage. Returns 409 when the category is still used by products."
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Products",
+      "description": "Menu products. /api/v1/products.",
+      "item": [
+        {
+          "name": "List available products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/products?restaurantId={{restaurantId}}",
+            "description": "Only available products. restaurantId is optional; omit to list available products across branches."
+          }
+        },
+        {
+          "name": "List all products (management)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/products/all?restaurantId={{restaurantId}}",
+            "description": "Includes unavailable products. restaurantId is required."
+          }
+        },
+        {
+          "name": "Get product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}"
+          }
+        },
+        {
+          "name": "List products by category",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/products/category/Starters?restaurantId={{restaurantId}}",
+            "description": "Category is a path variable (case-insensitive); restaurantId is optional."
+          }
+        },
+        {
+          "name": "Create product (saves productId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Paneer Tikka\",\n  \"description\": \"Char-grilled cottage cheese cubes with peppers\",\n  \"ingredients\": \"Paneer, bell peppers, onion, yogurt, spices\",\n  \"price\": 249.00,\n  \"category\": \"Starters\",\n  \"is_veg\": 1,\n  \"imagePath\": \"\",\n  \"is_available\": true,\n  \"gstPercentage\": 5.00,\n  \"dietaryPreferences\": \"Vegetarian\",\n  \"tastePreferences\": \"Spicy, Smoky\",\n  \"attributes\": \"Contains dairy\",\n  \"customDietaryNotes\": \"Can be made Jain on request\",\n  \"recipeSteps\": \"Marinate paneer, skewer with peppers, grill until charred\",\n  \"prepTime\": 15,\n  \"cookTime\": 20,\n  \"servings\": 2,\n  \"difficulty\": \"Easy\",\n  \"videoPath\": \"\",\n  \"restaurantId\": {{restaurantId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/products",
+            "description": "Requires menu:manage. Body matches the Product entity: name (max 150), price (>=0), category (existing category name for the branch), is_veg (0-3), is_available, gstPercentage (0-100, default 5), restaurantId. Uses is_veg / is_available JSON names (imagePath stays camelCase). Saves productId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('productId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Paneer Tikka\",\n  \"description\": \"Char-grilled cottage cheese cubes with peppers\",\n  \"ingredients\": \"Paneer, bell peppers, onion, yogurt, spices\",\n  \"price\": 269.00,\n  \"category\": \"Starters\",\n  \"is_veg\": 1,\n  \"imagePath\": \"\",\n  \"is_available\": true,\n  \"gstPercentage\": 5.00,\n  \"dietaryPreferences\": \"Vegetarian\",\n  \"tastePreferences\": \"Spicy, Smoky\",\n  \"attributes\": \"Contains dairy\",\n  \"customDietaryNotes\": \"Can be made Jain on request\",\n  \"recipeSteps\": \"Marinate paneer, skewer with peppers, grill until charred\",\n  \"prepTime\": 15,\n  \"cookTime\": 20,\n  \"servings\": 2,\n  \"difficulty\": \"Easy\",\n  \"videoPath\": \"\",\n  \"restaurantId\": {{restaurantId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}",
+            "description": "Same Product body as create. restaurantId is optional on update."
+          }
+        },
+        {
+          "name": "Set product availability",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_available\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/availability",
+            "description": "Body matches ProductAvailabilityRequest: is_available (required boolean). Accepts menu:manage or menu:toggle_availability."
+          }
+        },
+        {
+          "name": "Delete product",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}",
+            "description": "Requires menu:manage. Returns 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Customers",
+      "description": "Tenant customers. /api/v1/customers.",
+      "item": [
+        {
+          "name": "List customers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/customers",
+            "description": "Requires customer:view. Tenant scoped."
+          }
+        },
+        {
+          "name": "Get customer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/customers/{{customerId}}"
+          }
+        },
+        {
+          "name": "Create customer (saves customerId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ravi Kumar\",\n  \"phone\": \"+91-9888888888\",\n  \"email\": \"ravi@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/customers",
+            "description": "Requires customer:manage. Body matches Customer: name and phone required; phone unique per tenant. tenantId, loyaltyPoints and createdAt are server-managed. Saves customerId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('customerId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update customer",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ravi Kumar\",\n  \"phone\": \"+91-9888888888\",\n  \"email\": \"ravi.kumar@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/customers/{{customerId}}",
+            "description": "Body matches Customer: name, phone, email."
+          }
+        },
+        {
+          "name": "Delete customer",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/customers/{{customerId}}",
+            "description": "Requires customer:manage. Returns 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Tables",
+      "description": "Dining tables. /api/v1/tables.",
+      "item": [
+        {
+          "name": "List tables",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/tables?restaurantId={{restaurantId}}",
+            "description": "Requires table:view and branch scope. restaurantId is required."
+          }
+        },
+        {
+          "name": "Get table",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/tables/{{tableId}}"
+          }
+        },
+        {
+          "name": "Create table (saves tableId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tableNumber\": \"T-01\",\n  \"name\": \"Window Table\",\n  \"capacity\": 4,\n  \"status\": \"Available\",\n  \"section\": \"Main Hall\",\n  \"tableType\": \"Standard Table\",\n  \"restaurantId\": {{restaurantId}},\n  \"active\": true,\n  \"reservable\": true,\n  \"notes\": \"Near the window\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/tables",
+            "description": "Requires table:manage_layout. Body matches TableRequest: tableNumber required (max 30, unique per branch), capacity required (>=1), section required, tableType required, restaurantId required. status: Available|Occupied|Reserved|Cleaning. Saves tableId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('tableId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update table",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tableNumber\": \"T-01\",\n  \"name\": \"Window Table\",\n  \"capacity\": 6,\n  \"status\": \"Available\",\n  \"section\": \"Main Hall\",\n  \"tableType\": \"Standard Table\",\n  \"restaurantId\": {{restaurantId}},\n  \"active\": true,\n  \"reservable\": true,\n  \"notes\": \"Near the window\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/tables/{{tableId}}",
+            "description": "Body matches TableRequest."
+          }
+        },
+        {
+          "name": "Update table status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tables/{{tableId}}/status?status=Occupied",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tables",
+                "{{tableId}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "Occupied",
+                  "description": "Available | Occupied | Reserved | Cleaning"
+                }
+              ]
+            },
+            "description": "Requires table:update_status. Status is a query parameter (not a body)."
+          }
+        },
+        {
+          "name": "Delete table (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/tables/{{tableId}}",
+            "description": "Requires table:manage_layout. Sets is_active=false. Returns 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Orders",
+      "description": "Orders and payments. /api/v1/orders.",
+      "item": [
+        {
+          "name": "Create order (saves orderId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restaurantId\": {{restaurantId}},\n  \"tableId\": {{tableId}},\n  \"customerId\": {{customerId}},\n  \"waiterId\": {{userId}},\n  \"type\": \"Dine In\",\n  \"notes\": \"Birthday celebration\",\n  \"guestCount\": 2,\n  \"discountAmount\": 0,\n  \"items\": [\n    {\n      \"productId\": {{productId}},\n      \"quantity\": 2,\n      \"notes\": \"Less spicy\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/orders",
+            "description": "Requires order:create. Body matches CreateOrderRequest: restaurantId required; tableId, customerId, waiterId optional; type default 'Dine In'; guestCount; discountAmount default 0; items (non-empty) each with productId, quantity and optional notes. Saves orderId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('orderId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/orders?restaurantId={{restaurantId}}",
+            "description": "Requires order:view. restaurantId is required."
+          }
+        },
+        {
+          "name": "Get order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}"
+          }
+        },
+        {
+          "name": "List order items (saves orderItemId)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/items",
+            "description": "Returns order items; the script stores the first item id for KOT assignment."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (Array.isArray(body) && body.length && body[0].id) pm.collectionVariables.set('orderItemId', body[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update order status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Preparing\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/status",
+            "description": "Body matches OrderStatusRequest. Allowed: Pending, Received, Preparing, Ready, Served, Completed, Held, Cancelled. Accepts order:update or kot:update_status."
+          }
+        },
+        {
+          "name": "Hold order",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/hold",
+            "description": "Requires order:park. Sets status Held."
+          }
+        },
+        {
+          "name": "Cancel order",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
+            "description": "Requires order:cancel. A paid order cannot be cancelled."
+          }
+        },
+        {
+          "name": "Record payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"CASH\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/orders/{{orderId}}/payment",
+            "description": "Requires payment:record. Body matches PaymentRequest: paymentMethod (required, max 50). Marks paid and status Completed."
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 - Reservations (Bookings)",
+      "description": "Table reservations. /api/v1/reservations.",
+      "item": [
+        {
+          "name": "List reservations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/reservations?restaurantId={{restaurantId}}",
+            "description": "Requires reservation:view. Ordered by bookingTime ascending."
+          }
+        },
+        {
+          "name": "Create reservation (saves reservationId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tableId\": {{tableId}},\n  \"customerId\": {{customerId}},\n  \"customerName\": \"Ravi Kumar\",\n  \"customerPhone\": \"+91-9888888888\",\n  \"guestCount\": 2,\n  \"bookingTime\": \"2026-12-01T19:30:00+05:30\",\n  \"status\": \"Pending\",\n  \"notes\": \"Window seat preferred\",\n  \"restaurantId\": {{restaurantId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/reservations",
+            "description": "Requires reservation:create. Body matches BookingRequest: tableId, guestCount, bookingTime (OffsetDateTime) and restaurantId required; customerId optional; status Pending|Confirmed|Cancelled|Completed (default Pending); notes max 2000. Saves reservationId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('reservationId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update reservation",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tableId\": {{tableId}},\n  \"customerId\": {{customerId}},\n  \"customerName\": \"Ravi Kumar\",\n  \"customerPhone\": \"+91-9888888888\",\n  \"guestCount\": 4,\n  \"bookingTime\": \"2026-12-01T20:00:00+05:30\",\n  \"status\": \"Confirmed\",\n  \"notes\": \"Window seat preferred\",\n  \"restaurantId\": {{restaurantId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/reservations/{{reservationId}}",
+            "description": "Body matches BookingRequest. Requires reservation:update."
+          }
+        },
+        {
+          "name": "Update reservation status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reservations/{{reservationId}}/status?value=Confirmed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reservations",
+                "{{reservationId}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "value",
+                  "value": "Confirmed",
+                  "description": "Pending | Confirmed | Cancelled | Completed"
+                }
+              ]
+            },
+            "description": "Status is a query parameter named value."
+          }
+        },
+        {
+          "name": "Delete reservation",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/reservations/{{reservationId}}",
+            "description": "Requires reservation:update. Returns 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "12 - Inventory",
+      "description": "Stock items. /api/v1/inventory.",
+      "item": [
+        {
+          "name": "List inventory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/inventory?restaurantId={{restaurantId}}",
+            "description": "Requires inventory:view. Ordered by item name."
+          }
+        },
+        {
+          "name": "Create inventory item (saves inventoryId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemName\": \"Paneer\",\n  \"currentStock\": 20.5,\n  \"unit\": \"kg\",\n  \"lowStockThreshold\": 5.0,\n  \"expiryDate\": \"2026-12-31\",\n  \"restaurantId\": {{restaurantId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/inventory",
+            "description": "Requires inventory:receive. Body matches InventoryRequest: itemName (max 150), currentStock >=0, unit (max 30), lowStockThreshold >=0, expiryDate (LocalDate), restaurantId. Saves inventoryId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('inventoryId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update inventory item",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemName\": \"Paneer\",\n  \"currentStock\": 18.0,\n  \"unit\": \"kg\",\n  \"lowStockThreshold\": 4.0,\n  \"expiryDate\": \"2026-12-31\",\n  \"restaurantId\": {{restaurantId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/inventory/{{inventoryId}}",
+            "description": "Body matches InventoryRequest."
+          }
+        },
+        {
+          "name": "Adjust stock",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"add\",\n  \"quantity\": 5.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/inventory/{{inventoryId}}/stock",
+            "description": "Requires inventory:adjust. Body matches StockAdjustmentRequest: mode add|deduct|set (case-insensitive) + quantity >=0. Result must not be negative."
+          }
+        },
+        {
+          "name": "Delete inventory item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/inventory/{{inventoryId}}",
+            "description": "Requires ROLE_OWNER or ROLE_MANAGER. Returns 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "13 - Recipes",
+      "description": "Product-to-inventory recipe lines. /api/v1/recipes.",
+      "item": [
+        {
+          "name": "List recipe lines",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/recipes?productId={{productId}}",
+            "description": "Requires recipe:view. productId is required."
+          }
+        },
+        {
+          "name": "Create recipe line (saves recipeId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": {{productId}},\n  \"ingredientId\": {{inventoryId}},\n  \"quantityUsed\": 0.2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/recipes",
+            "description": "Requires recipe:manage. Body matches RecipeRequest: productId, ingredientId (inventory item), quantityUsed (>0). Product and ingredient must belong to the same restaurant. Saves recipeId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('recipeId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update recipe line",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": {{productId}},\n  \"ingredientId\": {{inventoryId}},\n  \"quantityUsed\": 0.25\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}",
+            "description": "Body matches RecipeRequest."
+          }
+        },
+        {
+          "name": "Delete recipe line",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}",
+            "description": "Requires recipe:manage. Returns 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "14 - Kitchen Tickets (KOT)",
+      "description": "Kitchen order tickets. /api/v1/kitchen-tickets.",
+      "item": [
+        {
+          "name": "List KOTs for branch",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/kitchen-tickets?restaurantId={{restaurantId}}",
+            "description": "Requires kot:view. Newest first."
+          }
+        },
+        {
+          "name": "List KOTs for order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/kitchen-tickets/order/{{orderId}}",
+            "description": "Requires kot:view. Oldest first."
+          }
+        },
+        {
+          "name": "Create KOT (saves kotId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": {{orderId}},\n  \"kotNumber\": \"KOT-001\",\n  \"priority\": \"Normal\",\n  \"estimatedTime\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/kitchen-tickets",
+            "description": "Requires order:create. Body matches CreateKotRequest: orderId required; kotNumber optional (auto KOT-<timestamp>); priority default Normal; estimatedTime positive integer. With a blank kotNumber, an existing Pending/Cooking ticket is reused. Saves kotId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('kotId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update KOT status",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/kitchen-tickets/{{kotId}}/status?value=Cooking",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "kitchen-tickets",
+                "{{kotId}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "value",
+                  "value": "Cooking",
+                  "description": "Pending | Cooking | Preparing | Ready | Served | Completed | Cancelled"
+                }
+              ]
+            },
+            "description": "Requires kot:update_status. value is a query parameter. Preparing maps to Cooking and Completed maps to Served. Transitions are role-gated: CHEF Pendingâ†’Cookingâ†’Ready, WAITER Readyâ†’Served, MANAGER/OWNER may cancel."
+          }
+        },
+        {
+          "name": "Assign order item to KOT",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/kitchen-tickets/{{kotId}}/items/{{orderItemId}}",
+            "description": "Requires kot:update_status. Links an order item to this KOT; item must belong to the KOT's order."
+          }
+        },
+        {
+          "name": "Unassign order item from KOT",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/kitchen-tickets/{{kotId}}/items/{{orderItemId}}",
+            "description": "Requires kot:update_status. Returns 204."
+          }
+        }
+      ]
+    }
   ]
 }
-

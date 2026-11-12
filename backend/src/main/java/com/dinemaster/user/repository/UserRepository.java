@@ -25,6 +25,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findForAuthenticationByUsername(@Param("username") String username);
 
     boolean existsByUsername(String username);
+    boolean existsByTenantIdAndEmployeeCode(Long tenantId, String employeeCode);
 
     List<User> findAllByRoleIgnoreCase(String role);
 
@@ -40,7 +41,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
                     where ub.user_id = u.id and ub.branch_id = :branchId))
               and (:query is null or lower(u.name) like lower(concat('%', :query, '%'))
                     or lower(u.username) like lower(concat('%', :query, '%'))
-                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%')))
+                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%'))
+                    or lower(coalesce(u.employee_code, '')) like lower(concat('%', :query, '%'))
+                    or lower(coalesce(u.email, '')) like lower(concat('%', :query, '%')))
             """,
             countQuery = """
             select count(*) from users u
@@ -52,7 +55,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
                     where ub.user_id = u.id and ub.branch_id = :branchId))
               and (:query is null or lower(u.name) like lower(concat('%', :query, '%'))
                     or lower(u.username) like lower(concat('%', :query, '%'))
-                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%')))
+                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%'))
+                    or lower(coalesce(u.employee_code, '')) like lower(concat('%', :query, '%'))
+                    or lower(coalesce(u.email, '')) like lower(concat('%', :query, '%')))
             """, nativeQuery = true)
     Page<User> searchTenantUsers(@Param("tenantId") Long tenantId,
             @Param("role") String role, @Param("active") Boolean active,
@@ -71,7 +76,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
                     where ub.user_id = u.id and ub.branch_id = :branchId))
               and (:query is null or lower(u.name) like lower(concat('%', :query, '%'))
                     or lower(u.username) like lower(concat('%', :query, '%'))
-                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%')))
+                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%'))
+                    or lower(coalesce(u.employee_code, '')) like lower(concat('%', :query, '%'))
+                    or lower(coalesce(u.email, '')) like lower(concat('%', :query, '%')))
             """,
             countQuery = """
             select count(*) from users u
@@ -86,7 +93,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
                     where ub.user_id = u.id and ub.branch_id = :branchId))
               and (:query is null or lower(u.name) like lower(concat('%', :query, '%'))
                     or lower(u.username) like lower(concat('%', :query, '%'))
-                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%')))
+                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%'))
+                    or lower(coalesce(u.employee_code, '')) like lower(concat('%', :query, '%'))
+                    or lower(coalesce(u.email, '')) like lower(concat('%', :query, '%')))
             """, nativeQuery = true)
     Page<User> searchTenantUsersInBranches(@Param("tenantId") Long tenantId,
             @Param("visibleBranches") List<Long> visibleBranches, @Param("role") String role,

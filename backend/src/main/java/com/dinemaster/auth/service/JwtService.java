@@ -15,15 +15,18 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class JwtService {
+    private static final String RSA_KEY_ID = "dinemaster-rsa-1";
     private final String secret;
     private final long expirationMs;
     private final PrivateKey privateKey;
@@ -66,7 +69,7 @@ public class JwtService {
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs));
         if (privateKey == null) builder.signWith(key(), Jwts.SIG.HS256);
-        else builder.signWith(privateKey, Jwts.SIG.RS256);
+        else builder.header().keyId(RSA_KEY_ID).and().signWith(privateKey, Jwts.SIG.RS256);
         return builder.compact();
     }
 
@@ -91,7 +94,7 @@ public class JwtService {
                 "kty", "RSA",
                 "use", "sig",
                 "alg", "RS256",
-                "kid", keyId,
+                "kid", RSA_KEY_ID,
                 "n", Base64.getUrlEncoder().withoutPadding().encodeToString(unsigned(rsaKey.getModulus().toByteArray())),
                 "e", Base64.getUrlEncoder().withoutPadding().encodeToString(unsigned(rsaKey.getPublicExponent().toByteArray())))));
     }

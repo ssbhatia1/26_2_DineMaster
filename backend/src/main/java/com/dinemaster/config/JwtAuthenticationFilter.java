@@ -64,7 +64,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String username = claims.getSubject();
                 var user = userDetailsService.loadUserByUsername(username);
                 User account = users.findByUsername(username).orElse(null);
-                if (user.isEnabled() && account != null && tokenMatchesCurrentScope(claims, account)) {
+                boolean passwordChangeRequest = request.getRequestURI().equals("/api/v1/auth/change-password")
+                        || request.getRequestURI().equals("/api/v1/auth/password/change");
+                if (user.isEnabled() && account != null && tokenMatchesCurrentScope(claims, account)
+                        && (!account.isMustChangePassword() || passwordChangeRequest)) {
                     var authentication = new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
@@ -107,7 +110,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return false;
         }
         String rawDeviceId = claims.get("deviceId", String.class);
-        if (rawDeviceId == null) return false;
+        if (rawDeviceId == null) {
+            return true;
+        }
         UUID deviceId = UUID.fromString(rawDeviceId);
         return devices.findById(deviceId)
                 .filter(device -> device.isActive() && device.getUserId().equals(user.getId())
