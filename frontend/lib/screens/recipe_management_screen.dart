@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import '../core/platform/io.dart';
 import '../core/platform/video_file_controller.dart';
 import 'package:flutter/material.dart';
@@ -56,8 +56,9 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
         const api = BackendApiClient();
         final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
 
-        final inventoryResponse =
-            await api.getJson('/api/inventory?restaurantId=$restaurantId');
+        final inventoryResponse = await api.getJson(
+          '/api/v1/inventory?restaurantId=$restaurantId',
+        );
         final inventoryItems = inventoryResponse is List
             ? inventoryResponse
             : <dynamic>[];
@@ -71,29 +72,36 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
           };
         }).toList();
 
-        final productResponse =
-            await api.getJson('/api/products/$productId');
+        final productResponse = await api.getJson('/api/products/$productId');
 
         if (productResponse is Map) {
           final productData = Map<String, dynamic>.from(productResponse);
           _prepTimeController.text =
-              (productData['prepTime'] ?? productData['prep_time'] ?? '').toString();
+              (productData['prepTime'] ?? productData['prep_time'] ?? '')
+                  .toString();
           _cookTimeController.text =
-              (productData['cookTime'] ?? productData['cook_time'] ?? '').toString();
-          _servingsController.text =
-              (productData['servings'] ?? '').toString();
+              (productData['cookTime'] ?? productData['cook_time'] ?? '')
+                  .toString();
+          _servingsController.text = (productData['servings'] ?? '').toString();
           _difficulty = productData['difficulty']?.toString() ?? 'Easy';
-          _videoPath =
-              (productData['videoPath'] ?? productData['video_path'])?.toString();
+          _videoPath = (productData['videoPath'] ?? productData['video_path'])
+              ?.toString();
 
           final stepsStr =
-              (productData['recipeSteps'] ?? productData['recipe_steps'] ?? '').toString();
-          _steps = stepsStr.split('\n').where((s) => s.trim().isNotEmpty).toList();
+              (productData['recipeSteps'] ?? productData['recipe_steps'] ?? '')
+                  .toString();
+          _steps = stepsStr
+              .split('\n')
+              .where((s) => s.trim().isNotEmpty)
+              .toList();
         }
 
-        final recipeResponse =
-            await api.getJson('/api/recipes?productId=$productId');
-        final recipeItems = recipeResponse is List ? recipeResponse : <dynamic>[];
+        final recipeResponse = await api.getJson(
+          '/api/recipes?productId=$productId',
+        );
+        final recipeItems = recipeResponse is List
+            ? recipeResponse
+            : <dynamic>[];
 
         _localRecipe = recipeItems.map<Map<String, dynamic>>((item) {
           final map = Map<String, dynamic>.from(item as Map);
@@ -106,13 +114,15 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
           final matchingInventory = _allIngredients.where(
             (ing) => ing['id'].toString() == ingredientId?.toString(),
           );
-          final inventoryItem =
-              matchingInventory.isEmpty ? <String, dynamic>{} : matchingInventory.first;
+          final inventoryItem = matchingInventory.isEmpty
+              ? <String, dynamic>{}
+              : matchingInventory.first;
 
           return {
             'recipe_id': map['id'],
             'ingredient_id': ingredientId,
-            'ingredient_name': ingredient['itemName'] ??
+            'ingredient_name':
+                ingredient['itemName'] ??
                 ingredient['name'] ??
                 inventoryItem['name'] ??
                 'Ingredient $ingredientId',
@@ -123,8 +133,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
       } else {
         final db = await DatabaseHelper.instance.database;
 
-        _allIngredients =
-            await db.query('inventory', orderBy: 'item_name ASC');
+        _allIngredients = await db.query('inventory', orderBy: 'item_name ASC');
 
         final productList = await db.query(
           'products',
@@ -134,32 +143,41 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
 
         if (productList.isNotEmpty) {
           final productData = productList.first;
-          _prepTimeController.text =
-              (productData['prep_time'] ?? '').toString();
-          _cookTimeController.text =
-              (productData['cook_time'] ?? '').toString();
-          _servingsController.text =
-              (productData['servings'] ?? '').toString();
+          _prepTimeController.text = (productData['prep_time'] ?? '')
+              .toString();
+          _cookTimeController.text = (productData['cook_time'] ?? '')
+              .toString();
+          _servingsController.text = (productData['servings'] ?? '').toString();
           _difficulty = productData['difficulty'] as String? ?? 'Easy';
           _videoPath = productData['video_path'] as String?;
 
           final stepsStr = productData['recipe_steps'] as String? ?? '';
-          _steps = stepsStr.split('\n').where((s) => s.trim().isNotEmpty).toList();
+          _steps = stepsStr
+              .split('\n')
+              .where((s) => s.trim().isNotEmpty)
+              .toList();
         }
 
-        final recipeItems = await db.rawQuery('''
+        final recipeItems = await db.rawQuery(
+          '''
           SELECT recipes.*, inventory.item_name as ingredient_name, inventory.unit
           FROM recipes
           JOIN inventory ON recipes.ingredient_id = inventory.id
           WHERE recipes.product_id = ?
-        ''', [productId]);
+        ''',
+          [productId],
+        );
 
-        _localRecipe = recipeItems.map((item) => {
-          'ingredient_id': item['ingredient_id'],
-          'ingredient_name': item['ingredient_name'],
-          'quantity_used': item['quantity_used'],
-          'unit': item['unit'] ?? '',
-        }).toList();
+        _localRecipe = recipeItems
+            .map(
+              (item) => {
+                'ingredient_id': item['ingredient_id'],
+                'ingredient_name': item['ingredient_name'],
+                'quantity_used': item['quantity_used'],
+                'unit': item['unit'] ?? '',
+              },
+            )
+            .toList();
       }
 
       if (_videoPath != null && _videoPath!.isNotEmpty) {
@@ -167,9 +185,9 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not load recipe: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not load recipe: $e')));
       }
     } finally {
       if (mounted) {
@@ -195,9 +213,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
 
   Future<void> _pickVideo() async {
     try {
-      final result = await fp.FilePicker.pickFiles(
-        type: fp.FileType.video,
-      );
+      final result = await fp.FilePicker.pickFiles(type: fp.FileType.video);
 
       if (result != null && result.files.single.path != null) {
         setState(() {
@@ -206,9 +222,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
         });
         _initializeVideoPlayer();
       }
-    } catch (e) {
-
-    }
+    } catch (e) {}
   }
 
   void _removeVideo() {
@@ -225,9 +239,7 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
       final uri = Uri.file(_videoPath!);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
-      } else {
-
-      }
+      } else {}
     }
   }
 
@@ -238,11 +250,17 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
     final productId = widget.product['id'] as int;
 
     // Collect all ingredient names to sync back to the main products.ingredients field
-    final ingredientNames = _localRecipe.map((e) => e['ingredient_name'] as String).toList();
-    
+    final ingredientNames = _localRecipe
+        .map((e) => e['ingredient_name'] as String)
+        .toList();
+
     // Add any manual ingredients already defined
     final manualIngsStr = widget.product['ingredients'] as String? ?? '';
-    final manualIngs = manualIngsStr.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    final manualIngs = manualIngsStr
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
     final combinedIngredients = {...ingredientNames, ...manualIngs}.join(',');
 
     final prepTime = int.tryParse(_prepTimeController.text.trim());
@@ -276,7 +294,6 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
     }
 
     if (mounted) {
-
       Navigator.pop(context, true);
     }
   }
@@ -370,8 +387,13 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
             height: 50,
             child: ElevatedButton.icon(
               icon: const Icon(Icons.save, color: Colors.white),
-              label: const Text('Save Recipe', style: TextStyle(fontSize: 16, color: Colors.white)),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+              label: const Text(
+                'Save Recipe',
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+              ),
               onPressed: _saveRecipe,
             ),
           ),
@@ -394,7 +416,11 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
           children: [
             const Text(
               'Preparation Details',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
             ),
             const SizedBox(height: 16),
             Row(
@@ -447,10 +473,12 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    items: ['Easy', 'Medium', 'Hard'].map((lvl) => DropdownMenuItem(
-                      value: lvl,
-                      child: Text(lvl),
-                    )).toList(),
+                    items: ['Easy', 'Medium', 'Hard']
+                        .map(
+                          (lvl) =>
+                              DropdownMenuItem(value: lvl, child: Text(lvl)),
+                        )
+                        .toList(),
                     onChanged: (val) {
                       if (val != null) setState(() => _difficulty = val);
                     },
@@ -483,12 +511,19 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
               children: [
                 const Text(
                   'Recipe Tutorial Video',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
                 ),
                 if (_videoPath != null)
                   TextButton.icon(
                     icon: const Icon(Icons.delete, color: Colors.red, size: 18),
-                    label: const Text('Remove Video', style: TextStyle(color: Colors.red)),
+                    label: const Text(
+                      'Remove Video',
+                      style: TextStyle(color: Colors.red),
+                    ),
                     onPressed: _removeVideo,
                   ),
               ],
@@ -505,14 +540,26 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                 ),
                 child: Column(
                   children: [
-                    const Icon(Icons.video_library_outlined, size: 48, color: Colors.grey),
+                    const Icon(
+                      Icons.video_library_outlined,
+                      size: 48,
+                      color: Colors.grey,
+                    ),
                     const SizedBox(height: 12),
-                    const Text('No tutorial video uploaded', style: TextStyle(color: Colors.grey)),
+                    const Text(
+                      'No tutorial video uploaded',
+                      style: TextStyle(color: Colors.grey),
+                    ),
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
                       icon: const Icon(Icons.upload_file, color: Colors.white),
-                      label: const Text('Select Video File', style: TextStyle(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                      label: const Text(
+                        'Select Video File',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                      ),
                       onPressed: _pickVideo,
                     ),
                   ],
@@ -521,7 +568,11 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
             else ...[
               Text(
                 'File: ${Platform.isWindows ? _videoPath : _videoPath!.split('/').last}',
-                style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Colors.grey),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                  color: Colors.grey,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -552,7 +603,10 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                     children: [
                       CircularProgressIndicator(),
                       SizedBox(height: 8),
-                      Text('Initializing video player...', style: TextStyle(color: Colors.grey)),
+                      Text(
+                        'Initializing video player...',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                     ],
                   ),
                 ),
@@ -581,9 +635,12 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
 
   Widget _buildIngredientsSection() {
     // Filter out already selected ingredients
-    final availableIngs = _allIngredients.where((ing) =>
-      !_localRecipe.any((item) => item['ingredient_id'] == ing['id'])
-    ).toList();
+    final availableIngs = _allIngredients
+        .where(
+          (ing) =>
+              !_localRecipe.any((item) => item['ingredient_id'] == ing['id']),
+        )
+        .toList();
 
     return Card(
       elevation: 0,
@@ -598,7 +655,11 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
           children: [
             const Text(
               'Recipe Ingredients',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
             ),
             const SizedBox(height: 16),
             Row(
@@ -613,10 +674,14 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    items: availableIngs.map((ing) => DropdownMenuItem<int>(
-                      value: ing['id'] as int,
-                      child: Text('${ing['item_name']} (${ing['unit']})'),
-                    )).toList(),
+                    items: availableIngs
+                        .map(
+                          (ing) => DropdownMenuItem<int>(
+                            value: ing['id'] as int,
+                            child: Text('${ing['item_name']} (${ing['unit']})'),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (val) {
                       setState(() {
                         _selectedIngredientId = val;
@@ -634,17 +699,26 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 36),
+                  icon: const Icon(
+                    Icons.add_circle,
+                    color: AppColors.primary,
+                    size: 36,
+                  ),
                   onPressed: () {
-                    if (_selectedIngredientId != null && _recipeQtyController.text.isNotEmpty) {
+                    if (_selectedIngredientId != null &&
+                        _recipeQtyController.text.isNotEmpty) {
                       final qty = double.tryParse(_recipeQtyController.text);
                       if (qty != null && qty > 0) {
-                        final selectedIng = _allIngredients.firstWhere((ing) => ing['id'] == _selectedIngredientId);
+                        final selectedIng = _allIngredients.firstWhere(
+                          (ing) => ing['id'] == _selectedIngredientId,
+                        );
                         setState(() {
                           _localRecipe.add({
                             'ingredient_id': _selectedIngredientId,
@@ -668,23 +742,39 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
                     child: Center(
-                      child: Text('No ingredients added to this recipe.', style: TextStyle(color: Colors.grey)),
+                      child: Text(
+                        'No ingredients added to this recipe.',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                     ),
                   )
                 : ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _localRecipe.length,
-                    separatorBuilder: (context, index) => const Divider(height: 1),
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final item = _localRecipe[index];
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
-                        title: Text(item['ingredient_name'] as String, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                        subtitle: Text('Required: ${item['quantity_used']} ${item['unit']}'),
+                        title: Text(
+                          item['ingredient_name'] as String,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Required: ${item['quantity_used']} ${item['unit']}',
+                        ),
                         trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                            size: 20,
+                          ),
                           onPressed: () {
                             setState(() {
                               _localRecipe.removeAt(index);
@@ -715,7 +805,11 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
           children: [
             const Text(
               'Cooking Steps & Instructions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
             ),
             const SizedBox(height: 16),
             Row(
@@ -732,7 +826,11 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 36),
+                  icon: const Icon(
+                    Icons.add_circle,
+                    color: AppColors.primary,
+                    size: 36,
+                  ),
                   onPressed: () {
                     final val = _stepController.text.trim();
                     if (val.isNotEmpty) {
@@ -752,7 +850,10 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
                     child: Center(
-                      child: Text('No instructions added yet.', style: TextStyle(color: Colors.grey)),
+                      child: Text(
+                        'No instructions added yet.',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                     ),
                   )
                 : ReorderableListView.builder(
@@ -777,7 +878,11 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                           backgroundColor: AppColors.primaryLight,
                           child: Text(
                             '${index + 1}',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
                           ),
                         ),
                         title: Text(_steps[index]),
@@ -786,7 +891,11 @@ class _RecipeManagementScreenState extends State<RecipeManagementScreen> {
                           children: [
                             const Icon(Icons.drag_handle, color: Colors.grey),
                             IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                                size: 20,
+                              ),
                               onPressed: () {
                                 setState(() {
                                   _steps.removeAt(index);

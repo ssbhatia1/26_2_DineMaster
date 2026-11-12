@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../core/database/database_helper.dart';
+import '../core/api/api_mode.dart';
 import '../repositories/table_repository.dart';
+import '../services/backend_api_client.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
@@ -23,9 +25,12 @@ class _KitchenScreenState extends State<KitchenScreen> {
 
   // Filters & Sorting state
   bool _showHistoryArchive = false;
-  String _selectedTab = 'All'; // All, Pending, Preparing, Ready, Served, Delayed
-  String _selectedSection = 'All'; // All, Chinese, Tandoor, Fast Food, Main Course, Dessert, Beverages
-  String _sortBy = 'Oldest First'; // Oldest First, Priority, Fastest Prep, Table
+  String _selectedTab =
+      'All'; // All, Pending, Preparing, Ready, Served, Delayed
+  String _selectedSection =
+      'All'; // All, Chinese, Tandoor, Fast Food, Main Course, Dessert, Beverages
+  String _sortBy =
+      'Oldest First'; // Oldest First, Priority, Fastest Prep, Table
   String _searchQuery = '';
 
   // Auto delay prompt tracking
@@ -37,7 +42,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
   void initState() {
     super.initState();
     _loadKOTs();
-    
+
     // Live WebSocket synchronization
     _syncSubscription = SyncService.instance.syncEvents.listen((event) {
       if (mounted) {
@@ -63,6 +68,10 @@ class _KitchenScreenState extends State<KitchenScreen> {
       setState(() => _isLoading = true);
     }
     try {
+      if (await ApiMode.useBackendApi()) {
+        await _loadOnlineKOTs();
+        return;
+      }
       final db = await _dbHelper.database;
       final restaurantId = DatabaseHelper.currentRestaurantId;
 
@@ -80,13 +89,16 @@ class _KitchenScreenState extends State<KitchenScreen> {
         final kotId = kotMap['id'] as int;
         final orderId = kotMap['order_id'] as int;
 
-        final List<Map<String, dynamic>> itemMaps = await db.rawQuery('''
+        final List<Map<String, dynamic>> itemMaps = await db.rawQuery(
+          '''
           SELECT oi.quantity, p.name as product_name, oi.status as item_status, 
                  p.prep_time, p.cook_time, oi.notes as item_notes, p.category as product_category
           FROM order_items oi
           JOIN products p ON oi.product_id = p.id
           WHERE oi.kot_id = ?
-        ''', [kotId]);
+        ''',
+          [kotId],
+        );
 
         // Query order details
         final List<Map<String, dynamic>> orderMaps = await db.query(
@@ -156,8 +168,91 @@ class _KitchenScreenState extends State<KitchenScreen> {
     }
   }
 
-  Future<void> _updateKOTStatus(int kotId, int orderId, String newStatus, {String? delayReason, String? chefName}) async {
+  Future<void> _loadOnlineKOTs() async {
+    final restaurantId = DatabaseHelper.currentRestaurantId;
+    if (restaurantId == null) {
+      throw StateError('A restaurant must be selected');
+    }
+    final api = const BackendApiClient();
+    final rawKots = await api.getJson(
+      '/api/v1/kitchen-tickets?restaurantId=$restaurantId',
+    );
+    if (rawKots is! List) {
+      throw const FormatException('Expected a kitchen ticket list');
+    }
+    final tables = await TableRepository().getTables();
+    final tableNames = {
+      for (final table in tables)
+        if (table.id != null) table.id!: table.displayName,
+    };
+    final kots = <Map<String, dynamic>>[];
+    for (final raw in rawKots.whereType<Map>()) {
+      final kot = Map<String, dynamic>.from(raw);
+      final orderId = (kot['orderId'] as num?)?.toInt();
+      if (orderId == null) continue;
+      final orderRaw = await api.getJson('/api/v1/orders/$orderId');
+      final order = Map<String, dynamic>.from(orderRaw as Map);
+      final itemRaw = await api.getJson('/api/v1/orders/$orderId/items');
+      final items = itemRaw is List
+          ? itemRaw.whereType<Map>().map((item) {
+              final value = Map<String, dynamic>.from(item);
+              return {
+                'quantity': value['quantity'] ?? 0,
+                'product_name':
+                    value['productName'] ?? value['product_name'] ?? 'Item',
+                'item_status': value['status'] ?? 'Pending',
+                'item_notes': value['notes'],
+              };
+            }).toList()
+          : <Map<String, dynamic>>[];
+      final tableId = (order['tableId'] as num?)?.toInt();
+      kots.add({
+        'id': (kot['id'] as num?)?.toInt(),
+        'order_id': orderId,
+        'kot_number': kot['kotNumber'] ?? 'KOT-$orderId',
+        'table_number': tableId == null
+            ? 'Takeaway'
+            : (tableNames[tableId] ?? 'Table $tableId'),
+        'type': order['type'] ?? 'Dine In',
+        'notes': order['notes'] ?? '',
+        'customer_name': order['customerName'] ?? 'Guest',
+        'status': kot['status'] ?? 'Pending',
+        'time': kot['createdAt'],
+        'started_cooking_at': kot['startedCookingAt'],
+        'ready_at': kot['readyAt'],
+        'served_at': kot['servedAt'],
+        'delay_reason': kot['delayReason'],
+        'chef_name': kot['chefName'],
+        'priority': kot['priority'] ?? 'Normal',
+        'estimated_time': kot['estimatedTime'] ?? 15,
+        'items': items,
+      });
+    }
+    if (!mounted) return;
+    setState(() {
+      _kots = kots;
+      _isLoading = false;
+    });
+    _checkForAutoDelays(kots);
+  }
+
+  Future<void> _updateKOTStatus(
+    int kotId,
+    int orderId,
+    String newStatus, {
+    String? delayReason,
+    String? chefName,
+  }) async {
     try {
+      if (await ApiMode.useBackendApi()) {
+        final value = newStatus == 'Delayed' ? 'Cooking' : newStatus;
+        await const BackendApiClient().patchJson(
+          '/api/v1/kitchen-tickets/$kotId/status?value=${Uri.encodeQueryComponent(value)}',
+          {},
+        );
+        await _loadKOTs(silent: true);
+        return;
+      }
       final db = await _dbHelper.database;
       final nowStr = DateTime.now().toIso8601String();
 
@@ -204,8 +299,12 @@ class _KitchenScreenState extends State<KitchenScreen> {
         );
 
         bool allServed = siblingKots.every((kot) => kot['status'] == 'Served');
-        bool allReadyOrServed = siblingKots.every((kot) => kot['status'] == 'Ready' || kot['status'] == 'Served');
-        bool hasCooking = siblingKots.any((kot) => kot['status'] == 'Cooking' || kot['status'] == 'Delayed');
+        bool allReadyOrServed = siblingKots.every(
+          (kot) => kot['status'] == 'Ready' || kot['status'] == 'Served',
+        );
+        bool hasCooking = siblingKots.any(
+          (kot) => kot['status'] == 'Cooking' || kot['status'] == 'Delayed',
+        );
 
         String orderStatus = 'Sent to Kitchen';
         if (allServed) {
@@ -229,7 +328,9 @@ class _KitchenScreenState extends State<KitchenScreen> {
           'status': newStatus,
           'changed_at': nowStr,
           'changed_by': chefName ?? 'Kitchen Staff',
-          'notes': 'KOT #$kotId status changed to $newStatus.' + (delayReason != null ? ' Reason: $delayReason' : ''),
+          'notes':
+              'KOT #$kotId status changed to $newStatus.' +
+              (delayReason != null ? ' Reason: $delayReason' : ''),
         });
       });
 
@@ -241,9 +342,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
 
       _loadKOTs(silent: true);
     } catch (e) {
-      if (mounted) {
-
-      }
+      if (mounted) {}
     }
   }
 
@@ -253,7 +352,9 @@ class _KitchenScreenState extends State<KitchenScreen> {
     final now = DateTime.now();
     for (final kot in kots) {
       final status = kot['status'] as String? ?? 'Pending';
-      if (status == 'Served' || status == 'Ready' || status == 'Delayed') continue;
+      if (status == 'Served' || status == 'Ready' || status == 'Delayed') {
+        continue;
+      }
       final delayReason = kot['delay_reason'] as String?;
       if (delayReason != null && delayReason.isNotEmpty) continue;
       final kotId = kot['id'] as int;
@@ -267,7 +368,9 @@ class _KitchenScreenState extends State<KitchenScreen> {
       }
     }
     if (_delayPromptQueue.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _processDelayPromptQueue());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _processDelayPromptQueue(),
+      );
     }
   }
 
@@ -313,7 +416,12 @@ class _KitchenScreenState extends State<KitchenScreen> {
               final reason = controller.text.trim();
               if (reason.isNotEmpty) {
                 Navigator.pop(context);
-                _updateKOTStatus(kotId, orderId, 'Delayed', delayReason: reason);
+                _updateKOTStatus(
+                  kotId,
+                  orderId,
+                  'Delayed',
+                  delayReason: reason,
+                );
               }
             },
             child: const Text('Mark Delayed'),
@@ -326,9 +434,15 @@ class _KitchenScreenState extends State<KitchenScreen> {
   void _showAssignChefDialog(int kotId, int orderId, String currentChef) async {
     try {
       final db = await _dbHelper.database;
-      final chefRecords = await db.query('users', where: "role = ? AND is_active = 1", whereArgs: ['Chef']);
-      final List<String> chefNames = chefRecords.map((c) => c['name'] as String).toList();
-      
+      final chefRecords = await db.query(
+        'users',
+        where: "role = ? AND is_active = 1",
+        whereArgs: ['Chef'],
+      );
+      final List<String> chefNames = chefRecords
+          .map((c) => c['name'] as String)
+          .toList();
+
       if (!mounted) return;
 
       String selectedChef = currentChef;
@@ -339,11 +453,16 @@ class _KitchenScreenState extends State<KitchenScreen> {
         builder: (context) => StatefulBuilder(
           builder: (context, setStateDialog) {
             final filteredChefs = chefNames
-                .where((name) => name.toLowerCase().contains(searchQuery.toLowerCase()))
+                .where(
+                  (name) =>
+                      name.toLowerCase().contains(searchQuery.toLowerCase()),
+                )
                 .toList();
 
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               title: const Row(
                 children: [
                   Icon(Icons.assignment_ind_outlined, color: AppColors.primary),
@@ -375,8 +494,8 @@ class _KitchenScreenState extends State<KitchenScreen> {
                           ? Padding(
                               padding: const EdgeInsets.all(16.0),
                               child: Text(
-                                searchQuery.isEmpty 
-                                    ? 'No active chefs registered.\nGo to settings to add chef staff.' 
+                                searchQuery.isEmpty
+                                    ? 'No active chefs registered.\nGo to settings to add chef staff.'
                                     : 'No matching chefs found.',
                                 style: const TextStyle(color: Colors.grey),
                                 textAlign: TextAlign.center,
@@ -390,12 +509,30 @@ class _KitchenScreenState extends State<KitchenScreen> {
                                 final isSelected = chef == selectedChef;
                                 return ListTile(
                                   leading: CircleAvatar(
-                                    backgroundColor: isSelected ? AppColors.primary : Colors.grey.shade200,
-                                    foregroundColor: isSelected ? Colors.white : Colors.black,
-                                    child: Text(chef.substring(0, 1).toUpperCase()),
+                                    backgroundColor: isSelected
+                                        ? AppColors.primary
+                                        : Colors.grey.shade200,
+                                    foregroundColor: isSelected
+                                        ? Colors.white
+                                        : Colors.black,
+                                    child: Text(
+                                      chef.substring(0, 1).toUpperCase(),
+                                    ),
                                   ),
-                                  title: Text(chef, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                                  trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primary) : null,
+                                  title: Text(
+                                    chef,
+                                    style: TextStyle(
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                  trailing: isSelected
+                                      ? const Icon(
+                                          Icons.check_circle,
+                                          color: AppColors.primary,
+                                        )
+                                      : null,
                                   onTap: () {
                                     setStateDialog(() {
                                       selectedChef = chef;
@@ -416,9 +553,17 @@ class _KitchenScreenState extends State<KitchenScreen> {
                 ElevatedButton(
                   onPressed: () {
                     Navigator.pop(context);
-                    _updateKOTStatus(kotId, orderId, 'Cooking', chefName: selectedChef.isEmpty ? 'Kitchen' : selectedChef);
+                    _updateKOTStatus(
+                      kotId,
+                      orderId,
+                      'Cooking',
+                      chefName: selectedChef.isEmpty ? 'Kitchen' : selectedChef,
+                    );
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
                   child: const Text('Assign & Prepare'),
                 ),
               ],
@@ -455,21 +600,22 @@ class _KitchenScreenState extends State<KitchenScreen> {
 
     // Filter by kitchen section
     if (_selectedSection != 'All') {
-      list = list.map((kot) {
-        final items = List<Map<String, dynamic>>.from(kot['items']);
-        final filteredItems = items.where((item) {
-          final cat = (item['product_category'] as String? ?? 'General').toLowerCase();
-          return cat == _selectedSection.toLowerCase();
-        }).toList();
-        
-        return {
-          ...kot,
-          'items': filteredItems,
-        };
-      }).where((kot) {
-        final items = kot['items'] as List;
-        return items.isNotEmpty;
-      }).toList();
+      list = list
+          .map((kot) {
+            final items = List<Map<String, dynamic>>.from(kot['items']);
+            final filteredItems = items.where((item) {
+              final cat = (item['product_category'] as String? ?? 'General')
+                  .toLowerCase();
+              return cat == _selectedSection.toLowerCase();
+            }).toList();
+
+            return {...kot, 'items': filteredItems};
+          })
+          .where((kot) {
+            final items = kot['items'] as List;
+            return items.isNotEmpty;
+          })
+          .toList();
     }
 
     // Filter by search query
@@ -479,7 +625,9 @@ class _KitchenScreenState extends State<KitchenScreen> {
         final tabNum = (kot['table_number'] as String).toLowerCase();
         final customer = (kot['customer_name'] as String).toLowerCase();
         final query = _searchQuery.toLowerCase();
-        return kotNum.contains(query) || tabNum.contains(query) || customer.contains(query);
+        return kotNum.contains(query) ||
+            tabNum.contains(query) ||
+            customer.contains(query);
       }).toList();
     }
 
@@ -494,9 +642,16 @@ class _KitchenScreenState extends State<KitchenScreen> {
         return bp.compareTo(ap);
       });
     } else if (_sortBy == 'Fastest Prep') {
-      list.sort((a, b) => (a['estimated_time'] as int).compareTo(b['estimated_time'] as int));
+      list.sort(
+        (a, b) =>
+            (a['estimated_time'] as int).compareTo(b['estimated_time'] as int),
+      );
     } else if (_sortBy == 'Table Orders') {
-      list.sort((a, b) => (a['table_number'] as String).compareTo(b['table_number'] as String));
+      list.sort(
+        (a, b) => (a['table_number'] as String).compareTo(
+          b['table_number'] as String,
+        ),
+      );
     }
 
     return list;
@@ -556,7 +711,10 @@ class _KitchenScreenState extends State<KitchenScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Kitchen Display System (KDS)', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Kitchen Display System (KDS)',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 0,
@@ -565,7 +723,10 @@ class _KitchenScreenState extends State<KitchenScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(20),
@@ -576,7 +737,10 @@ class _KitchenScreenState extends State<KitchenScreen> {
                     const SizedBox(width: 6),
                     Text(
                       'Live Workload: $activeCount Active',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ],
                 ),
@@ -604,7 +768,10 @@ class _KitchenScreenState extends State<KitchenScreen> {
 
                 // Sliding Toggle between Active and Archive
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 8.0,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
@@ -644,23 +811,32 @@ class _KitchenScreenState extends State<KitchenScreen> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.restaurant_menu, size: 64, color: Colors.grey.shade300),
+                              Icon(
+                                Icons.restaurant_menu,
+                                size: 64,
+                                color: Colors.grey.shade300,
+                              ),
                               const SizedBox(height: 16),
                               Text(
                                 'No matching KOT orders found',
-                                style: TextStyle(fontSize: 16, color: Colors.grey.shade500, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey.shade500,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ],
                           ),
                         )
                       : GridView.builder(
                           padding: const EdgeInsets.all(16),
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 400,
-                            mainAxisExtent: 380,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                          ),
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 400,
+                                mainAxisExtent: 380,
+                                crossAxisSpacing: 16,
+                                mainAxisSpacing: 16,
+                              ),
                           itemCount: filteredKots.length,
                           itemBuilder: (context, index) {
                             final kot = filteredKots[index];
@@ -683,25 +859,37 @@ class _KitchenScreenState extends State<KitchenScreen> {
     return Container(
       color: Theme.of(context).cardColor,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: LayoutBuilder(builder: (context, constraints) {
-        final isMobile = constraints.maxWidth < 600;
-        return Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          alignment: WrapAlignment.spaceBetween,
-          children: [
-            _buildStatCard('Active Orders', '$active', Colors.blue, isMobile),
-            _buildStatCard('Pending', '$pending', Colors.orange, isMobile),
-            _buildStatCard('Preparing', '$preparing', Colors.amber, isMobile),
-            _buildStatCard('Delayed', '$delayed', Colors.red, isMobile),
-            _buildStatCard('Ready to Serve', '$ready', Colors.green, isMobile),
-          ],
-        );
-      }),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isMobile = constraints.maxWidth < 600;
+          return Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
+            children: [
+              _buildStatCard('Active Orders', '$active', Colors.blue, isMobile),
+              _buildStatCard('Pending', '$pending', Colors.orange, isMobile),
+              _buildStatCard('Preparing', '$preparing', Colors.amber, isMobile),
+              _buildStatCard('Delayed', '$delayed', Colors.red, isMobile),
+              _buildStatCard(
+                'Ready to Serve',
+                '$ready',
+                Colors.green,
+                isMobile,
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildStatCard(String label, String value, Color color, bool isMobile) {
+  Widget _buildStatCard(
+    String label,
+    String value,
+    Color color,
+    bool isMobile,
+  ) {
     final width = isMobile ? 80.0 : 120.0;
     return Container(
       width: width,
@@ -713,9 +901,24 @@ class _KitchenScreenState extends State<KitchenScreen> {
       ),
       child: Column(
         children: [
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500), textAlign: TextAlign.center),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -725,106 +928,144 @@ class _KitchenScreenState extends State<KitchenScreen> {
     return Container(
       color: Theme.of(context).cardColor,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: LayoutBuilder(builder: (context, constraints) {
-        final isMobile = constraints.maxWidth < 800;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isMobile = constraints.maxWidth < 800;
 
-        final searchBar = SizedBox(
-          width: isMobile ? double.infinity : 220,
-          height: 40,
-          child: TextField(
-            onChanged: (val) => setState(() => _searchQuery = val),
-            decoration: InputDecoration(
-              hintText: 'Search Table or KOT...',
-              prefixIcon: const Icon(Icons.search, size: 20),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            ),
-          ),
-        );
-
-        final sortDropdown = DropdownButton<String>(
-          value: _sortBy,
-          underline: const SizedBox(),
-          icon: const Icon(Icons.sort, size: 20),
-          items: ['Oldest First', 'Priority', 'Fastest Prep', 'Table Orders']
-              .map((val) => DropdownMenuItem(value: val, child: Text(val, style: const TextStyle(fontSize: 13))))
-              .toList(),
-          onChanged: (val) {
-            if (val != null) setState(() => _sortBy = val);
-          },
-        );
-
-        final sectionDropdown = DropdownButton<String>(
-          value: _selectedSection,
-          underline: const SizedBox(),
-          icon: const Icon(Icons.flatware, size: 20, color: AppColors.primary),
-          items: ['All', 'Chinese', 'Tandoor', 'Fast Food', 'Main Course', 'Dessert', 'Beverages']
-              .map((val) => DropdownMenuItem(value: val, child: Text(val == 'All' ? 'All Sections' : '$val Section', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))))
-              .toList(),
-          onChanged: (val) {
-            if (val != null) setState(() => _selectedSection = val);
-          },
-        );
-
-        final filtersSegment = _showHistoryArchive
-            ? const SizedBox.shrink()
-            : SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: ['All', 'Pending', 'Cooking', 'Ready', 'Delayed'].map((tab) {
-                    final isSelected = _selectedTab == tab;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                      child: ChoiceChip(
-                        label: Text(tab == 'Cooking' ? 'Preparing' : tab),
-                        selected: isSelected,
-                        selectedColor: AppColors.primary,
-                        backgroundColor: Colors.grey.shade100,
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : Colors.black87,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          fontSize: 12,
-                        ),
-                        onSelected: (val) {
-                          if (val) setState(() => _selectedTab = tab);
-                        },
-                      ),
-                    );
-                  }).toList(),
+          final searchBar = SizedBox(
+            width: isMobile ? double.infinity : 220,
+            height: 40,
+            child: TextField(
+              onChanged: (val) => setState(() => _searchQuery = val),
+              decoration: InputDecoration(
+                hintText: 'Search Table or KOT...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              );
-
-        if (isMobile) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              searchBar,
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  sectionDropdown,
-                  sortDropdown,
-                ],
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
               ),
-              const SizedBox(height: 4),
+            ),
+          );
+
+          final sortDropdown = DropdownButton<String>(
+            value: _sortBy,
+            underline: const SizedBox(),
+            icon: const Icon(Icons.sort, size: 20),
+            items: ['Oldest First', 'Priority', 'Fastest Prep', 'Table Orders']
+                .map(
+                  (val) => DropdownMenuItem(
+                    value: val,
+                    child: Text(val, style: const TextStyle(fontSize: 13)),
+                  ),
+                )
+                .toList(),
+            onChanged: (val) {
+              if (val != null) setState(() => _sortBy = val);
+            },
+          );
+
+          final sectionDropdown = DropdownButton<String>(
+            value: _selectedSection,
+            underline: const SizedBox(),
+            icon: const Icon(
+              Icons.flatware,
+              size: 20,
+              color: AppColors.primary,
+            ),
+            items:
+                [
+                      'All',
+                      'Chinese',
+                      'Tandoor',
+                      'Fast Food',
+                      'Main Course',
+                      'Dessert',
+                      'Beverages',
+                    ]
+                    .map(
+                      (val) => DropdownMenuItem(
+                        value: val,
+                        child: Text(
+                          val == 'All' ? 'All Sections' : '$val Section',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+            onChanged: (val) {
+              if (val != null) setState(() => _selectedSection = val);
+            },
+          );
+
+          final filtersSegment = _showHistoryArchive
+              ? const SizedBox.shrink()
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: ['All', 'Pending', 'Cooking', 'Ready', 'Delayed']
+                        .map((tab) {
+                          final isSelected = _selectedTab == tab;
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4.0,
+                            ),
+                            child: ChoiceChip(
+                              label: Text(tab == 'Cooking' ? 'Preparing' : tab),
+                              selected: isSelected,
+                              selectedColor: AppColors.primary,
+                              backgroundColor: Colors.grey.shade100,
+                              labelStyle: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.black87,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                fontSize: 12,
+                              ),
+                              onSelected: (val) {
+                                if (val) setState(() => _selectedTab = tab);
+                              },
+                            ),
+                          );
+                        })
+                        .toList(),
+                  ),
+                );
+
+          if (isMobile) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                searchBar,
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [sectionDropdown, sortDropdown],
+                ),
+                const SizedBox(height: 4),
+                filtersSegment,
+              ],
+            );
+          }
+
+          return Row(
+            children: [
               filtersSegment,
+              const SizedBox(width: 16),
+              sectionDropdown,
+              const Spacer(),
+              sortDropdown,
+              const SizedBox(width: 16),
+              searchBar,
             ],
           );
-        }
-
-        return Row(
-          children: [
-            filtersSegment,
-            const SizedBox(width: 16),
-            sectionDropdown,
-            const Spacer(),
-            sortDropdown,
-            const SizedBox(width: 16),
-            searchBar,
-          ],
-        );
-      }),
+        },
+      ),
     );
   }
 
@@ -858,8 +1099,8 @@ class _KitchenScreenState extends State<KitchenScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: priority == 'High' 
-              ? Colors.redAccent.shade100 
+          color: priority == 'High'
+              ? Colors.redAccent.shade100
               : Colors.grey.shade200,
           width: priority == 'High' ? 1.5 : 1.0,
         ),
@@ -872,7 +1113,9 @@ class _KitchenScreenState extends State<KitchenScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: statusColor.withAlpha(20),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
             ),
             child: Row(
               children: [
@@ -880,27 +1123,52 @@ class _KitchenScreenState extends State<KitchenScreen> {
                 Container(
                   width: 12,
                   height: 12,
-                  decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    tableNumber != 'Takeaway' ? 'Table $tableNumber' : 'Takeaway / Parcel',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    tableNumber != 'Takeaway'
+                        ? 'Table $tableNumber'
+                        : 'Takeaway / Parcel',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
                 // Priority Badge
                 if (priority == 'High')
                   Container(
                     margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
-                    child: const Text('HIGH PRIORITY', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'HIGH PRIORITY',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 // Countdown Timer text
                 Text(
                   timeBadgeText,
-                  style: TextStyle(fontWeight: FontWeight.bold, color: statusColor, fontSize: 12),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -908,13 +1176,20 @@ class _KitchenScreenState extends State<KitchenScreen> {
 
           // Details Row
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 6.0,
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   kotNumber,
-                  style: const TextStyle(color: Colors.blueGrey, fontWeight: FontWeight.bold, fontSize: 13),
+                  style: const TextStyle(
+                    color: Colors.blueGrey,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
                 Text(
                   DateFormat('hh:mm a').format(createdTime),
@@ -928,30 +1203,62 @@ class _KitchenScreenState extends State<KitchenScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Flexible(child: Text('Order #$orderId', style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis)),
+                Flexible(
+                  child: Text(
+                    'Order #$orderId',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Flexible(child: Text('Est: ${kot['estimated_time']}m (Sum: ${totalPrepSum}m)', style: const TextStyle(fontSize: 11, color: Colors.blueGrey), overflow: TextOverflow.ellipsis, textAlign: TextAlign.end)),
+                Flexible(
+                  child: Text(
+                    'Est: ${kot['estimated_time']}m (Sum: ${totalPrepSum}m)',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.blueGrey,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                  ),
+                ),
               ],
             ),
           ),
-          
+
           if (chefName != null && chefName.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12.0,
+                vertical: 2.0,
+              ),
               child: Row(
                 children: [
                   const Icon(Icons.person, size: 14, color: AppColors.primary),
                   const SizedBox(width: 4),
-                  Text('Chef: $chefName', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                  Text(
+                    'Chef: $chefName',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
                 ],
               ),
             ),
 
           if (delayReason != null && delayReason.isNotEmpty)
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+              margin: const EdgeInsets.symmetric(
+                horizontal: 12.0,
+                vertical: 4.0,
+              ),
               padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(6),
+              ),
               child: Row(
                 children: [
                   const Icon(Icons.warning, size: 14, color: Colors.red),
@@ -959,7 +1266,11 @@ class _KitchenScreenState extends State<KitchenScreen> {
                   Expanded(
                     child: Text(
                       'Delay: $delayReason',
-                      style: TextStyle(fontSize: 11, color: Colors.red.shade900, fontStyle: FontStyle.italic),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.red.shade900,
+                        fontStyle: FontStyle.italic,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -986,14 +1297,21 @@ class _KitchenScreenState extends State<KitchenScreen> {
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primaryLight,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           '${it['quantity']}x',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 12),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1003,19 +1321,30 @@ class _KitchenScreenState extends State<KitchenScreen> {
                           children: [
                             Text(
                               it['product_name'],
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                            if (it['item_notes'] != null && (it['item_notes'] as String).isNotEmpty)
+                            if (it['item_notes'] != null &&
+                                (it['item_notes'] as String).isNotEmpty)
                               Text(
                                 '* ${it['item_notes']}',
-                                style: const TextStyle(fontSize: 11, color: Colors.redAccent, fontStyle: FontStyle.italic),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.redAccent,
+                                  fontStyle: FontStyle.italic,
+                                ),
                               ),
                           ],
                         ),
                       ),
                       Text(
                         '${singleEst}m',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
                       ),
                     ],
                   ),
@@ -1027,10 +1356,17 @@ class _KitchenScreenState extends State<KitchenScreen> {
           if (notes.isNotEmpty) ...[
             const Divider(height: 8),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12.0,
+                vertical: 4.0,
+              ),
               child: Text(
                 'KOT Notes: $notes',
-                style: const TextStyle(color: Colors.red, fontSize: 12, fontStyle: FontStyle.italic),
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1048,7 +1384,10 @@ class _KitchenScreenState extends State<KitchenScreen> {
                 // Delay Alert Trigger
                 if (status != 'Served' && status != 'Ready')
                   IconButton(
-                    icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                    icon: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange,
+                    ),
                     // tooltip disabled,
                     onPressed: () => _showDelayDialog(kotId, orderId),
                   ),
@@ -1056,9 +1395,13 @@ class _KitchenScreenState extends State<KitchenScreen> {
                 // Chef Assignment trigger
                 if (status == 'Pending')
                   IconButton(
-                    icon: const Icon(Icons.assignment_ind_outlined, color: Colors.blue),
+                    icon: const Icon(
+                      Icons.assignment_ind_outlined,
+                      color: Colors.blue,
+                    ),
                     // tooltip disabled,
-                    onPressed: () => _showAssignChefDialog(kotId, orderId, chefName ?? ''),
+                    onPressed: () =>
+                        _showAssignChefDialog(kotId, orderId, chefName ?? ''),
                   ),
 
                 Expanded(
@@ -1077,17 +1420,22 @@ class _KitchenScreenState extends State<KitchenScreen> {
                       foregroundColor: Colors.white,
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                     child: Text(
                       status == 'Pending'
                           ? 'Start Preparing'
                           : status == 'Cooking' || status == 'Delayed'
-                              ? 'Mark Ready'
-                              : status == 'Ready'
-                                  ? 'Mark Served'
-                                  : 'Served Complete',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          ? 'Mark Ready'
+                          : status == 'Ready'
+                          ? 'Mark Served'
+                          : 'Served Complete',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ),

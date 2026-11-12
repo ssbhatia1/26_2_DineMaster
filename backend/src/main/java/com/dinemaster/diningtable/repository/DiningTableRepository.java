@@ -17,7 +17,7 @@ public interface DiningTableRepository
 
     List<DiningTable> findByStatus(String status);
 
-    boolean existsByTableNumber(String tableNumber);
+    boolean existsByRestaurant_IdAndTableNumber(Long restaurantId, String tableNumber);
 
     List<DiningTable> findByRestaurant_IdOrderByTableNumberAsc(Long restaurantId);
 }

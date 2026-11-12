@@ -237,8 +237,9 @@ class _TablesScreenState extends State<TablesScreen> {
 
       List<String> loadedSections = ['All'];
       loadedSections.addAll(sectionMaps.map((m) => m['name'] as String));
-      if (loadedSections.length == 1)
+      if (loadedSections.length == 1) {
         loadedSections.add('Main Hall'); // Fallback
+      }
 
       List<String> loadedTypes = [];
       loadedTypes.addAll(typeMaps.map((m) => m['name'] as String));
@@ -445,8 +446,9 @@ class _TablesScreenState extends State<TablesScreen> {
         final matchesName = table.name?.toLowerCase().contains(q) ?? false;
         final matchesNotes = table.notes?.toLowerCase().contains(q) ?? false;
         final matchesSection = table.section.toLowerCase().contains(q);
-        if (!matchesNum && !matchesName && !matchesNotes && !matchesSection)
+        if (!matchesNum && !matchesName && !matchesNotes && !matchesSection) {
           return false;
+        }
       }
 
       // 2. Section Filter
@@ -461,18 +463,21 @@ class _TablesScreenState extends State<TablesScreen> {
         } else if (_statusFilter == 'Occupied') {
           if (table.status != 'Occupied' &&
               activeOrder == null &&
-              activeBooking == null)
+              activeBooking == null) {
             return false;
+          }
         } else if (_statusFilter == 'Available') {
           if (table.status != 'Available' ||
               activeOrder != null ||
-              activeBooking != null)
+              activeBooking != null) {
             return false;
+          }
         } else if (_statusFilter == 'Reserved') {
           if (activeBooking == null &&
               allBookings.isEmpty &&
-              table.status != 'Reserved')
+              table.status != 'Reserved') {
             return false;
+          }
         } else if (table.status != _statusFilter) {
           return false;
         }
@@ -481,8 +486,9 @@ class _TablesScreenState extends State<TablesScreen> {
       // 4. Capacity Filter
       if (_capacityFilter == '2 Seats' && table.capacity > 2) return false;
       if (_capacityFilter == '4 Seats' &&
-          (table.capacity < 3 || table.capacity > 4))
+          (table.capacity < 3 || table.capacity > 4)) {
         return false;
+      }
       if (_capacityFilter == '6+ Seats' && table.capacity < 6) return false;
 
       return true;
@@ -1546,8 +1552,9 @@ class _TablesScreenState extends State<TablesScreen> {
                           item['tableId'] ??
                           (bookedTable is Map ? bookedTable['id'] : null);
 
-                      if (bookedTableId.toString() != table.id.toString())
+                      if (bookedTableId.toString() != table.id.toString()) {
                         continue;
+                      }
 
                       final bookingTimeValue =
                           item['bookingTime'] ?? item['booking_time'];
@@ -3156,8 +3163,9 @@ class _TablesScreenState extends State<TablesScreen> {
                                   selectedColor: AppColors.primary,
                                   visualDensity: VisualDensity.compact,
                                   onSelected: (selected) {
-                                    if (selected)
+                                    if (selected) {
                                       setState(() => _gridSectionFilter = sec);
+                                    }
                                   },
                                 ),
                               );

@@ -1,9 +1,8 @@
-import 'package:flutter/foundation.dart';
-
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'auth_token_storage.dart';
 
 class BackendApiException implements Exception {
   final int statusCode;
@@ -17,6 +16,8 @@ class BackendApiException implements Exception {
 
 class BackendApiClient {
   const BackendApiClient();
+
+  static Future<bool>? _refreshInFlight;
 
   Future<Uri> _uri(String path) async {
     final prefs = await SharedPreferences.getInstance();
@@ -32,7 +33,14 @@ class BackendApiClient {
         ? 'http://$fallbackHost:8081'
         : configuredBaseUrl.replaceFirst(RegExp(r'/$'), '');
 
-    return Uri.parse('$baseUrl$path');
+    final normalizedPath =
+        path.startsWith('/api/') &&
+            !path.startsWith('/api/v1/') &&
+            path != '/api/health'
+        ? '/api/v1${path.substring(4)}'
+        : path;
+
+    return Uri.parse('$baseUrl$normalizedPath');
   }
 
   Future<dynamic> getJson(String path) async {
@@ -61,15 +69,51 @@ class BackendApiClient {
     Map<String, dynamic>? body,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token') ?? prefs.getString('flutter.token');
-    debugPrint('AUTH CHECK: token found = ${token != null && token.isNotEmpty}');
+    var token = await AuthTokenStorage.readAccessToken();
+    // Migrate tokens from older releases once, then remove the insecure copy.
+    if (token == null || token.isEmpty) {
+      token = prefs.getString('token') ?? prefs.getString('flutter.token');
+      if (token != null && token.isNotEmpty) {
+        await AuthTokenStorage.save(accessToken: token);
+        await prefs.remove('token');
+        await prefs.remove('flutter.token');
+      }
+    }
 
+    final response = await _send(method, path, body, token);
+    if (response.statusCode == 401 &&
+        !path.endsWith('/auth/login') &&
+        !path.endsWith('/auth/refresh')) {
+      final refreshToken = await AuthTokenStorage.readRefreshToken();
+      if (refreshToken != null && await _refreshOnce(refreshToken)) {
+        return _decodeResponse(
+          await _send(
+            method,
+            path,
+            body,
+            await AuthTokenStorage.readAccessToken(),
+          ),
+        );
+      }
+      await AuthTokenStorage.clear();
+    }
+    return _decodeResponse(response);
+  }
+
+  Future<http.Response> _send(
+    String method,
+    String path,
+    Map<String, dynamic>? body,
+    String? token,
+  ) async {
     final headers = <String, String>{
       'Accept': 'application/json',
-      if (token != null && token.isNotEmpty)
-        'Authorization': 'Bearer $token',
-      if (body != null) 'Content-Type': 'application/json',
+            if (body != null) 'Content-Type': 'application/json',
     };
+
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
 
     final request = http.Request(method, await _uri(path))
       ..headers.addAll(headers);
@@ -78,12 +122,40 @@ class BackendApiClient {
       request.body = jsonEncode(body);
     }
 
-    final streamedResponse = await http.Client().send(request).timeout(
-      const Duration(seconds: 10),
+    final client = http.Client();
+    try {
+      final streamedResponse = await client
+          .send(request)
+          .timeout(const Duration(seconds: 10));
+      return await http.Response.fromStream(streamedResponse);
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<bool> _refresh(String refreshToken) async {
+    final response = await _send('POST', '/api/v1/auth/refresh', {
+      'refreshToken': refreshToken,
+    }, null);
+    if (response.statusCode < 200 || response.statusCode >= 300) return false;
+    final data = jsonDecode(response.body);
+    if (data is! Map) return false;
+    await AuthTokenStorage.save(
+      accessToken: (data['accessToken'] ?? data['token'])?.toString(),
+      refreshToken: data['refreshToken']?.toString(),
     );
+    return true;
+  }
 
-    final response = await http.Response.fromStream(streamedResponse);
+  Future<bool> _refreshOnce(String refreshToken) {
+    final activeRefresh = _refreshInFlight;
+    if (activeRefresh != null) return activeRefresh;
+    final pending = _refresh(refreshToken);
+    _refreshInFlight = pending;
+    return pending.whenComplete(() => _refreshInFlight = null);
+  }
 
+  dynamic _decodeResponse(http.Response response) {
     dynamic decoded;
     if (response.body.trim().isNotEmpty) {
       decoded = jsonDecode(response.body);
@@ -100,4 +172,3 @@ class BackendApiClient {
     return decoded;
   }
 }
-

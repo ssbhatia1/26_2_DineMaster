@@ -1,4 +1,4 @@
-﻿import 'network_http.dart';
+import 'network_http.dart';
 import 'package:sqflite/sqflite.dart';
 
 class NetworkDatabase implements Database {
@@ -161,9 +161,7 @@ class NetworkDatabase implements Database {
   }
 
   @override
-  Batch batch() => throw UnimplementedError(
-    'Batch operations not supported over NetworkDatabase.',
-  );
+  Batch batch() => NetworkBatch(this);
 
   @override
   Future<T> readTransaction<T>(
@@ -197,18 +195,30 @@ class NetworkDatabase implements Database {
     int? limit,
     int? offset,
     int? bufferSize,
-  }) => throw UnimplementedError(
-    'Cursor operations not supported over NetworkDatabase.',
-  );
+  }) async {
+    final rows = await query(
+      table,
+      distinct: distinct,
+      columns: columns,
+      where: where,
+      whereArgs: whereArgs,
+      groupBy: groupBy,
+      having: having,
+      orderBy: orderBy,
+      limit: limit,
+      offset: offset,
+    );
+    return ListQueryCursor(rows);
+  }
 
   @override
   Future<QueryCursor> rawQueryCursor(
     String sql,
     List<Object?>? arguments, {
     int? bufferSize,
-  }) => throw UnimplementedError(
-    'Cursor operations not supported over NetworkDatabase.',
-  );
+  }) async {
+    return ListQueryCursor(await rawQuery(sql, arguments));
+  }
 
   @override
   Database get database => this;
@@ -304,7 +314,8 @@ class NetworkTransaction implements Transaction {
       _db.rawDelete(sql, arguments);
 
   @override
-  Batch batch() => throw UnimplementedError();
+  @override
+  Batch batch() => _db.batch();
 
   @override
   Future<QueryCursor> queryCursor(
@@ -339,4 +350,149 @@ class NetworkTransaction implements Transaction {
     List<Object?>? arguments, {
     int? bufferSize,
   }) => _db.rawQueryCursor(sql, arguments, bufferSize: bufferSize);
+}
+
+class NetworkBatch implements Batch {
+  final NetworkDatabase _db;
+  final List<Map<String, dynamic>> _operations = [];
+
+  NetworkBatch(this._db);
+
+  @override
+  int get length => _operations.length;
+
+  void _add(String type, Map<String, dynamic> operation) {
+    _operations.add({'type': type, ...operation});
+  }
+
+  @override
+  void rawInsert(String sql, [List<Object?>? arguments]) =>
+      _add('rawInsert', {'sql': sql, 'arguments': arguments});
+
+  @override
+  void insert(
+    String table,
+    Map<String, Object?> values, {
+    String? nullColumnHack,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) => _add('insert', {
+    'table': table,
+    'values': values,
+    'nullColumnHack': nullColumnHack,
+    'conflictAlgorithm': conflictAlgorithm?.toString(),
+  });
+
+  @override
+  void rawUpdate(String sql, [List<Object?>? arguments]) =>
+      _add('rawUpdate', {'sql': sql, 'arguments': arguments});
+
+  @override
+  void update(
+    String table,
+    Map<String, Object?> values, {
+    String? where,
+    List<Object?>? whereArgs,
+    ConflictAlgorithm? conflictAlgorithm,
+  }) => _add('update', {
+    'table': table,
+    'values': values,
+    'where': where,
+    'whereArgs': whereArgs,
+    'conflictAlgorithm': conflictAlgorithm?.toString(),
+  });
+
+  @override
+  void rawDelete(String sql, [List<Object?>? arguments]) =>
+      _add('rawDelete', {'sql': sql, 'arguments': arguments});
+
+  @override
+  void delete(String table, {String? where, List<Object?>? whereArgs}) =>
+      _add('delete', {'table': table, 'where': where, 'whereArgs': whereArgs});
+
+  @override
+  void execute(String sql, [List<Object?>? arguments]) =>
+      _add('execute', {'sql': sql, 'arguments': arguments});
+
+  @override
+  void query(
+    String table, {
+    bool? distinct,
+    List<String>? columns,
+    List<Object?>? whereArgs,
+    String? where,
+    String? groupBy,
+    String? having,
+    String? orderBy,
+    int? limit,
+    int? offset,
+  }) => _add('query', {
+    'table': table,
+    'distinct': distinct,
+    'columns': columns,
+    'where': where,
+    'whereArgs': whereArgs,
+    'groupBy': groupBy,
+    'having': having,
+    'orderBy': orderBy,
+    'limit': limit,
+    'offset': offset,
+  });
+
+  @override
+  void rawQuery(String sql, [List<Object?>? arguments]) =>
+      _add('rawQuery', {'sql': sql, 'arguments': arguments});
+
+  @override
+  Future<List<Object?>> commit({
+    bool? exclusive,
+    bool? noResult,
+    bool? continueOnError,
+  }) async {
+    final response = await _db._post('/api/db/batch', {
+      'operations': _operations,
+      'noResult': noResult ?? false,
+      'continueOnError': continueOnError ?? false,
+    });
+    final results = response['result'];
+    if (results is! List) {
+      throw StateError('Network batch returned an invalid result');
+    }
+    return List<Object?>.from(results);
+  }
+
+  @override
+  Future<List<Object?>> apply({bool? noResult, bool? continueOnError}) =>
+      commit(noResult: noResult, continueOnError: continueOnError);
+}
+
+class ListQueryCursor implements QueryCursor {
+  final List<Map<String, Object?>> _rows;
+  int _index = -1;
+  bool _closed = false;
+
+  ListQueryCursor(this._rows);
+
+  @override
+  Future<bool> moveNext() async {
+    if (_closed) return false;
+    _index++;
+    if (_index >= _rows.length) {
+      _closed = true;
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  Map<String, Object?> get current {
+    if (_closed || _index < 0 || _index >= _rows.length) {
+      throw StateError('Cursor is not positioned on a row');
+    }
+    return _rows[_index];
+  }
+
+  @override
+  Future<void> close() async {
+    _closed = true;
+  }
 }

@@ -6,12 +6,24 @@ import com.dinemaster.user.entity.User;
 
 import java.time.OffsetDateTime;
 import java.util.Set;
+import java.util.List;
 
 public record UserResponse(Long id, String name, String username, String role,
-        boolean active, String contactDetails, String shiftTiming, OffsetDateTime createdAt, Set<String> permissions) {
+        boolean active, String contactDetails, String shiftTiming, OffsetDateTime createdAt,
+        List<Long> branchIds, boolean mustChangePassword, Set<String> permissions) {
     public static UserResponse from(User user, Set<String> permissions) {
+        return from(user, permissions, user.getContactDetails(), List.of());
+    }
+
+    public static UserResponse from(User user, Set<String> permissions, String visibleContactDetails) {
+        return from(user, permissions, visibleContactDetails, List.of());
+    }
+
+    public static UserResponse from(User user, Set<String> permissions,
+            String visibleContactDetails, List<Long> branchIds) {
         return new UserResponse(user.getId(), user.getName(), user.getUsername(), com.dinemaster.role.Roles.canonical(user.getRole()),
-                user.isActive(), user.getContactDetails(), user.getShiftTiming(), user.getCreatedAt(),
+                user.isActive(), visibleContactDetails, user.getShiftTiming(), user.getCreatedAt(),
+                List.copyOf(branchIds), user.isMustChangePassword(),
                 permissions);
     }
 }

@@ -10,13 +10,13 @@ public class UserBranchRepository {
     public UserBranchRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
     public List<Long> findBranchIds(Long userId) {
-        return jdbc.query("select branch_id from user_branches where user_id = ? order by branch_id",
+        return jdbc.query("select branch_id from user_branches where user_id = ? and assignment_verified = true order by branch_id",
                 (rs, row) -> rs.getLong(1), userId);
     }
 
     public boolean isAssigned(Long userId, Long branchId) {
         Integer count = jdbc.queryForObject(
-                "select count(*) from user_branches where user_id = ? and branch_id = ?",
+                "select count(*) from user_branches where user_id = ? and branch_id = ? and assignment_verified = true",
                 Integer.class, userId, branchId);
         return count != null && count > 0;
     }
@@ -24,6 +24,6 @@ public class UserBranchRepository {
     public void replaceBranches(Long userId, List<Long> branchIds) {
         jdbc.update("delete from user_branches where user_id = ?", userId);
         branchIds.stream().distinct().forEach(branchId ->
-                jdbc.update("insert into user_branches (user_id, branch_id) values (?, ?)", userId, branchId));
+                jdbc.update("insert into user_branches (user_id, branch_id, assignment_verified) values (?, ?, true)", userId, branchId));
     }
 }

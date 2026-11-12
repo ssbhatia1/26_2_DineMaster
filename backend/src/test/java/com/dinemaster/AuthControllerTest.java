@@ -4,6 +4,8 @@ package com.dinemaster;
 import com.dinemaster.auth.controller.AuthController;
 import com.dinemaster.user.entity.User;
 import com.dinemaster.user.repository.UserRepository;
+import com.dinemaster.tenant.Tenant;
+import com.dinemaster.tenant.TenantRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,23 +34,29 @@ class AuthControllerTest {
     private UserRepository userRepository;
 
     @Autowired
+    private TenantRepository tenantRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void setUp() {
         userRepository.deleteAllInBatch();
+        tenantRepository.deleteAllInBatch();
+        Tenant tenant = tenantRepository.saveAndFlush(new Tenant("Test tenant"));
         User user = new User();
         user.setName("Owner");
         user.setUsername("owner");
         user.setPassword(passwordEncoder.encode("owner123"));
         user.setRole("Owner");
+        user.setTenantId(tenant.getId());
         user.setActive(true);
         userRepository.saveAndFlush(user);
     }
 
     @Test
     void loginSucceedsWithValidCredentialsAndCanonicalRole() throws Exception {
-        mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"username":"owner","password":"owner123"}
@@ -62,7 +70,7 @@ class AuthControllerTest {
 
     @Test
     void loginRejectsInvalidPassword() throws Exception {
-        mockMvc.perform(post("/api/auth/login")
+        mockMvc.perform(post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"username":"owner","password":"wrong"}
@@ -73,7 +81,7 @@ class AuthControllerTest {
 
     @Test
     void usersEndpointRejectsUnauthenticatedRequests() throws Exception {
-        mockMvc.perform(get("/api/users").accept(MediaType.APPLICATION_JSON))
+        mockMvc.perform(get("/api/v1/users").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
     }
 }

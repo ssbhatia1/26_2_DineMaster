@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -130,12 +130,161 @@ class ServerService {
 
     // Order Placement Endpoint
     router.post('/api/order', (Request request) async {
-      await request.readAsString();
-      // Handle order creation here
-      return Response.ok(
-        jsonEncode({'status': 'success', 'message': 'Order received'}),
-        headers: {'Content-Type': 'application/json'},
-      );
+      try {
+        final decoded = jsonDecode(await request.readAsString());
+        if (decoded is! Map) {
+          return _jsonResponse({
+            'error': 'Request body must be a JSON object',
+          }, statusCode: 400);
+        }
+
+        final body = Map<String, dynamic>.from(decoded);
+        final rawItems = body['items'];
+        if (rawItems is! List || rawItems.isEmpty) {
+          return _jsonResponse({
+            'error': 'At least one order item is required',
+          }, statusCode: 400);
+        }
+
+        final tableValue = body['table']?.toString().trim();
+        final isTakeaway =
+            tableValue == null ||
+            tableValue.isEmpty ||
+            tableValue.toLowerCase() == 'takeaway';
+        final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
+        final db = await DatabaseHelper.instance.database;
+
+        int? tableId;
+        if (!isTakeaway) {
+          final tables = await db.query(
+            'tables',
+            columns: ['id'],
+            where:
+                '(table_number = ? OR CAST(id AS TEXT) = ?) AND restaurant_id = ?',
+            whereArgs: [tableValue, tableValue, restaurantId],
+            limit: 1,
+          );
+          if (tables.isEmpty) {
+            return _jsonResponse({
+              'error': 'Table does not exist for this restaurant',
+            }, statusCode: 400);
+          }
+          tableId = (tables.first['id'] as num).toInt();
+        }
+
+        final preparedItems = <Map<String, dynamic>>[];
+        var total = 0.0;
+        for (final rawItem in rawItems) {
+          if (rawItem is! Map) {
+            return _jsonResponse({
+              'error': 'Each order item must be an object',
+            }, statusCode: 400);
+          }
+          final item = Map<String, dynamic>.from(rawItem);
+          final productId = (item['id'] ?? item['productId']) is num
+              ? ((item['id'] ?? item['productId']) as num).toInt()
+              : int.tryParse(
+                  (item['id'] ?? item['productId'])?.toString() ?? '',
+                );
+          final quantity = item['quantity'] is num
+              ? (item['quantity'] as num).toInt()
+              : 1;
+          if (productId == null ||
+              productId <= 0 ||
+              quantity <= 0 ||
+              quantity > 100) {
+            return _jsonResponse({
+              'error': 'Each item requires a valid product id and quantity',
+            }, statusCode: 400);
+          }
+
+          final products = await db.query(
+            'products',
+            columns: ['id', 'price', 'is_available'],
+            where: 'id = ? AND restaurant_id = ?',
+            whereArgs: [productId, restaurantId],
+            limit: 1,
+          );
+          if (products.isEmpty ||
+              (products.first['is_available'] as num? ?? 0) == 0) {
+            return _jsonResponse({
+              'error': 'Product is unavailable or not found: $productId',
+            }, statusCode: 400);
+          }
+
+          final price = (products.first['price'] as num?)?.toDouble();
+          if (price == null || price < 0) {
+            return _jsonResponse({
+              'error': 'Product has an invalid price: $productId',
+            }, statusCode: 500);
+          }
+          total += price * quantity;
+          preparedItems.add({
+            'product_id': productId,
+            'quantity': quantity,
+            'price': price,
+            'notes': item['notes']?.toString(),
+          });
+        }
+
+        final orderId = await db.transaction((txn) async {
+          final id = await txn.insert('orders', {
+            'table_id': tableId,
+            'total_amount': total,
+            'status': 'Received',
+            'type': isTakeaway ? 'Takeaway' : 'Dine-In',
+            'order_time': DateTime.now().toIso8601String(),
+            'notes': body['notes']?.toString(),
+            'payment_status': 'Unpaid',
+            'discount_amount': 0,
+            'customer_name': body['customerName']?.toString(),
+            'customer_phone': body['customerPhone']?.toString(),
+            'restaurant_id': restaurantId,
+          });
+          for (final item in preparedItems) {
+            await txn.insert('order_items', {
+              ...item,
+              'order_id': id,
+              'status': 'Pending',
+            });
+          }
+          await DatabaseHelper.instance.logOrderStatus(
+            id,
+            'Received',
+            changedBy: 'LAN Customer',
+            executor: txn,
+          );
+          await DatabaseHelper.instance.generateKOTForOrder(id, null, txn);
+          if (tableId != null) {
+            await txn.update(
+              'tables',
+              {'status': 'Occupied'},
+              where: 'id = ?',
+              whereArgs: [tableId],
+            );
+          }
+          return id;
+        });
+
+        broadcastSyncMessage(
+          jsonEncode({
+            'event': 'database_update',
+            'action': 'create_order',
+            'orderId': orderId,
+          }),
+        );
+        return _jsonResponse({
+          'status': 'success',
+          'orderId': orderId,
+          'totalAmount': total,
+        }, statusCode: 201);
+      } on FormatException catch (error) {
+        return _jsonResponse({'error': error.message}, statusCode: 400);
+      } catch (error) {
+        return _jsonResponse({
+          'error': 'Could not create order',
+        }, statusCode: 500);
+      }
     });
 
     // --- DB HTTP Proxy Endpoints ---
@@ -156,6 +305,51 @@ class ServerService {
         );
       } catch (e) {
         return Response.internalServerError(body: e.toString());
+      }
+    });
+
+    router.post('/api/db/batch', (Request request) async {
+      try {
+        final body = jsonDecode(await request.readAsString());
+        if (body is! Map || body['operations'] is! List) {
+          return _jsonResponse({
+            'error': 'Batch operations must be a list',
+          }, statusCode: 400);
+        }
+        final operations = (body['operations'] as List)
+            .map((operation) => Map<String, dynamic>.from(operation as Map))
+            .toList();
+        final continueOnError = body['continueOnError'] == true;
+        final noResult = body['noResult'] == true;
+        final db = await DatabaseHelper.instance.database;
+        final results = await db.transaction((txn) async {
+          final values = <Object?>[];
+          for (final operation in operations) {
+            try {
+              values.add(await _executeBatchOperation(txn, operation));
+            } catch (error) {
+              if (!continueOnError) rethrow;
+              values.add(error.toString());
+            }
+          }
+          return values;
+        });
+
+        broadcastSyncMessage(
+          jsonEncode({
+            'event': 'db_change',
+            'table': 'batch',
+            'type': 'batch',
+            'timestamp': DateTime.now().toIso8601String(),
+          }),
+        );
+        return _jsonResponse({'result': noResult ? <Object?>[] : results});
+      } on FormatException catch (error) {
+        return _jsonResponse({'error': error.message}, statusCode: 400);
+      } catch (error) {
+        return _jsonResponse({
+          'error': 'Batch execution failed',
+        }, statusCode: 500);
       }
     });
 
@@ -484,6 +678,96 @@ class ServerService {
       });
     } catch (e) {
       print('Failed to bind WebSocket server: $e');
+    }
+  }
+
+  Response _jsonResponse(Map<String, dynamic> body, {int statusCode = 200}) {
+    return Response(
+      statusCode,
+      body: jsonEncode(body),
+      headers: {'Content-Type': 'application/json'},
+    );
+  }
+
+  Future<Object?> _executeBatchOperation(
+    DatabaseExecutor db,
+    Map<String, dynamic> operation,
+  ) async {
+    final type = operation['type'] as String?;
+    ConflictAlgorithm? conflictAlgorithm;
+    final conflictValue = operation['conflictAlgorithm'] as String?;
+    if (conflictValue != null) {
+      conflictAlgorithm = ConflictAlgorithm.values
+          .cast<ConflictAlgorithm?>()
+          .firstWhere(
+            (value) => value.toString() == conflictValue,
+            orElse: () => null,
+          );
+    }
+
+    switch (type) {
+      case 'rawInsert':
+        return db.rawInsert(
+          operation['sql'] as String,
+          operation['arguments'] as List?,
+        );
+      case 'rawUpdate':
+        return db.rawUpdate(
+          operation['sql'] as String,
+          operation['arguments'] as List?,
+        );
+      case 'rawDelete':
+        return db.rawDelete(
+          operation['sql'] as String,
+          operation['arguments'] as List?,
+        );
+      case 'execute':
+        await db.execute(
+          operation['sql'] as String,
+          operation['arguments'] as List?,
+        );
+        return null;
+      case 'insert':
+        return db.insert(
+          operation['table'] as String,
+          Map<String, Object?>.from(operation['values'] as Map),
+          nullColumnHack: operation['nullColumnHack'] as String?,
+          conflictAlgorithm: conflictAlgorithm,
+        );
+      case 'update':
+        return db.update(
+          operation['table'] as String,
+          Map<String, Object?>.from(operation['values'] as Map),
+          where: operation['where'] as String?,
+          whereArgs: operation['whereArgs'] as List?,
+          conflictAlgorithm: conflictAlgorithm,
+        );
+      case 'delete':
+        return db.delete(
+          operation['table'] as String,
+          where: operation['where'] as String?,
+          whereArgs: operation['whereArgs'] as List?,
+        );
+      case 'query':
+        return db.query(
+          operation['table'] as String,
+          distinct: operation['distinct'] as bool?,
+          columns: (operation['columns'] as List?)?.cast<String>(),
+          where: operation['where'] as String?,
+          whereArgs: operation['whereArgs'] as List?,
+          groupBy: operation['groupBy'] as String?,
+          having: operation['having'] as String?,
+          orderBy: operation['orderBy'] as String?,
+          limit: operation['limit'] as int?,
+          offset: operation['offset'] as int?,
+        );
+      case 'rawQuery':
+        return db.rawQuery(
+          operation['sql'] as String,
+          operation['arguments'] as List?,
+        );
+      default:
+        throw ArgumentError('Unsupported batch operation');
     }
   }
 

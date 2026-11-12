@@ -30,8 +30,9 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen> {
       List<Map<String, dynamic>> restaurants;
 
       if (kIsWeb) {
-        final response =
-            await const BackendApiClient().getJson('/api/restaurants');
+        final response = await const BackendApiClient().getJson(
+          '/api/v1/branches',
+        );
 
         if (response is! List) {
           throw const FormatException('Unexpected restaurants response');
@@ -56,9 +57,9 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen> {
       setState(() {
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load branches: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not load branches: $e')));
     }
   }
 
@@ -80,7 +81,7 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen> {
               ),
             ),
           ),
-          
+
           // Content
           Center(
             child: ClipRRect(
@@ -120,39 +121,61 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen> {
                       _isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : _restaurants.isEmpty
-                              ? const Text('No branches found', style: TextStyle(color: Colors.white))
-                              : ListView.builder(
-                                  shrinkWrap: true,
-                                  itemCount: _restaurants.length,
-                                  itemBuilder: (context, index) {
-                                    final restaurant = _restaurants[index];
-                                    return Card(
+                          ? const Text(
+                              'No branches found',
+                              style: TextStyle(color: Colors.white),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: _restaurants.length,
+                              itemBuilder: (context, index) {
+                                final restaurant = _restaurants[index];
+                                return Card(
                                       color: Colors.white.withAlpha(25),
                                       margin: const EdgeInsets.only(bottom: 16),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
-                                        side: const BorderSide(color: Colors.white24),
+                                        side: const BorderSide(
+                                          color: Colors.white24,
+                                        ),
                                       ),
                                       child: ListTile(
                                         title: Text(
                                           restaurant['name'],
-                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                         subtitle: Text(
                                           restaurant['address'] ?? 'No address',
-                                          style: const TextStyle(color: Colors.white70),
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                          ),
                                         ),
-                                        trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
+                                        trailing: const Icon(
+                                          Icons.arrow_forward_ios,
+                                          color: Colors.white70,
+                                          size: 16,
+                                        ),
                                         onTap: () async {
                                           final id = restaurant['id'] as int;
-                                          DatabaseHelper.currentRestaurantId = id;
-                                          await ApiMode.setCurrentRestaurantId(id);
-                                          if (context.mounted) context.go('/dashboard');
+                                          DatabaseHelper.currentRestaurantId =
+                                              id;
+                                          await ApiMode.setCurrentRestaurantId(
+                                            id,
+                                          );
+                                          if (context.mounted) {
+                                            context.go('/dashboard');
+                                          }
                                         },
                                       ),
-                                    ).animate().fadeIn(delay: (index * 100).ms).slideX(begin: 0.1);
-                                  },
-                                ),
+                                    )
+                                    .animate()
+                                    .fadeIn(delay: (index * 100).ms)
+                                    .slideX(begin: 0.1);
+                              },
+                            ),
                     ],
                   ),
                 ),

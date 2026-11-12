@@ -13,4 +13,10 @@ public class AuthAuditService {
     public void record(Long userId, String username, String action, boolean success) {
         repository.save(new AuthAuditLog(userId, username, action, success));
     }
+
+    public void record(Long userId, String username, String action, boolean success,
+            Long actorUserId, Long tenantId, Long branchId, String reason) {
+        repository.save(new AuthAuditLog(userId, username, action, success,
+                actorUserId, tenantId, branchId, reason));
+    }
 }

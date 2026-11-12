@@ -1,10 +1,11 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../core/api/api_mode.dart';
 import '../core/database/database_helper.dart';
 import '../models/user_model.dart';
+import '../repositories/restaurant_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/sync_service.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
@@ -27,6 +28,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   StreamSubscription? _syncSubscription;
 
   final UserRepository _userRepository = UserRepository();
+  final RestaurantRepository _restaurantRepository = RestaurantRepository();
+  List<Map<String, dynamic>> _branches = [];
 
   @override
   void initState() {
@@ -34,6 +37,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
     _tabController = TabController(length: 3, vsync: this);
     _loadUsers();
+    _loadBranches();
 
     // Keep existing synchronization behavior on supported platforms.
     _syncSubscription = SyncService.instance.syncEvents.listen((event) {
@@ -77,6 +81,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       case 'CHEF':
       case 'COOK':
         return 'Chef';
+      case 'INVENTORY_MANAGER':
+        return 'Inventory Manager';
       case 'STAFF':
       case 'EMPLOYEE':
         return 'Other Staff';
@@ -121,11 +127,20 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     }
   }
 
+  Future<void> _loadBranches() async {
+    try {
+      if (!await _useBackendApi()) return;
+      final branches = await _restaurantRepository.getRestaurants();
+      if (mounted) setState(() => _branches = branches);
+    } catch (e) {
+      debugPrint('Error loading branches: $e');
+    }
+  }
+
   void _showUserDialog([Map<String, dynamic>? user]) {
     _obscurePassword = true;
 
     final isEditing = user != null;
-
     final nameController = TextEditingController(
       text: isEditing ? (user['name'] ?? '').toString() : '',
     );
@@ -159,7 +174,17 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     bool isActive = isEditing
         ? _isActiveValue(user['is_active'] ?? user['active'])
         : true;
-
+    final existingBranchIds = isEditing
+        ? ((user['branch_ids'] ?? user['branchIds']) as List<dynamic>? ??
+                  const [])
+              .whereType<num>()
+              .map((id) => id.toInt())
+              .toList()
+        : <int>[];
+    final selectedBranchIds = {...existingBranchIds};
+    if (selectedBranchIds.isEmpty && _branches.length == 1) {
+      selectedBranchIds.add((_branches.first['id'] as num).toInt());
+    }
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -235,14 +260,21 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 DropdownButtonFormField<String>(
                   key: ValueKey(role),
                   initialValue: role,
-                  items: const ['Owner', 'Manager', 'Cashier', 'Waiter', 'Chef']
-                      .map((r) {
+                  items:
+                      const [
+                        'Owner',
+                        'Manager',
+                        'Cashier',
+                        'Waiter',
+                        'Chef',
+                        'Inventory Manager',
+                        'Other Staff',
+                      ].map((r) {
                         return DropdownMenuItem<String>(
                           value: r,
                           child: Text(r),
                         );
-                      })
-                      .toList(),
+                      }).toList(),
                   onChanged: (value) {
                     if (value != null) {
                       setStateDialog(() => role = value);
@@ -255,6 +287,31 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                   ),
                 ),
                 const SizedBox(height: 12),
+                if (_branches.isNotEmpty) ...[
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Authorized branches'),
+                  ),
+                  ..._branches.map((branch) {
+                    final branchId = (branch['id'] as num).toInt();
+                    return CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        (branch['name'] ?? 'Branch $branchId').toString(),
+                      ),
+                      value: selectedBranchIds.contains(branchId),
+                      onChanged: (selected) {
+                        setStateDialog(() {
+                          if (selected == true) {
+                            selectedBranchIds.add(branchId);
+                          } else {
+                            selectedBranchIds.remove(branchId);
+                          }
+                        });
+                      },
+                    );
+                  }),
+                ],
                 TextField(
                   controller: contactController,
                   decoration: const InputDecoration(
@@ -302,9 +359,29 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 if (name.isEmpty || username.isEmpty || password.isEmpty) {
                   return;
                 }
-
                 try {
                   if (await _useBackendApi()) {
+                    final currentBranchId = await ApiMode.currentRestaurantId();
+                    if (selectedBranchIds.isEmpty &&
+                        currentBranchId != null &&
+                        _branches.isEmpty) {
+                      selectedBranchIds.add(currentBranchId);
+                    }
+                    if (selectedBranchIds.isEmpty && _branches.isNotEmpty) {
+                      if (dialogContext.mounted) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          const SnackBar(
+                            content: Text('Assign at least one branch'),
+                          ),
+                        );
+                      }
+                      return;
+                    }
+                    final branchIds = selectedBranchIds.isNotEmpty
+                        ? selectedBranchIds.toList()
+                        : (currentBranchId == null
+                              ? <int>[]
+                              : [currentBranchId]);
                     final apiUser = UserModel(
                       id: isEditing ? (user['id'] as num?)?.toInt() : null,
                       name: name,
@@ -318,6 +395,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                           ? (user['created_at'] ?? user['createdAt'] ?? '')
                                 .toString()
                           : DateTime.now().toIso8601String(),
+                      branchIds: branchIds,
                     );
 
                     if (isEditing) {
@@ -784,5 +862,3 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     );
   }
 }
-
-

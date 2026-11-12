@@ -37,6 +37,8 @@ class InternetAddress {
 }
 
 class InternetAddressType {
+  // Keep the same member name as dart:io for the cross-platform stub.
+  // ignore: constant_identifier_names
   static const InternetAddressType IPv4 = InternetAddressType();
   const InternetAddressType();
 }

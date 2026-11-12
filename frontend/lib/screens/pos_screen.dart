@@ -450,8 +450,9 @@ class _PosScreenState extends State<PosScreen>
                 final List<String> parts = [];
                 if (selectedDietary != null) parts.add(selectedDietary!);
                 if (selectedTaste != null) parts.add(selectedTaste!);
-                if (notesCtrl.text.trim().isNotEmpty)
+                if (notesCtrl.text.trim().isNotEmpty) {
                   parts.add(notesCtrl.text.trim());
+                }
                 final customNote = parts.isNotEmpty ? parts.join(', ') : null;
 
                 Navigator.pop(context);
@@ -940,8 +941,9 @@ class _PosScreenState extends State<PosScreen>
       discountAmount: _getDiscount(),
     );
 
-    if (order.id == null)
+    if (order.id == null) {
       throw StateError('Backend did not return an order ID');
+    }
     if (hold) {
       await _orderApiRepository.hold(order.id!);
     } else if (_selectedPaymentType != 'Split') {
@@ -1918,26 +1920,30 @@ class _PosScreenState extends State<PosScreen>
                             // Record all payment items
                             final List<Map<String, dynamic>> paymentsToInsert =
                                 [];
-                            if (enteredCash > 0)
+                            if (enteredCash > 0) {
                               paymentsToInsert.add({
                                 'mode': 'Cash',
                                 'val': enteredCash,
                               });
-                            if (enteredUpi > 0)
+                            }
+                            if (enteredUpi > 0) {
                               paymentsToInsert.add({
                                 'mode': 'UPI',
                                 'val': enteredUpi,
                               });
-                            if (enteredCard > 0)
+                            }
+                            if (enteredCard > 0) {
                               paymentsToInsert.add({
                                 'mode': 'Card',
                                 'val': enteredCard,
                               });
-                            if (enteredWallet > 0)
+                            }
+                            if (enteredWallet > 0) {
                               paymentsToInsert.add({
                                 'mode': 'Wallet',
                                 'val': enteredWallet,
                               });
+                            }
 
                             for (var pay in paymentsToInsert) {
                               await db.insert('payments', {

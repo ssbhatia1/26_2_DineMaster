@@ -19,7 +19,7 @@ class OrderApiRepository {
     int? guestCount,
     double discountAmount = 0,
   }) async {
-    final response = await _apiClient.postJson('/api/orders', {
+    final response = await _apiClient.postJson('/api/v1/orders', {
       'restaurantId': restaurantId,
       if (tableId != null) 'tableId': tableId,
       if (customerId != null) 'customerId': customerId,
@@ -43,18 +43,18 @@ class OrderApiRepository {
 
   Future<List<OrderModel>> getOrders(int restaurantId) async {
     final response = await _apiClient.getJson(
-      '/api/orders?restaurantId=$restaurantId',
+      '/api/v1/orders?restaurantId=$restaurantId',
     );
     return _parseOrders(response);
   }
 
   Future<OrderModel> getOrder(int id) async {
-    final response = await _apiClient.getJson('/api/orders/$id');
+    final response = await _apiClient.getJson('/api/v1/orders/$id');
     return OrderModel.fromMap(Map<String, dynamic>.from(response as Map));
   }
 
   Future<List<OrderItemModel>> getOrderItems(int orderId) async {
-    final response = await _apiClient.getJson('/api/orders/$orderId/items');
+    final response = await _apiClient.getJson('/api/v1/orders/$orderId/items');
     if (response is! List) {
       throw const FormatException(
         'Expected an order item list from the backend',
@@ -69,29 +69,34 @@ class OrderApiRepository {
   }
 
   Future<OrderModel> updateStatus(int orderId, String status) async {
-    final response = await _apiClient.patchJson('/api/orders/$orderId/status', {
-      'status': status,
-    });
+    final response = await _apiClient.patchJson(
+      '/api/v1/orders/$orderId/status',
+      {'status': status},
+    );
     return OrderModel.fromMap(Map<String, dynamic>.from(response as Map));
   }
 
   Future<OrderModel> hold(int orderId) async {
-    final response = await _apiClient.postJson('/api/orders/$orderId/hold', {});
+    final response = await _apiClient.postJson(
+      '/api/v1/orders/$orderId/hold',
+      {},
+    );
     return OrderModel.fromMap(Map<String, dynamic>.from(response as Map));
   }
 
   Future<OrderModel> cancel(int orderId) async {
     final response = await _apiClient.postJson(
-      '/api/orders/$orderId/cancel',
+      '/api/v1/orders/$orderId/cancel',
       {},
     );
     return OrderModel.fromMap(Map<String, dynamic>.from(response as Map));
   }
 
   Future<OrderModel> recordPayment(int orderId, String paymentMethod) async {
-    final response = await _apiClient.postJson('/api/orders/$orderId/payment', {
-      'paymentMethod': paymentMethod,
-    });
+    final response = await _apiClient.postJson(
+      '/api/v1/orders/$orderId/payment',
+      {'paymentMethod': paymentMethod},
+    );
     return OrderModel.fromMap(Map<String, dynamic>.from(response as Map));
   }
 

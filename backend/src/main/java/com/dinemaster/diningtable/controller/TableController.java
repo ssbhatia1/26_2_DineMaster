@@ -14,6 +14,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import com.dinemaster.security.BranchScopeService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -27,23 +29,26 @@ public class TableController {
 
     private final DiningTableRepository diningTableRepository;
     private final RestaurantRepository restaurantRepository;
+    private final BranchScopeService branchScope;
 
     public TableController(
             DiningTableRepository diningTableRepository,
-            RestaurantRepository restaurantRepository) {
+            RestaurantRepository restaurantRepository,
+            BranchScopeService branchScope) {
         this.diningTableRepository = diningTableRepository;
         this.restaurantRepository = restaurantRepository;
+        this.branchScope = branchScope;
     }
 
     @GetMapping
     @PreAuthorize("hasAuthority('table:view')")
     public ResponseEntity<List<Map<String, Object>>> getAllTables(
-            @RequestParam(required = false) Long restaurantId) {
+            @RequestParam Long restaurantId, Authentication authentication) {
+        branchScope.requireBranch(authentication, restaurantId);
         List<Map<String, Object>> response = new ArrayList<>();
 
-        List<DiningTable> tables = restaurantId == null
-                ? diningTableRepository.findAll()
-                : diningTableRepository.findByRestaurant_IdOrderByTableNumberAsc(restaurantId);
+        List<DiningTable> tables =
+                diningTableRepository.findByRestaurant_IdOrderByTableNumberAsc(restaurantId);
         for (DiningTable table : tables) {
             response.add(toTableResponse(table));
         }
@@ -53,9 +58,12 @@ public class TableController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('table:view')")
-    public ResponseEntity<?> getTableById(@PathVariable Long id) {
+    public ResponseEntity<?> getTableById(@PathVariable Long id, Authentication authentication) {
         return diningTableRepository.findById(id)
-                .<ResponseEntity<?>>map(table -> ResponseEntity.ok(toTableResponse(table)))
+                .<ResponseEntity<?>>map(table -> {
+                    branchScope.requireBranch(authentication, table.getRestaurant().getId());
+                    return ResponseEntity.ok(toTableResponse(table));
+                })
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("message", "Table not found")));
     }
@@ -64,13 +72,17 @@ public class TableController {
     @PreAuthorize("hasAuthority('table:update_status')")
     public ResponseEntity<?> updateStatus(
             @PathVariable Long id,
-            @RequestParam String status) {
+            @RequestParam String status, Authentication authentication) {
         if (status == null || status.isBlank() || status.length() > 30) {
             return ResponseEntity.badRequest()
                     .body(Map.of("message", "A valid table status is required"));
         }
         return diningTableRepository.findById(id)
                 .<ResponseEntity<?>>map(table -> {
+                    branchScope.requireBranch(authentication, table.getRestaurant().getId());
+                    if (!List.of("Available", "Occupied", "Reserved", "Cleaning").contains(status.trim())) {
+                        return ResponseEntity.badRequest().body(Map.of("message", "Invalid table status"));
+                    }
                     table.setStatus(status.trim());
                     return ResponseEntity.ok(toTableResponse(
                             diningTableRepository.save(table)));
@@ -82,10 +94,11 @@ public class TableController {
     @PostMapping
     @PreAuthorize("hasAuthority('table:manage_layout')")
     public ResponseEntity<?> createTable(
-            @Valid @RequestBody TableRequest request) {
+            @Valid @RequestBody TableRequest request, Authentication authentication) {
+        branchScope.requireBranch(authentication, request.getRestaurantId());
 
-        if (diningTableRepository.existsByTableNumber(
-                request.getTableNumber())) {
+        if (diningTableRepository.existsByRestaurant_IdAndTableNumber(
+                request.getRestaurantId(), request.getTableNumber())) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("message", "Table number already exists"));
         }
@@ -107,14 +120,16 @@ public class TableController {
     @PreAuthorize("hasAuthority('table:manage_layout')")
     public ResponseEntity<?> updateTable(
             @PathVariable Long id,
-            @Valid @RequestBody TableRequest request) {
+            @Valid @RequestBody TableRequest request, Authentication authentication) {
+        branchScope.requireBranch(authentication, request.getRestaurantId());
 
         return diningTableRepository.findById(id)
                 .<ResponseEntity<?>>map(existing -> {
 
                     boolean duplicate = !existing.getTableNumber().equals(
                             request.getTableNumber())
-                            && diningTableRepository.existsByTableNumber(
+                            && diningTableRepository.existsByRestaurant_IdAndTableNumber(
+                            existing.getRestaurant().getId(), request.getTableNumber())) {
                                     request.getTableNumber());
 
                     if (duplicate) {
@@ -139,13 +154,15 @@ public class TableController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('table:manage_layout')")
-    public ResponseEntity<?> deleteTable(@PathVariable Long id) {
-        if (!diningTableRepository.existsById(id)) {
+    public ResponseEntity<?> deleteTable(@PathVariable Long id, Authentication authentication) {
+        DiningTable table = diningTableRepository.findById(id).orElse(null);
+        if (table == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("message", "Table not found"));
         }
-
-        diningTableRepository.deleteById(id);
+        branchScope.requireBranch(authentication, table.getRestaurant().getId());
+        table.setActive(false);
+        diningTableRepository.save(table);
         return ResponseEntity.noContent().build();
     }
 

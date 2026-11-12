@@ -40,6 +40,9 @@ public class User {
     @Column(name = "permission_version", nullable = false)
     private int permissionVersion = 1;
 
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword;
+
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
@@ -116,6 +119,10 @@ public class User {
     public int getPermissionVersion() { return permissionVersion; }
 
     public void setPermissionVersion(int permissionVersion) { this.permissionVersion = permissionVersion; }
+
+    public boolean isMustChangePassword() { return mustChangePassword; }
+
+    public void setMustChangePassword(boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
 
     public boolean isActive() {
         return isActive;

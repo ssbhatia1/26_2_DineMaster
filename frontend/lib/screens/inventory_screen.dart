@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import '../core/database/database_helper.dart';
+import '../core/api/api_mode.dart';
 import '../services/backend_api_client.dart';
 import 'package:dine_master/core/theme/app_colors.dart';
 
@@ -27,70 +27,79 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _loadInventory() async {
-  setState(() => _isLoading = true);
+    setState(() => _isLoading = true);
 
-  try {
-    if (kIsWeb) {
-      final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
-      final response = await BackendApiClient().getJson(
-        '/api/inventory?restaurantId=$restaurantId',
-      );
+    try {
+      if (await ApiMode.useBackendApi()) {
+        final restaurantId = DatabaseHelper.currentRestaurantId ?? 1;
+        final response = await BackendApiClient().getJson(
+          '/api/v1/inventory?restaurantId=$restaurantId',
+        );
 
-      final List<dynamic> items = response is List
-          ? response
-          : (response['content'] as List<dynamic>? ?? []);
+        final List<dynamic> items = response is List
+            ? response
+            : (response['content'] as List<dynamic>? ?? []);
 
-      _inventoryItems = items.map<Map<String, dynamic>>((raw) {
-        final item = Map<String, dynamic>.from(raw as Map);
-        return {
-          ...item,
-          'id': item['id'],
-          'item_name': item['itemName'] ?? item['item_name'] ?? '',
-          'current_stock': item['currentStock'] ?? item['current_stock'] ?? 0,
-          'low_stock_threshold':
-              item['lowStockThreshold'] ?? item['low_stock_threshold'] ?? 0,
-          'unit': item['unit'] ?? '',
-          'restaurant_id': item['restaurantId'] ?? item['restaurant_id'],
-          'expiry_date': item['expiryDate'] ?? item['expiry_date'],
-        };
-      }).toList();
-    } else {
-      final db = await _dbHelper.database;
-      final restaurantId = DatabaseHelper.currentRestaurantId;
-      _inventoryItems = await db.query(
-        'inventory',
-        where: 'restaurant_id = ?',
-        whereArgs: [restaurantId],
-        orderBy: 'item_name ASC',
-      );
+        _inventoryItems = items.map<Map<String, dynamic>>((raw) {
+          final item = Map<String, dynamic>.from(raw as Map);
+          return {
+            ...item,
+            'id': item['id'],
+            'item_name': item['itemName'] ?? item['item_name'] ?? '',
+            'current_stock': item['currentStock'] ?? item['current_stock'] ?? 0,
+            'low_stock_threshold':
+                item['lowStockThreshold'] ?? item['low_stock_threshold'] ?? 0,
+            'unit': item['unit'] ?? '',
+            'restaurant_id': item['restaurantId'] ?? item['restaurant_id'],
+            'expiry_date': item['expiryDate'] ?? item['expiry_date'],
+          };
+        }).toList();
+      } else {
+        final db = await _dbHelper.database;
+        final restaurantId = DatabaseHelper.currentRestaurantId;
+        _inventoryItems = await db.query(
+          'inventory',
+          where: 'restaurant_id = ?',
+          whereArgs: [restaurantId],
+          orderBy: 'item_name ASC',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load inventory: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load inventory: $e')),
-      );
-    }
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
 
   List<Map<String, dynamic>> get _filteredItems {
     return _inventoryItems.where((item) {
       // Search
       final name = (item['item_name'] as String).toLowerCase();
-      if (_searchQuery.isNotEmpty && !name.contains(_searchQuery.toLowerCase())) {
+      if (_searchQuery.isNotEmpty &&
+          !name.contains(_searchQuery.toLowerCase())) {
         return false;
       }
 
       // Status
       final stock = (item['current_stock'] as num).toDouble();
       final threshold = (item['low_stock_threshold'] as num).toDouble();
-      
-      if (_filterStatus == 'Out of Stock' && stock <= 0) return _filterStatus == 'Out of Stock'; // Actually, if filter is out of stock, we ONLY want stock <= 0.
-      if (_filterStatus == 'Out of Stock' && stock > 0) return false;
-      if (_filterStatus == 'Low Stock' && (stock <= 0 || stock > threshold)) return false;
-      if (_filterStatus == 'Healthy' && stock <= threshold) return false;
+
+      if (_filterStatus == 'Out of Stock' && stock <= 0) {
+        return true;
+      }
+      if (_filterStatus == 'Out of Stock' && stock > 0) {
+        return false;
+      }
+      if (_filterStatus == 'Low Stock' && (stock <= 0 || stock > threshold)) {
+        return false;
+      }
+      if (_filterStatus == 'Healthy' && stock <= threshold) {
+        return false;
+      }
 
       return true;
     }).toList();
@@ -98,8 +107,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   // KPIs
   int get _totalItems => _inventoryItems.length;
-  int get _lowStockCount => _inventoryItems.where((i) => (i['current_stock'] as num) > 0 && (i['current_stock'] as num) <= (i['low_stock_threshold'] as num)).length;
-  int get _outOfStockCount => _inventoryItems.where((i) => (i['current_stock'] as num) <= 0).length;
+  int get _lowStockCount => _inventoryItems
+      .where(
+        (i) =>
+            (i['current_stock'] as num) > 0 &&
+            (i['current_stock'] as num) <= (i['low_stock_threshold'] as num),
+      )
+      .length;
+  int get _outOfStockCount =>
+      _inventoryItems.where((i) => (i['current_stock'] as num) <= 0).length;
 
   void _showAddInventoryDialog() {
     final nameController = TextEditingController();
@@ -110,14 +126,20 @@ class _InventoryScreenState extends State<InventoryScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add New Item', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Add New Item',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameController,
-                decoration: const InputDecoration(labelText: 'Item Name', prefixIcon: Icon(Icons.inventory_2_outlined)),
+                decoration: const InputDecoration(
+                  labelText: 'Item Name',
+                  prefixIcon: Icon(Icons.inventory_2_outlined),
+                ),
               ),
               const SizedBox(height: 12),
               Row(
@@ -125,7 +147,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   Expanded(
                     child: TextField(
                       controller: stockController,
-                      decoration: const InputDecoration(labelText: 'Initial Stock', prefixIcon: Icon(Icons.numbers)),
+                      decoration: const InputDecoration(
+                        labelText: 'Initial Stock',
+                        prefixIcon: Icon(Icons.numbers),
+                      ),
                       keyboardType: TextInputType.number,
                     ),
                   ),
@@ -133,7 +158,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   Expanded(
                     child: TextField(
                       controller: unitController,
-                      decoration: const InputDecoration(labelText: 'Unit (e.g. kg)'),
+                      decoration: const InputDecoration(
+                        labelText: 'Unit (e.g. kg)',
+                      ),
                     ),
                   ),
                 ],
@@ -141,7 +168,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: thresholdController,
-                decoration: const InputDecoration(labelText: 'Low Stock Threshold', prefixIcon: Icon(Icons.warning_amber)),
+                decoration: const InputDecoration(
+                  labelText: 'Low Stock Threshold',
+                  prefixIcon: Icon(Icons.warning_amber),
+                ),
                 keyboardType: TextInputType.number,
               ),
             ],
@@ -153,7 +183,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () async {
               if (nameController.text.trim().isEmpty ||
                   stockController.text.isEmpty ||
@@ -169,21 +202,38 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 final stock = double.tryParse(stockController.text);
                 final threshold = double.tryParse(thresholdController.text);
 
-                if (stock == null || threshold == null || stock < 0 || threshold < 0) {
+                if (stock == null ||
+                    threshold == null ||
+                    stock < 0 ||
+                    threshold < 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Enter valid non-negative stock values.')),
+                    const SnackBar(
+                      content: Text('Enter valid non-negative stock values.'),
+                    ),
                   );
                   return;
                 }
 
-                await BackendApiClient().postJson('/api/inventory', {
-                  'itemName': nameController.text.trim(),
-                  'currentStock': stock,
-                  'unit': unitController.text.trim(),
-                  'lowStockThreshold': threshold,
-                  'expiryDate': null,
-                  'restaurantId': DatabaseHelper.currentRestaurantId ?? 1,
-                });
+                if (await ApiMode.useBackendApi()) {
+                  await BackendApiClient().postJson('/api/v1/inventory', {
+                    'itemName': nameController.text.trim(),
+                    'currentStock': stock,
+                    'unit': unitController.text.trim(),
+                    'lowStockThreshold': threshold,
+                    'expiryDate': null,
+                    'restaurantId': DatabaseHelper.currentRestaurantId ?? 1,
+                  });
+                } else {
+                  final db = await _dbHelper.database;
+                  await db.insert('inventory', {
+                    'item_name': nameController.text.trim(),
+                    'current_stock': stock,
+                    'unit': unitController.text.trim(),
+                    'low_stock_threshold': threshold,
+                    'expiry_date': null,
+                    'restaurant_id': DatabaseHelper.currentRestaurantId ?? 1,
+                  });
+                }
 
                 if (!mounted) return;
                 Navigator.pop(context);
@@ -212,12 +262,18 @@ class _InventoryScreenState extends State<InventoryScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            title: Text('Adjust Stock: ${item['item_name']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text(
+              'Adjust Stock: ${item['item_name']}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Current Stock: ${item['current_stock']} ${item['unit']}', style: const TextStyle(fontSize: 16)),
+                Text(
+                  'Current Stock: ${item['current_stock']} ${item['unit']}',
+                  style: const TextStyle(fontSize: 16),
+                ),
                 const SizedBox(height: 16),
                 SegmentedButton<String>(
                   segments: const [
@@ -234,7 +290,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 TextField(
                   controller: qtyController,
                   decoration: InputDecoration(
-                    labelText: mode == 'Set' ? 'New Total Quantity' : 'Quantity to $mode',
+                    labelText: mode == 'Set'
+                        ? 'New Total Quantity'
+                        : 'Quantity to $mode',
                     suffixText: item['unit'],
                     border: const OutlineInputBorder(),
                   ),
@@ -248,19 +306,38 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
                 onPressed: () async {
                   final val = double.tryParse(qtyController.text);
                   if (val != null) {
-
                     try {
-                      await BackendApiClient().patchJson(
-                        '/api/inventory/${item['id']}/stock',
-                        {
-                          'mode': mode.toLowerCase(),
-                          'quantity': val,
-                        },
-                      );
+                      if (await ApiMode.useBackendApi()) {
+                        await BackendApiClient().patchJson(
+                          '/api/v1/inventory/${item['id']}/stock',
+                          {'mode': mode.toLowerCase(), 'quantity': val},
+                        );
+                      } else {
+                        final db = await _dbHelper.database;
+                        final current = (item['current_stock'] as num)
+                            .toDouble();
+                        final updated = switch (mode) {
+                          'Add' => current + val,
+                          'Deduct' => current - val,
+                          _ => val,
+                        };
+                        if (updated < 0) {
+                          throw StateError('Stock cannot be negative');
+                        }
+                        await db.update(
+                          'inventory',
+                          {'current_stock': updated},
+                          where: 'id = ?',
+                          whereArgs: [item['id']],
+                        );
+                      }
                     } catch (e) {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -277,7 +354,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               ),
             ],
           );
-        }
+        },
       ),
     );
   }
@@ -285,7 +362,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
   void _showEditDetailsDialog(Map<String, dynamic> item) {
     final nameController = TextEditingController(text: item['item_name']);
     final unitController = TextEditingController(text: item['unit']);
-    final thresholdController = TextEditingController(text: item['low_stock_threshold'].toString());
+    final thresholdController = TextEditingController(
+      text: item['low_stock_threshold'].toString(),
+    );
 
     showDialog(
       context: context,
@@ -294,41 +373,77 @@ class _InventoryScreenState extends State<InventoryScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Item Name')),
-            TextField(controller: unitController, decoration: const InputDecoration(labelText: 'Unit')),
-            TextField(controller: thresholdController, decoration: const InputDecoration(labelText: 'Low Stock Threshold'), keyboardType: TextInputType.number),
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Item Name'),
+            ),
+            TextField(
+              controller: unitController,
+              decoration: const InputDecoration(labelText: 'Unit'),
+            ),
+            TextField(
+              controller: thresholdController,
+              decoration: const InputDecoration(
+                labelText: 'Low Stock Threshold',
+              ),
+              keyboardType: TextInputType.number,
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () async {
-              if (nameController.text.isNotEmpty && unitController.text.isNotEmpty && thresholdController.text.isNotEmpty) {
+              if (nameController.text.isNotEmpty &&
+                  unitController.text.isNotEmpty &&
+                  thresholdController.text.isNotEmpty) {
                 try {
-                await BackendApiClient().putJson(
-                  '/api/inventory/${item['id']}',
-                  {
-                    'itemName': nameController.text.trim(),
-                    'currentStock': (item['current_stock'] as num).toDouble(),
-                    'unit': unitController.text.trim(),
-                    'lowStockThreshold':
-                        double.tryParse(thresholdController.text) ?? 0.0,
-                    'expiryDate': item['expiry_date'],
-                    'restaurantId': item['restaurant_id'] ??
-                        DatabaseHelper.currentRestaurantId ?? 1,
-                  },
-                );
-                if (!mounted) return;
-                Navigator.pop(context);
-                _loadInventory();
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to update item: $e')),
-                  );
+                  if (await ApiMode.useBackendApi()) {
+                    await BackendApiClient()
+                        .putJson('/api/v1/inventory/${item['id']}', {
+                          'itemName': nameController.text.trim(),
+                          'currentStock': (item['current_stock'] as num)
+                              .toDouble(),
+                          'unit': unitController.text.trim(),
+                          'lowStockThreshold':
+                              double.tryParse(thresholdController.text) ?? 0.0,
+                          'expiryDate': item['expiry_date'],
+                          'restaurantId':
+                              item['restaurant_id'] ??
+                              DatabaseHelper.currentRestaurantId ??
+                              1,
+                        });
+                  } else {
+                    final db = await _dbHelper.database;
+                    await db.update(
+                      'inventory',
+                      {
+                        'item_name': nameController.text.trim(),
+                        'unit': unitController.text.trim(),
+                        'low_stock_threshold':
+                            double.tryParse(thresholdController.text) ?? 0.0,
+                      },
+                      where: 'id = ?',
+                      whereArgs: [item['id']],
+                    );
+                  }
+                  if (!mounted) return;
+                  Navigator.pop(context);
+                  _loadInventory();
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to update item: $e')),
+                    );
+                  }
                 }
-              }
               }
             },
             child: const Text('Save'),
@@ -338,7 +453,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  Widget _buildKpiCard(String title, String value, IconData icon, Color color, {bool isMobile = false}) {
+  Widget _buildKpiCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color, {
+    bool isMobile = false,
+  }) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -407,7 +528,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
       ),
       child: Text(
         label,
-        style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -420,7 +545,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text('Inventory Management', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Inventory Management',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -428,10 +556,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 16, vertical: 8),
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 10 : 16,
+                vertical: 8,
+              ),
             ),
             icon: const Icon(Icons.add, size: 18),
-            label: Text(isMobile ? 'New Item' : 'New Item', style: const TextStyle(fontSize: 13)),
+            label: Text(
+              isMobile ? 'New Item' : 'New Item',
+              style: const TextStyle(fontSize: 13),
+            ),
             onPressed: _showAddInventoryDialog,
           ),
           const SizedBox(width: 16),
@@ -448,29 +582,91 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   if (isMobile) ...[
                     Row(
                       children: [
-                        Expanded(child: _buildKpiCard('Total Items', _totalItems.toString(), Icons.inventory_2, AppColors.primary, isMobile: true)),
+                        Expanded(
+                          child: _buildKpiCard(
+                            'Total Items',
+                            _totalItems.toString(),
+                            Icons.inventory_2,
+                            AppColors.primary,
+                            isMobile: true,
+                          ),
+                        ),
                         const SizedBox(width: 8),
-                        Expanded(child: _buildKpiCard('Healthy', (_totalItems - _lowStockCount - _outOfStockCount).toString(), Icons.check_circle, Colors.green, isMobile: true)),
+                        Expanded(
+                          child: _buildKpiCard(
+                            'Healthy',
+                            (_totalItems - _lowStockCount - _outOfStockCount)
+                                .toString(),
+                            Icons.check_circle,
+                            Colors.green,
+                            isMobile: true,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Expanded(child: _buildKpiCard('Low Stock', _lowStockCount.toString(), Icons.warning_amber_rounded, Colors.orange, isMobile: true)),
+                        Expanded(
+                          child: _buildKpiCard(
+                            'Low Stock',
+                            _lowStockCount.toString(),
+                            Icons.warning_amber_rounded,
+                            Colors.orange,
+                            isMobile: true,
+                          ),
+                        ),
                         const SizedBox(width: 8),
-                        Expanded(child: _buildKpiCard('Out of Stock', _outOfStockCount.toString(), Icons.error_outline, Colors.red, isMobile: true)),
+                        Expanded(
+                          child: _buildKpiCard(
+                            'Out of Stock',
+                            _outOfStockCount.toString(),
+                            Icons.error_outline,
+                            Colors.red,
+                            isMobile: true,
+                          ),
+                        ),
                       ],
                     ),
                   ] else ...[
                     Row(
                       children: [
-                        Expanded(child: _buildKpiCard('Total Items', _totalItems.toString(), Icons.inventory_2, AppColors.primary)),
+                        Expanded(
+                          child: _buildKpiCard(
+                            'Total Items',
+                            _totalItems.toString(),
+                            Icons.inventory_2,
+                            AppColors.primary,
+                          ),
+                        ),
                         const SizedBox(width: 16),
-                        Expanded(child: _buildKpiCard('Healthy Stock', (_totalItems - _lowStockCount - _outOfStockCount).toString(), Icons.check_circle, Colors.green)),
+                        Expanded(
+                          child: _buildKpiCard(
+                            'Healthy Stock',
+                            (_totalItems - _lowStockCount - _outOfStockCount)
+                                .toString(),
+                            Icons.check_circle,
+                            Colors.green,
+                          ),
+                        ),
                         const SizedBox(width: 16),
-                        Expanded(child: _buildKpiCard('Low Stock', _lowStockCount.toString(), Icons.warning_amber_rounded, Colors.orange)),
+                        Expanded(
+                          child: _buildKpiCard(
+                            'Low Stock',
+                            _lowStockCount.toString(),
+                            Icons.warning_amber_rounded,
+                            Colors.orange,
+                          ),
+                        ),
                         const SizedBox(width: 16),
-                        Expanded(child: _buildKpiCard('Out of Stock', _outOfStockCount.toString(), Icons.error_outline, Colors.red)),
+                        Expanded(
+                          child: _buildKpiCard(
+                            'Out of Stock',
+                            _outOfStockCount.toString(),
+                            Icons.error_outline,
+                            Colors.red,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -491,7 +687,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide.none,
                             ),
-                            contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 0,
+                            ),
                           ),
                           onChanged: (val) {
                             setState(() => _searchQuery = val);
@@ -517,10 +715,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
                               });
                             },
                             children: const [
-                              Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('All')),
-                              Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('Healthy')),
-                              Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('Low')),
-                              Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('Out')),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                child: Text('All'),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                child: Text('Healthy'),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                child: Text('Low'),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 16),
+                                child: Text('Out'),
+                              ),
                             ],
                           ),
                         ),
@@ -541,7 +751,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide.none,
                               ),
-                              contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 0,
+                              ),
                             ),
                             onChanged: (val) {
                               setState(() => _searchQuery = val);
@@ -566,10 +778,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
                             });
                           },
                           children: const [
-                            Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('All')),
-                            Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('Healthy')),
-                            Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('Low')),
-                            Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('Out')),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16),
+                              child: Text('All'),
+                            ),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16),
+                              child: Text('Healthy'),
+                            ),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16),
+                              child: Text('Low'),
+                            ),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16),
+                              child: Text('Out'),
+                            ),
                           ],
                         ),
                       ],
@@ -581,195 +805,339 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   Expanded(
                     child: Card(
                       elevation: 2,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       color: Colors.white,
                       child: items.isEmpty
-                          ? const Center(child: Text('No items match your filters.'))
+                          ? const Center(
+                              child: Text('No items match your filters.'),
+                            )
                           : isMobile
-                              ? ListView.separated(
-                                  padding: const EdgeInsets.all(8),
-                                  itemCount: items.length,
-                                  separatorBuilder: (context, index) => const Divider(height: 1),
-                                  itemBuilder: (context, index) {
-                                    final item = items[index];
-                                    final stock = (item['current_stock'] as num).toDouble();
-                                    final threshold = (item['low_stock_threshold'] as num).toDouble();
+                          ? ListView.separated(
+                              padding: const EdgeInsets.all(8),
+                              itemCount: items.length,
+                              separatorBuilder: (context, index) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final item = items[index];
+                                final stock = (item['current_stock'] as num)
+                                    .toDouble();
+                                final threshold =
+                                    (item['low_stock_threshold'] as num)
+                                        .toDouble();
 
-                                    return Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 10,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              item['item_name'],
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          _buildStatusChip(stock, threshold),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
                                         children: [
                                           Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
-                                              Expanded(
-                                                child: Text(
-                                                  item['item_name'],
-                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                              Text(
+                                                'Stock: ',
+                                                style: TextStyle(
+                                                  color: Colors.grey.shade600,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                              Text(
+                                                '$stock ${item['unit']}',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: stock <= threshold
+                                                      ? Colors.red
+                                                      : Colors.black87,
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
-                                              _buildStatusChip(stock, threshold),
+                                              Text(
+                                                '(Min: $threshold)',
+                                                style: TextStyle(
+                                                  color: Colors.grey.shade500,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
                                             ],
                                           ),
-                                          const SizedBox(height: 6),
                                           Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              Row(
+                                              Tooltip(
+                                                message: 'Adjust Stock',
+                                                child: IconButton(
+                                                  icon: const Icon(
+                                                    Icons.sync_alt,
+                                                    color: Colors.blue,
+                                                    size: 20,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _showAdjustStockDialog(
+                                                        item,
+                                                      ),
+                                                  constraints:
+                                                      const BoxConstraints(
+                                                        minWidth: 32,
+                                                        minHeight: 32,
+                                                      ),
+                                                  padding: EdgeInsets.zero,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Tooltip(
+                                                message: 'Edit Details',
+                                                child: IconButton(
+                                                  icon: const Icon(
+                                                    Icons.edit,
+                                                    color: Colors.grey,
+                                                    size: 20,
+                                                  ),
+                                                  onPressed: () =>
+                                                      _showEditDetailsDialog(
+                                                        item,
+                                                      ),
+                                                  constraints:
+                                                      const BoxConstraints(
+                                                        minWidth: 32,
+                                                        minHeight: 32,
+                                                      ),
+                                                  padding: EdgeInsets.zero,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            )
+                          : Column(
+                              children: [
+                                // Header
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 16,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: Colors.grey.shade200,
+                                      ),
+                                    ),
+                                    color: Colors.grey.shade50,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(12),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          'ITEM NAME',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 2,
+                                        child: Text(
+                                          'CURRENT STOCK',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 2,
+                                        child: Text(
+                                          'STATUS',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: 120,
+                                        child: Text(
+                                          'ACTIONS',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.grey.shade700,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Rows
+                                Expanded(
+                                  child: ListView.separated(
+                                    itemCount: items.length,
+                                    separatorBuilder: (context, index) =>
+                                        Divider(
+                                          height: 1,
+                                          color: Colors.grey.shade100,
+                                        ),
+                                    itemBuilder: (context, index) {
+                                      final item = items[index];
+                                      final stock =
+                                          (item['current_stock'] as num)
+                                              .toDouble();
+                                      final threshold =
+                                          (item['low_stock_threshold'] as num)
+                                              .toDouble();
+
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 24,
+                                          vertical: 12,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              flex: 3,
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
-                                                    'Stock: ',
-                                                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                                                  ),
-                                                  Text(
-                                                    '$stock ${item['unit']}',
-                                                    style: TextStyle(
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: stock <= threshold ? Colors.red : Colors.black87,
+                                                    item['item_name'],
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontSize: 15,
                                                     ),
                                                   ),
-                                                  const SizedBox(width: 8),
                                                   Text(
-                                                    '(Min: $threshold)',
-                                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                                                    'Min: $threshold ${item['unit']}',
+                                                    style: TextStyle(
+                                                      color:
+                                                          Colors.grey.shade500,
+                                                      fontSize: 12,
+                                                    ),
                                                   ),
                                                 ],
                                               ),
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Row(
+                                                children: [
+                                                  Text(
+                                                    '$stock',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: stock <= threshold
+                                                          ? Colors.red
+                                                          : Colors.black87,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    item['unit'],
+                                                    style: TextStyle(
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: _buildStatusChip(
+                                                  stock,
+                                                  threshold,
+                                                ),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 120,
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
                                                 children: [
                                                   Tooltip(
                                                     message: 'Adjust Stock',
                                                     child: IconButton(
-                                                      icon: const Icon(Icons.sync_alt, color: Colors.blue, size: 20),
-                                                      onPressed: () => _showAdjustStockDialog(item),
-                                                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                                      padding: EdgeInsets.zero,
+                                                      icon: const Icon(
+                                                        Icons.sync_alt,
+                                                        color: Colors.blue,
+                                                      ),
+                                                      onPressed: () =>
+                                                          _showAdjustStockDialog(
+                                                            item,
+                                                          ),
+                                                      splashRadius: 20,
                                                     ),
                                                   ),
-                                                  const SizedBox(width: 4),
                                                   Tooltip(
                                                     message: 'Edit Details',
                                                     child: IconButton(
-                                                      icon: const Icon(Icons.edit, color: Colors.grey, size: 20),
-                                                      onPressed: () => _showEditDetailsDialog(item),
-                                                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                                      padding: EdgeInsets.zero,
+                                                      icon: const Icon(
+                                                        Icons.edit,
+                                                        color: Colors.grey,
+                                                      ),
+                                                      onPressed: () =>
+                                                          _showEditDetailsDialog(
+                                                            item,
+                                                          ),
+                                                      splashRadius: 20,
                                                     ),
                                                   ),
                                                 ],
                                               ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                )
-                              : Column(
-                                  children: [
-                                    // Header
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                                      decoration: BoxDecoration(
-                                        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-                                        color: Colors.grey.shade50,
-                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Expanded(flex: 3, child: Text('ITEM NAME', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700))),
-                                          Expanded(flex: 2, child: Text('CURRENT STOCK', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700))),
-                                          Expanded(flex: 2, child: Text('STATUS', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700))),
-                                          SizedBox(width: 120, child: Text('ACTIONS', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade700), textAlign: TextAlign.center)),
-                                        ],
-                                      ),
-                                    ),
-                                    // Rows
-                                    Expanded(
-                                      child: ListView.separated(
-                                        itemCount: items.length,
-                                        separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
-                                        itemBuilder: (context, index) {
-                                          final item = items[index];
-                                          final stock = (item['current_stock'] as num).toDouble();
-                                          final threshold = (item['low_stock_threshold'] as num).toDouble();
-
-                                          return Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                            child: Row(
-                                              children: [
-                                                Expanded(
-                                                  flex: 3,
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text(item['item_name'], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                                                      Text('Min: $threshold ${item['unit']}', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                                                    ],
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  flex: 2,
-                                                  child: Row(
-                                                    children: [
-                                                      Text(
-                                                        '$stock',
-                                                        style: TextStyle(
-                                                          fontSize: 16,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: stock <= threshold ? Colors.red : Colors.black87,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 4),
-                                                      Text(item['unit'], style: TextStyle(color: Colors.grey.shade600)),
-                                                    ],
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  flex: 2,
-                                                  child: Align(
-                                                    alignment: Alignment.centerLeft,
-                                                    child: _buildStatusChip(stock, threshold),
-                                                  ),
-                                                ),
-                                                SizedBox(
-                                                  width: 120,
-                                                  child: Row(
-                                                    mainAxisAlignment: MainAxisAlignment.center,
-                                                    children: [
-                                                      Tooltip(
-                                                        message: 'Adjust Stock',
-                                                        child: IconButton(
-                                                          icon: const Icon(Icons.sync_alt, color: Colors.blue),
-                                                          onPressed: () => _showAdjustStockDialog(item),
-                                                          splashRadius: 20,
-                                                        ),
-                                                      ),
-                                                      Tooltip(
-                                                        message: 'Edit Details',
-                                                        child: IconButton(
-                                                          icon: const Icon(Icons.edit, color: Colors.grey),
-                                                          onPressed: () => _showEditDetailsDialog(item),
-                                                          splashRadius: 20,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ],
                                             ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 ),
+                              ],
+                            ),
                     ),
                   ),
                 ],
@@ -778,8 +1146,3 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 }
-
-
-
-
-

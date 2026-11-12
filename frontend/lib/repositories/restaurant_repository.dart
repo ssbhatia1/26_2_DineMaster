@@ -1,4 +1,3 @@
-
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 
@@ -11,9 +10,8 @@ class RestaurantRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   final BackendApiClient _apiClient;
 
-  RestaurantRepository({
-    BackendApiClient apiClient = const BackendApiClient(),
-  }) : _apiClient = apiClient;
+  RestaurantRepository({BackendApiClient apiClient = const BackendApiClient()})
+    : _apiClient = apiClient;
 
   // ---------------------------------------------------------------------------
   // READ
@@ -21,7 +19,7 @@ class RestaurantRepository {
 
   Future<List<Map<String, dynamic>>> getRestaurants() async {
     if (await _useBackendApi()) {
-      final response = await _apiClient.getJson('/api/restaurants');
+      final response = await _apiClient.getJson('/api/v1/branches');
 
       if (response is! List) {
         throw const FormatException(
@@ -37,10 +35,7 @@ class RestaurantRepository {
     // Offline: read from local SQLite
     final db = await _dbHelper.database;
 
-    return db.query(
-      'restaurants',
-      orderBy: 'id ASC',
-    );
+    return db.query('restaurants', orderBy: 'id ASC');
   }
 
   // ---------------------------------------------------------------------------
@@ -54,7 +49,7 @@ class RestaurantRepository {
     String? phone,
   }) async {
     if (await _useBackendApi()) {
-      final response = await _apiClient.postJson('/api/restaurants', {
+      final response = await _apiClient.postJson('/api/v1/branches', {
         'name': name,
         if (address != null && address.isNotEmpty) 'address': address,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
@@ -100,7 +95,7 @@ class RestaurantRepository {
     String? phone,
   }) async {
     if (await _useBackendApi()) {
-      await _apiClient.putJson('/api/restaurants/$id', {
+      await _apiClient.putJson('/api/v1/branches/$id', {
         'name': name,
         'address': address,
         'phone': phone,
@@ -142,7 +137,7 @@ class RestaurantRepository {
   /// or 1 on success (API).
   Future<int> deleteRestaurant(int id) async {
     if (await _useBackendApi()) {
-      await _apiClient.delete('/api/restaurants/$id');
+      await _apiClient.delete('/api/v1/branches/$id');
 
       SyncService.instance.broadcastEvent('database_update', {
         'action': 'delete_restaurant',
@@ -207,8 +202,6 @@ class RestaurantRepository {
     final prefs = await SharedPreferences.getInstance();
 
     return kIsWeb ||
-        (prefs.getBool('use_backend_api') ??
-            ApiMode.defaultUseBackendApi);
+        (prefs.getBool('use_backend_api') ?? ApiMode.defaultUseBackendApi);
   }
 }
-

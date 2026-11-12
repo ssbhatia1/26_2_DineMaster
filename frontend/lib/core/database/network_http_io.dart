@@ -1,5 +1,7 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import '../platform/io.dart';
+import '../../services/auth_token_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<dynamic> sendNetworkRequest(
   String url,
@@ -10,6 +12,13 @@ Future<dynamic> sendNetworkRequest(
   try {
     final request = await client.postUrl(Uri.parse(url));
     request.headers.set('content-type', 'application/json');
+    final prefs = await SharedPreferences.getInstance();
+    final token = await AuthTokenStorage.readAccessToken() ??
+        prefs.getString('token') ??
+        prefs.getString('flutter.token');
+    if (token != null && token.isNotEmpty) {
+      request.headers.set('authorization', 'Bearer $token');
+    }
     request.write(jsonEncode(body));
 
     final response = await request.close();

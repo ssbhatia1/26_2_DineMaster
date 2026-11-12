@@ -46,11 +46,49 @@ public class BranchScopeService {
 
     public void requireBranch(Authentication authentication, Long branchId) {
         User user = requireUser(authentication);
-        if (branchId == null || !userBranches.isAssigned(user.getId(), branchId)
-                || branches.findById(branchId).filter(branch -> user.getTenantId() != null
-                        && user.getTenantId().equals(branch.getTenantId())).isEmpty()) {
+        boolean belongsToTenant = belongsToTenant(user, branchId);
+        boolean hasBranchAccess = com.dinemaster.role.Roles.matches(user.getRole(), "OWNER")
+                || branchId != null && userBranches.isAssigned(user.getId(), branchId);
+        if (!belongsToTenant || !hasBranchAccess) {
             throw new AccessDeniedException("Branch is outside the user's assigned scope");
         }
+    }
+
+    public boolean belongsToTenant(User user, Long branchId) {
+        return user != null && branchId != null && user.getTenantId() != null
+                && branches.findById(branchId)
+                        .filter(branch -> user.getTenantId().equals(branch.getTenantId())).isPresent();
+    }
+
+    public boolean canViewUser(User actor, User target) {
+        if (actor == null || target == null || actor.getTenantId() == null
+                || !actor.getTenantId().equals(target.getTenantId())) {
+            return false;
+        }
+        if (com.dinemaster.role.Roles.matches(actor.getRole(), "OWNER")) {
+            return !com.dinemaster.role.Roles.matches(target.getRole(), "SUPER_ADMIN");
+        }
+        if (!com.dinemaster.role.Roles.matches(actor.getRole(), "MANAGER")) {
+            return false;
+        }
+        return sharesManagedBranch(actor, target);
+    }
+
+    public boolean canManageUser(User actor, User target) {
+        if (!canViewUser(actor, target)) {
+            return false;
+        }
+        if (com.dinemaster.role.Roles.matches(actor.getRole(), "OWNER")) {
+            return true;
+        }
+        return com.dinemaster.role.Roles.matches(actor.getRole(), "MANAGER")
+                && java.util.Set.of("CASHIER", "WAITER", "CHEF", "INVENTORY_MANAGER", "STAFF")
+                        .stream().anyMatch(role -> com.dinemaster.role.Roles.matches(target.getRole(), role));
+    }
+
+    private boolean sharesManagedBranch(User actor, User target) {
+        java.util.Set<Long> branchesForActor = new java.util.HashSet<>(userBranches.findBranchIds(actor.getId()));
+        return userBranches.findBranchIds(target.getId()).stream().anyMatch(branchesForActor::contains);
     }
 
     public Long branchForResource(String uri, Long id) {

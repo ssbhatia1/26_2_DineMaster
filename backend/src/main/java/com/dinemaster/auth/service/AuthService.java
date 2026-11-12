@@ -176,16 +176,13 @@ public class AuthService {
 
     @Transactional
     public void logoutAll(Long userId) {
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime revokedAt = OffsetDateTime.now();
         refreshTokens.findAllByUserIdAndRevokedAtIsNull(userId).forEach(token -> {
-            token.setRevokedAt(now);
+            token.setRevokedAt(revokedAt);
             refreshTokens.save(token);
         });
-        users.findById(userId).ifPresent(user -> {
-            user.setPermissionVersion(user.getPermissionVersion() + 1);
-            users.save(user);
-            audit.record(userId, user.getUsername(), "LOGOUT_ALL", true);
-        });
+        users.findById(userId).ifPresent(user ->
+                audit.record(userId, user.getUsername(), "LOGOUT_ALL", true));
     }
 
     @Transactional(noRollbackFor = AuthFailure.class)
@@ -200,6 +197,7 @@ public class AuthService {
             throw new AuthFailure(422, "New password must be between 10 and 128 characters");
         }
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setMustChangePassword(false);
         user.setPermissionVersion(user.getPermissionVersion() + 1);
         users.save(user);
         refreshTokens.findAllByUserIdAndRevokedAtIsNull(userId).forEach(token -> {
@@ -238,7 +236,9 @@ public class AuthService {
     private AuthSession session(User user, String rawRefresh, UUID deviceId) {
         var branches = userBranches.findBranchIds(user.getId());
         return new AuthSession(jwtService.createToken(user, deviceId, branches), rawRefresh,
-                accessLifetimeMs / 1000, UserResponse.from(user, rolePermissions.permissionsFor(user.getRole(), user.getTenantId())), user.getTenantId(), branches,
+                accessLifetimeMs / 1000, UserResponse.from(user,
+                        rolePermissions.permissionsFor(user.getRole(), user.getTenantId()),
+                        user.getContactDetails(), branches), user.getTenantId(), branches,
                 deviceId, user.getPermissionVersion());
     }
 

@@ -14,6 +14,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import com.dinemaster.security.BranchScopeService;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
@@ -25,22 +27,28 @@ import java.util.Map;
 public class InventoryController {
     private final InventoryRepository inventoryRepository;
     private final RestaurantRepository restaurantRepository;
+    private final BranchScopeService branchScope;
 
-    public InventoryController(InventoryRepository inventoryRepository, RestaurantRepository restaurantRepository) {
+    public InventoryController(InventoryRepository inventoryRepository, RestaurantRepository restaurantRepository,
+            BranchScopeService branchScope) {
         this.inventoryRepository = inventoryRepository;
         this.restaurantRepository = restaurantRepository;
+        this.branchScope = branchScope;
     }
 
     @GetMapping
     @PreAuthorize("hasAuthority('inventory:view')")
-    public List<InventoryItem> list(@RequestParam Long restaurantId) {
+    public List<InventoryItem> list(@RequestParam Long restaurantId, Authentication authentication) {
+        branchScope.requireBranch(authentication, restaurantId);
         return inventoryRepository.findByRestaurant_IdOrderByItemNameAsc(restaurantId);
     }
 
     @PostMapping
     @PreAuthorize("hasAuthority('inventory:receive')")
     @Transactional
-    public ResponseEntity<?> create(@Valid @RequestBody InventoryRequest request) {
+    public ResponseEntity<?> create(
+            @Valid @RequestBody InventoryRequest request, Authentication authentication) {
+        branchScope.requireBranch(authentication, request.restaurantId());
         Restaurant restaurant = restaurantRepository.findById(request.restaurantId()).orElse(null);
         if (restaurant == null)
             return ResponseEntity.badRequest().body(Map.of("error", "Restaurant not found"));
@@ -52,10 +60,13 @@ public class InventoryController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('inventory:receive')")
     @Transactional
-    public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody InventoryRequest request) {
+    public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody InventoryRequest request,
+            Authentication authentication) {
+        branchScope.requireBranch(authentication, request.restaurantId());
         InventoryItem item = inventoryRepository.findById(id).orElse(null);
         if (item == null)
             return ResponseEntity.notFound().build();
+        branchScope.requireBranch(authentication, item.getRestaurantId());
         Restaurant restaurant = restaurantRepository.findById(request.restaurantId()).orElse(null);
         if (restaurant == null)
             return ResponseEntity.badRequest().body(Map.of("error", "Restaurant not found"));
@@ -66,10 +77,12 @@ public class InventoryController {
     @PatchMapping("/{id}/stock")
     @PreAuthorize("hasAuthority('inventory:adjust')")
     @Transactional
-    public ResponseEntity<?> adjustStock(@PathVariable Long id, @Valid @RequestBody StockAdjustmentRequest request) {
+    public ResponseEntity<?> adjustStock(@PathVariable Long id, @Valid @RequestBody StockAdjustmentRequest request,
+            Authentication authentication) {
         InventoryItem item = inventoryRepository.findById(id).orElse(null);
         if (item == null)
             return ResponseEntity.notFound().build();
+        branchScope.requireBranch(authentication, item.getRestaurantId());
         BigDecimal current = item.getCurrentStock();
         BigDecimal quantity = request.quantity();
         BigDecimal updated = switch (request.mode().trim().toLowerCase()) {
@@ -87,10 +100,12 @@ public class InventoryController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER','MANAGER')")
-    public ResponseEntity<?> delete(@PathVariable Long id) {
-        if (!inventoryRepository.existsById(id))
+    public ResponseEntity<?> delete(@PathVariable Long id, Authentication authentication) {
+        InventoryItem item = inventoryRepository.findById(id).orElse(null);
+        if (item == null)
             return ResponseEntity.notFound().build();
-        inventoryRepository.deleteById(id);
+        branchScope.requireBranch(authentication, item.getRestaurantId());
+        inventoryRepository.delete(item);
         return ResponseEntity.noContent().build();
     }
 

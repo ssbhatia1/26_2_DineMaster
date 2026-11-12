@@ -102,6 +102,7 @@ public class OrderService {
                         }
 
                         order.setDiningTable(table);
+                        table.setStatus("Occupied");
                 }
 
                 if (request.getCustomerId() != null) {
@@ -212,6 +213,11 @@ public class OrderService {
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND, "Order not found"));
                 return OrderResponse.from(order);
+        }
+
+        @Transactional(readOnly = true)
+        public Long getOrderRestaurantId(Long orderId) {
+                return findOrder(orderId).getRestaurant().getId();
         }
 
         @Transactional(readOnly = true)

@@ -59,7 +59,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
         final results = await Future.wait([
           BackendApiClient().getJson(
-            '/api/inventory?restaurantId=$restaurantId',
+            '/api/v1/inventory?restaurantId=$restaurantId',
           ),
           TableRepository().getTables(),
         ]);
@@ -68,21 +68,21 @@ class _OverviewScreenState extends State<OverviewScreen> {
         final List<dynamic> items = inventoryResponse is List
             ? inventoryResponse
             : (inventoryResponse is Map
-                ? (inventoryResponse['content'] as List<dynamic>? ?? [])
-                : <dynamic>[]);
+                  ? (inventoryResponse['content'] as List<dynamic>? ?? [])
+                  : <dynamic>[]);
 
         final lowStock = items.where((raw) {
           if (raw is! Map) return false;
 
-          final stock = num.tryParse(
+          final stock =
+              num.tryParse(
                 (raw['currentStock'] ?? raw['current_stock'] ?? 0).toString(),
               ) ??
               0;
 
-          final threshold = num.tryParse(
-                (raw['lowStockThreshold'] ??
-                        raw['low_stock_threshold'] ??
-                        0)
+          final threshold =
+              num.tryParse(
+                (raw['lowStockThreshold'] ?? raw['low_stock_threshold'] ?? 0)
                     .toString(),
               ) ??
               0;
@@ -143,7 +143,8 @@ class _OverviewScreenState extends State<OverviewScreen> {
       );
       final lowStock = (lowStockRes.first['count'] as num?)?.toInt() ?? 0;
 
-      final recentOrdersRes = await db.rawQuery('''
+      final recentOrdersRes = await db.rawQuery(
+        '''
         SELECT o.*, t.table_number,
                (SELECT COUNT(*) FROM order_items WHERE order_id = o.id) as item_count
         FROM orders o
@@ -151,7 +152,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
         WHERE o.restaurant_id = ?
         ORDER BY o.order_time DESC
         LIMIT 5
-      ''', [restaurantId]);
+      ''',
+        [restaurantId],
+      );
 
       if (mounted) {
         setState(() {
@@ -208,9 +211,7 @@ class _OverviewScreenState extends State<OverviewScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
@@ -232,7 +233,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       children: [
                         Text(
                           'Welcome Back, $_username',
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                         const Text(
@@ -248,7 +252,11 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     backgroundColor: AppColors.primary,
                     child: Text(
                       _username.isNotEmpty ? _username[0].toUpperCase() : 'U',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
                     ),
                   ),
                 ],
@@ -257,7 +265,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
 
               // Metrics Grid
               GridView.count(
-                crossAxisCount: MediaQuery.of(context).size.width >= 1024 ? 4 : 2,
+                crossAxisCount: MediaQuery.of(context).size.width >= 1024
+                    ? 4
+                    : 2,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
                 shrinkWrap: true,
@@ -289,7 +299,9 @@ class _OverviewScreenState extends State<OverviewScreen> {
                     '$_lowStockCount',
                     Icons.inventory_2,
                     _lowStockCount > 0 ? Colors.red : Colors.grey,
-                    _lowStockCount > 0 ? 'Requires attention' : 'Inventory healthy',
+                    _lowStockCount > 0
+                        ? 'Requires attention'
+                        : 'Inventory healthy',
                   ),
                 ],
               ).animate().fadeIn(delay: 200.ms),
@@ -316,11 +328,19 @@ class _OverviewScreenState extends State<OverviewScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey),
+                          Icon(
+                            Icons.receipt_long_outlined,
+                            size: 48,
+                            color: Colors.grey,
+                          ),
                           SizedBox(height: 12),
                           Text(
                             'No recent orders',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey,
+                            ),
                           ),
                           SizedBox(height: 4),
                           Text(
@@ -338,51 +358,71 @@ class _OverviewScreenState extends State<OverviewScreen> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: _recentOrders.length,
-                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final order = _recentOrders[index];
                     final orderId = order['id'];
-                    final tableNum = order['table_number'] != null ? 'Table ${order['table_number']}' : (order['type'] ?? 'Walk-in');
+                    final tableNum = order['table_number'] != null
+                        ? 'Table ${order['table_number']}'
+                        : (order['type'] ?? 'Walk-in');
                     final itemCount = order['item_count'] ?? 0;
-                    final timeStr = _formatOrderTime(order['order_time'] as String?);
+                    final timeStr = _formatOrderTime(
+                      order['order_time'] as String?,
+                    );
                     final status = order['status'] as String? ?? 'Received';
                     final statusColor = _statusColor(status);
 
                     return Card(
-                      elevation: 0,
-                      color: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: AppColors.primaryLight,
-                          child: const Icon(Icons.receipt_long, color: AppColors.primary),
-                        ),
-                        title: Text(
-                          'Order #$orderId',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text('$tableNum • $itemCount ${itemCount == 1 ? 'Item' : 'Items'} • $timeStr'),
-                        trailing: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: statusColor.withAlpha(25),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: statusColor.withAlpha(50)),
+                          elevation: 0,
+                          color: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: Colors.grey.shade200),
                           ),
-                          child: Text(
-                            status,
-                            style: TextStyle(
-                              color: statusColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: AppColors.primaryLight,
+                              child: const Icon(
+                                Icons.receipt_long,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            title: Text(
+                              'Order #$orderId',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '$tableNum • $itemCount ${itemCount == 1 ? 'Item' : 'Items'} • $timeStr',
+                            ),
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withAlpha(25),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: statusColor.withAlpha(50),
+                                ),
+                              ),
+                              child: Text(
+                                status,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    ).animate().fadeIn(delay: (500 + (index * 100)).ms).slideX(begin: 0.1);
+                        )
+                        .animate()
+                        .fadeIn(delay: (500 + (index * 100)).ms)
+                        .slideX(begin: 0.1);
                   },
                 ),
             ],
@@ -392,7 +432,13 @@ class _OverviewScreenState extends State<OverviewScreen> {
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color, String subtitle) {
+  Widget _buildMetricCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+    String subtitle,
+  ) {
     return Card(
       elevation: 0,
       color: Colors.white,
@@ -412,7 +458,10 @@ class _OverviewScreenState extends State<OverviewScreen> {
                 Flexible(
                   child: Text(
                     title,
-                    style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),

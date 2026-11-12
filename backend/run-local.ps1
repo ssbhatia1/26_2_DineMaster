@@ -29,5 +29,11 @@ if (-not $env:JWT_SECRET) {
     throw "JWT_SECRET is missing from .env."
 }
 
-& (Join-Path $PSScriptRoot "mvnw.cmd") spring-boot:run
+$maven = Get-Command mvn -ErrorAction SilentlyContinue
+if ($maven) {
+    $mavenRepository = Join-Path $env:USERPROFILE ".m2\repository"
+    & $maven.Source "-Dmaven.repo.local=$mavenRepository" spring-boot:run
+} else {
+    & (Join-Path $PSScriptRoot "mvnw.cmd") spring-boot:run
+}
 exit $LASTEXITCODE

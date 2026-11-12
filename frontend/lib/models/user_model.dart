@@ -1,4 +1,4 @@
-﻿class UserModel {
+class UserModel {
   final int? id;
   final String name;
   final String username;
@@ -8,6 +8,8 @@
   final String createdAt;
   final String contactDetails;
   final String shiftTiming;
+  final List<int> branchIds;
+  final bool mustChangePassword;
 
   UserModel({
     this.id,
@@ -19,6 +21,8 @@
     required this.createdAt,
     this.contactDetails = '',
     this.shiftTiming = '',
+    this.branchIds = const [],
+    this.mustChangePassword = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -32,6 +36,7 @@
       'created_at': createdAt,
       'contact_details': contactDetails,
       'shift_timing': shiftTiming,
+      'branch_ids': branchIds,
     };
   }
 
@@ -44,13 +49,23 @@
       username: (map['username'] ?? '').toString(),
       password: (map['password'] ?? '').toString(),
       role: (map['role'] ?? '').toString(),
-      isActive: active == 1 || active == true ||
+      isActive:
+          active == 1 ||
+          active == true ||
           active?.toString().toLowerCase() == 'true',
       createdAt: (map['created_at'] ?? map['createdAt'] ?? '').toString(),
-      contactDetails:
-          (map['contact_details'] ?? map['contactDetails'] ?? '').toString(),
-      shiftTiming:
-          (map['shift_timing'] ?? map['shiftTiming'] ?? '').toString(),
+      contactDetails: (map['contact_details'] ?? map['contactDetails'] ?? '')
+          .toString(),
+      shiftTiming: (map['shift_timing'] ?? map['shiftTiming'] ?? '').toString(),
+      branchIds:
+          ((map['branch_ids'] ?? map['branchIds']) as List<dynamic>? ??
+                  const [])
+              .whereType<num>()
+              .map((id) => id.toInt())
+              .toList(),
+      mustChangePassword:
+          map['must_change_password'] == true ||
+          map['mustChangePassword'] == true,
     );
   }
 }

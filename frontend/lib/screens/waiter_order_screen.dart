@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:dine_master/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +8,7 @@ import 'package:sqflite/sqflite.dart';
 import '../core/database/database_helper.dart';
 import '../core/database/network_database.dart';
 import '../models/product_model.dart';
+import '../models/order_model.dart';
 import '../models/table_model.dart';
 import '../repositories/product_repository.dart';
 import '../services/sync_service.dart';
@@ -17,6 +18,8 @@ import 'waiter/components/waiter_menu_view.dart';
 import 'waiter/components/waiter_floor_plan_view.dart';
 import 'waiter/components/item_customization_dialog.dart';
 import '../services/backend_api_client.dart';
+import '../core/api/api_mode.dart';
+import '../repositories/order_api_repository.dart';
 
 class WaiterOrderScreen extends StatefulWidget {
   final int? selectedTableId;
@@ -30,6 +33,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ProductRepository _productRepository = ProductRepository();
+  final OrderApiRepository _orderApiRepository = const OrderApiRepository();
 
   bool _isLoading = true;
   bool _isTakingOrder = false;
@@ -401,7 +405,9 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
   /// Calculates GST using each product's individual gst_percentage field.
   double _calculateTax() {
     return _cartItems.fold(0.0, (sum, it) {
-      final gst = (it.product.gstPercentage > 0) ? it.product.gstPercentage : 5.0;
+      final gst = (it.product.gstPercentage > 0)
+          ? it.product.gstPercentage
+          : 5.0;
       return sum + (it.subtotal * gst / 100);
     });
   }
@@ -634,7 +640,7 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
 
   // --- SUBMIT WAITER ORDER (KOT) ---
   Future<void> _submitWaiterOrder() async {
-    if (_cartItems.isEmpty) return;
+    if (_cartItems.isEmpty || _isLoading) return;
 
     if (_orderType == 'Dine-In' && _selectedTableId == null) {
       return;
@@ -643,6 +649,52 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
     setState(() => _isLoading = true);
 
     try {
+      if (await ApiMode.useBackendApi()) {
+        final restaurantId = DatabaseHelper.currentRestaurantId;
+        if (restaurantId == null) {
+          throw StateError('A restaurant must be selected before ordering');
+        }
+        final order = await _orderApiRepository.createOrder(
+          restaurantId: restaurantId,
+          tableId: _selectedTableId,
+          waiterId: _selectedWaiterId,
+          type: _orderType == 'Dine-In' ? 'Dine In' : _orderType,
+          guestCount: _currentOrderGuestCount,
+          items: _cartItems
+              .map(
+                (item) => OrderItemModel(
+                  productId: item.product.id!,
+                  quantity: item.quantity,
+                  price: item.product.price,
+                  notes: item.formattedNotes.isEmpty
+                      ? null
+                      : item.formattedNotes,
+                ),
+              )
+              .toList(),
+        );
+        if (order.id == null) {
+          throw const FormatException('Backend did not return an order ID');
+        }
+        await const BackendApiClient().postJson('/api/v1/kitchen-tickets', {
+          'orderId': order.id,
+          'priority': 'Normal',
+        });
+        if (!mounted) return;
+        setState(() {
+          _cartItems.clear();
+          _selectedTableId = null;
+          _selectedTableDisplayName = 'Select';
+          _customerNameController.clear();
+          _customerPhoneController.clear();
+          _isTakingOrder = false;
+          _selectedChefId = null;
+          _selectedChefName = null;
+        });
+        await _loadDashboardAndProducts();
+        return;
+      }
+
       final db = await DatabaseHelper.instance.database;
       final restaurantId = DatabaseHelper.currentRestaurantId;
       final String now = DateTime.now().toIso8601String();
@@ -1846,27 +1898,45 @@ class _WaiterOrderScreenState extends State<WaiterOrderScreen>
             onSendKOT: _submitWaiterOrder,
             onPrintBill: () {
               if (_selectedTableId == null) return;
-              final billMatch = _tableInfoList.where((t) => t.table.id == _selectedTableId);
-              final billOrder = billMatch.isNotEmpty ? billMatch.first.activeOrder : null;
-              final billOrderId = billOrder == null ? null : (billOrder['id'] as num?)?.toInt();
+              final billMatch = _tableInfoList.where(
+                (t) => t.table.id == _selectedTableId,
+              );
+              final billOrder = billMatch.isNotEmpty
+                  ? billMatch.first.activeOrder
+                  : null;
+              final billOrderId = billOrder == null
+                  ? null
+                  : (billOrder['id'] as num?)?.toInt();
               if (billOrderId != null) {
                 _requestBilling(billOrderId, _selectedTableId);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('No active order to bill for this table.')),
+                  const SnackBar(
+                    content: Text('No active order to bill for this table.'),
+                  ),
                 );
               }
             },
             onCheckout: () {
               if (_selectedTableId == null) return;
-              final checkMatch = _tableInfoList.where((t) => t.table.id == _selectedTableId);
-              final checkOrder = checkMatch.isNotEmpty ? checkMatch.first.activeOrder : null;
-              final checkOrderId = checkOrder == null ? null : (checkOrder['id'] as num?)?.toInt();
+              final checkMatch = _tableInfoList.where(
+                (t) => t.table.id == _selectedTableId,
+              );
+              final checkOrder = checkMatch.isNotEmpty
+                  ? checkMatch.first.activeOrder
+                  : null;
+              final checkOrderId = checkOrder == null
+                  ? null
+                  : (checkOrder['id'] as num?)?.toInt();
               if (checkOrderId != null) {
                 _requestBilling(checkOrderId, _selectedTableId);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('No active order to checkout for this table.')),
+                  const SnackBar(
+                    content: Text(
+                      'No active order to checkout for this table.',
+                    ),
+                  ),
                 );
               }
             },

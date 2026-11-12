@@ -7,11 +7,10 @@ import com.dinemaster.auth.dto.RefreshRequest;
 import com.dinemaster.auth.service.AuthService;
 import com.dinemaster.auth.service.AuthSession;
 import com.dinemaster.auth.service.LoginRateLimiter;
-import com.dinemaster.auth.service.JwtService;
-import com.dinemaster.common.exception.ApiErrorResponse;
 import com.dinemaster.user.dto.UserResponse;
 import com.dinemaster.user.entity.User;
 import com.dinemaster.user.repository.UserRepository;
+import com.dinemaster.user.repository.UserBranchRepository;
 import com.dinemaster.role.RolePermissionService;
 import com.dinemaster.auth.entity.AuthDevice;
 import com.dinemaster.auth.repository.AuthDeviceRepository;
@@ -20,7 +19,6 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -38,64 +36,59 @@ public class AuthController {
     private final RolePermissionService rolePermissions;
     private final AuthDeviceRepository devices;
     private final RefreshTokenRepository refreshTokens;
-    private final JwtService jwtService;
+    private final UserBranchRepository userBranches;
 
     public AuthController(AuthService authService, UserRepository users, LoginRateLimiter loginRateLimiter,
             RolePermissionService rolePermissions, AuthDeviceRepository devices,
-            RefreshTokenRepository refreshTokens, JwtService jwtService) {
+            RefreshTokenRepository refreshTokens, UserBranchRepository userBranches) {
         this.authService = authService;
         this.users = users;
         this.loginRateLimiter = loginRateLimiter;
         this.rolePermissions = rolePermissions;
         this.devices = devices;
         this.refreshTokens = refreshTokens;
-        this.jwtService = jwtService;
+        this.userBranches = userBranches;
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
         if (!loginRateLimiter.allow(servletRequest.getRemoteAddr())) {
-            return ApiErrorResponse.of(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED",
-                    "Too many login attempts. Try again later.", null, servletRequest);
+            return ResponseEntity.status(429).body(Map.of("error", "Too many login attempts", "code", "RATE_LIMITED"));
         }
         try {
             return ResponseEntity.ok(response(authService.login(
                     request.username(), request.password(), request.deviceLabel())));
         } catch (AuthService.AuthFailure failure) {
-            boolean locked = failure.getStatus() == 423;
-            return ApiErrorResponse.of(locked ? HttpStatus.LOCKED : HttpStatus.UNAUTHORIZED,
-                    locked ? "ACCOUNT_LOCKED" : "INVALID_CREDENTIALS",
-                    locked ? "Account temporarily locked." : "Invalid username or password.", null, servletRequest);
+            return ResponseEntity.status(failure.getStatus()).body(Map.of(
+                    "error", failure.getMessage(),
+                    "code", failure.getStatus() == 423 ? "ACCOUNT_LOCKED" : "INVALID_CREDENTIALS"));
         }
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<?> refresh(@Valid @RequestBody RefreshRequest request, HttpServletRequest servletRequest) {
+    public ResponseEntity<?> refresh(@Valid @RequestBody RefreshRequest request) {
         try {
             return ResponseEntity.ok(response(authService.refresh(request.refreshToken())));
         } catch (AuthService.AuthFailure failure) {
-            return ApiErrorResponse.of(HttpStatus.valueOf(failure.getStatus()), "AUTH_TOKEN_INVALID",
-                    "Refresh token is invalid or expired.", null, servletRequest);
+            return ResponseEntity.status(failure.getStatus()).body(Map.of(
+                    "error", failure.getMessage(), "code", "AUTH_TOKEN_INVALID"));
         }
     }
 
     @PostMapping("/logout")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> logout(Authentication authentication, @Valid @RequestBody RefreshRequest request,
-            HttpServletRequest servletRequest) {
+    public ResponseEntity<?> logout(Authentication authentication, @Valid @RequestBody RefreshRequest request) {
         User user = currentUser(authentication);
-        if (user == null) return ApiErrorResponse.of(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_INVALID",
-                "Authentication is required.", null, servletRequest);
+        if (user == null) return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         authService.logout(user.getId(), request.refreshToken());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/logout-all")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> logoutAll(Authentication authentication, HttpServletRequest servletRequest) {
+    public ResponseEntity<?> logoutAll(Authentication authentication) {
         User user = currentUser(authentication);
-        if (user == null) return ApiErrorResponse.of(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_INVALID",
-                "Authentication is required.", null, servletRequest);
+        if (user == null) return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         authService.logoutAll(user.getId());
         return ResponseEntity.noContent().build();
     }
@@ -129,31 +122,34 @@ public class AuthController {
 
     @GetMapping("/me/permissions")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> permissions(Authentication authentication, HttpServletRequest servletRequest) {
+    public ResponseEntity<?> permissions(Authentication authentication) {
         User user = currentUser(authentication);
-        if (user == null) return ApiErrorResponse.of(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_INVALID",
-                "Authentication is required.", null, servletRequest);
+        if (user == null) return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         return ResponseEntity.ok(Map.of(
-                "permissions", rolePermissions.permissionsFor(user.getRole(), user.getTenantId()),
-                "permVersion", user.getPermissionVersion()));
+                "userId", user.getId(),
+                "permVersion", user.getPermissionVersion(),
+                "permissions", rolePermissions.permissionsFor(user.getRole(), user.getTenantId())));
     }
 
-    @GetMapping("/jwks")
-    public ResponseEntity<?> jwks(HttpServletRequest servletRequest) {
+    @PostMapping("/password/change")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> changePassword(Authentication authentication,
+            @Valid @RequestBody PasswordChangeRequest request) {
+        User user = currentUser(authentication);
+        if (user == null) return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         try {
-            return ResponseEntity.ok(jwtService.jwks());
-        } catch (IllegalStateException exception) {
-            return ApiErrorResponse.of(HttpStatus.SERVICE_UNAVAILABLE, "JWKS_UNAVAILABLE",
-                    "RSA signing keys are not configured.", null, servletRequest);
+            authService.changePassword(user.getId(), request.currentPassword(), request.newPassword());
+            return ResponseEntity.noContent().build();
+        } catch (AuthService.AuthFailure failure) {
+            return ResponseEntity.status(failure.getStatus()).body(Map.of("error", failure.getMessage()));
         }
     }
 
     @GetMapping("/devices")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> devices(Authentication authentication, HttpServletRequest servletRequest) {
+    public ResponseEntity<?> devices(Authentication authentication) {
         User user = currentUser(authentication);
-        if (user == null) return ApiErrorResponse.of(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_INVALID",
-                "Authentication is required.", null, servletRequest);
+        if (user == null) return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         return ResponseEntity.ok(devices.findAllByUserIdAndActiveTrue(user.getId()).stream()
                 .map(device -> Map.of("deviceId", device.getId(), "label", device.getLabel(),
                         "createdAt", device.getCreatedAt(), "lastSeenAt", device.getLastSeenAt()))
@@ -162,15 +158,12 @@ public class AuthController {
 
     @PostMapping("/devices/{deviceId}/revoke")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<?> revokeDevice(Authentication authentication, @PathVariable UUID deviceId,
-            HttpServletRequest servletRequest) {
+    public ResponseEntity<?> revokeDevice(Authentication authentication, @PathVariable UUID deviceId) {
         User user = currentUser(authentication);
-        if (user == null) return ApiErrorResponse.of(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_INVALID",
-                "Authentication is required.", null, servletRequest);
+        if (user == null) return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
         AuthDevice device = devices.findById(deviceId)
                 .filter(value -> value.getUserId().equals(user.getId())).orElse(null);
-        if (device == null) return ApiErrorResponse.of(HttpStatus.NOT_FOUND, "NOT_FOUND",
-                "Device was not found.", null, servletRequest);
+        if (device == null) return ResponseEntity.notFound().build();
         device.setActive(false);
         devices.save(device);
         refreshTokens.findAllByDeviceIdAndRevokedAtIsNull(deviceId).forEach(token -> {

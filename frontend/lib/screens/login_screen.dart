@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:dine_master/core/theme/app_colors.dart';
@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/database_helper.dart';
 import '../repositories/user_repository.dart';
+import '../services/auth_token_storage.dart';
+import '../services/backend_api_client.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -22,6 +24,68 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   String _selectedRole = 'Owner';
   bool _rememberMe = false;
+
+  Future<bool> _changeInitialPassword(String currentPassword) async {
+    final controller = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final newPassword = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Change your temporary password'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            obscureText: true,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'New password'),
+            validator: (value) => value == null || value.length < 10
+                ? 'Use at least 10 characters'
+                : null,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(dialogContext, controller.text);
+              }
+            },
+            child: const Text('Change password'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (newPassword == null || !mounted) return false;
+
+    try {
+      await UserRepository().changePassword(currentPassword, newPassword);
+      await AuthTokenStorage.clear();
+      if (!mounted) return false;
+      _passwordController.text = newPassword;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Password changed. Sign in again with your new password.',
+          ),
+        ),
+      );
+      return false;
+    } on BackendApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Password change failed: ${error.message}')),
+        );
+      }
+      return false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +252,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           dropdownColor: AppColors.primaryMaterialColor[800]!,
                           style: const TextStyle(color: Colors.white),
                           items:
-                              ['Owner', 'Manager', 'Cashier', 'Waiter', 'Chef']
+                              [
+                                    'Owner',
+                                    'Manager',
+                                    'Cashier',
+                                    'Waiter',
+                                    'Chef',
+                                    'Inventory Manager',
+                                    'Other Staff',
+                                  ]
                                   .map(
                                     (r) => DropdownMenuItem(
                                       value: r,
@@ -280,23 +352,29 @@ class _LoginScreenState extends State<LoginScreen> {
                                 final prefs =
                                     await SharedPreferences.getInstance();
                                 final useBackendApi =
-                                    kIsWeb || (prefs.getBool('use_backend_api') ?? true);
+                                    kIsWeb ||
+                                    (prefs.getBool('use_backend_api') ?? true);
                                 if (useBackendApi) {
                                   final user = await UserRepository().login(
                                     username,
                                     password,
                                   );
                                   if (user == null ||
-                                      user.role.toLowerCase() !=
-                                          _selectedRole.toLowerCase()) {
+                                      _normalizeRole(user.role) !=
+                                          _normalizeRole(_selectedRole)) {
+                                    return;
+                                  }
+                                  if (user.mustChangePassword) {
+                                    await _changeInitialPassword(password);
                                     return;
                                   }
                                   await prefs.setBool(
                                     'remember_me',
                                     _rememberMe,
                                   );
-                                  if (context.mounted)
+                                  if (context.mounted) {
                                     context.go('/branch_selection');
+                                  }
                                   return;
                                 }
 
@@ -410,6 +488,20 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       ),
     );
+  }
+
+  String _normalizeRole(String role) {
+    final normalized = role
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\s-]+'), '_')
+        .replaceFirst(RegExp(r'^role_'), '');
+    return switch (normalized) {
+      'restaurant_admin' || 'admin' => 'owner',
+      'cook' => 'chef',
+      'employee' || 'other_staff' => 'staff',
+      _ => normalized,
+    };
   }
 
   void _showRegisterDialog() {

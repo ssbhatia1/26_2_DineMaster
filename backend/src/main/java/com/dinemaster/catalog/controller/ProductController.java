@@ -11,11 +11,13 @@ import com.dinemaster.catalog.repository.ProductRepository;
 import com.dinemaster.recipe.entity.Recipe;
 import com.dinemaster.restaurant.entity.Restaurant;
 import com.dinemaster.restaurant.repository.RestaurantRepository;
+import com.dinemaster.security.BranchScopeService;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -29,14 +31,17 @@ public class ProductController {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final RestaurantRepository restaurantRepository;
+    private final BranchScopeService branchScope;
 
     public ProductController(
             ProductRepository productRepository,
             CategoryRepository categoryRepository,
-            RestaurantRepository restaurantRepository) {
+            RestaurantRepository restaurantRepository,
+            BranchScopeService branchScope) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.restaurantRepository = restaurantRepository;
+        this.branchScope = branchScope;
     }
 
     // GET: Fetch available products
@@ -81,12 +86,14 @@ public class ProductController {
     // POST: Create a product
     @PostMapping
     @PreAuthorize("hasAuthority('menu:manage')")
-    public ResponseEntity<?> createProduct(@Valid @RequestBody Product product) {
+    public ResponseEntity<?> createProduct(
+            @Valid @RequestBody Product product, Authentication authentication) {
         ResponseEntity<Map<String, String>> validation = validateProduct(product);
 
         if (validation != null) {
             return ResponseEntity.badRequest().body(validation.getBody());
         }
+        branchScope.requireBranch(authentication, product.getRestaurantId());
 
         String categoryName = findCategoryName(product.getCategory(), product.getRestaurantId());
 
@@ -117,12 +124,15 @@ public class ProductController {
     @PreAuthorize("hasAuthority('menu:manage')")
     public ResponseEntity<?> updateProduct(
             @PathVariable Long id,
-            @Valid @RequestBody Product request) {
+            @Valid @RequestBody Product request, Authentication authentication) {
 
         ResponseEntity<Map<String, String>> validation = validateProduct(request);
 
         if (validation != null) {
             return ResponseEntity.badRequest().body(validation.getBody());
+        }
+        if (request.getRestaurantId() != null) {
+            branchScope.requireBranch(authentication, request.getRestaurantId());
         }
 
         return productRepository.findById(id)
@@ -274,4 +284,3 @@ public class ProductController {
         target.setVideoPath(source.getVideoPath());
     }
 }
-

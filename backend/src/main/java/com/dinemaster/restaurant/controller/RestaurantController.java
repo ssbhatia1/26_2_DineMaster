@@ -37,6 +37,9 @@ public class RestaurantController {
     @PreAuthorize("hasAuthority('branch:view')")
     public ResponseEntity<?> getAllRestaurants(Authentication authentication) {
         User user = branchScope.requireUser(authentication);
+        if (com.dinemaster.role.Roles.matches(user.getRole(), "OWNER")) {
+            return ResponseEntity.ok(restaurantRepository.findAllByTenantId(user.getTenantId()));
+        }
         return ResponseEntity.ok(restaurantRepository.findAllById(userBranches.findBranchIds(user.getId())).stream()
                 .filter(branch -> java.util.Objects.equals(branch.getTenantId(), user.getTenantId())).toList());
     }

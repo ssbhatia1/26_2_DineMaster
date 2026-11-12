@@ -42,20 +42,19 @@ public class RoleController {
                 "permissions", rolePermissionService.permissionsFor(role.getCode(), actor.getTenantId()))).toList();
     }
 
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('role:view') or hasAuthority('role:assign')")
-    public ResponseEntity<?> get(@PathVariable Long id, Authentication authentication) {
+    @GetMapping("/{roleCode}")
+    @PreAuthorize("hasAuthority('role:assign')")
+    public ResponseEntity<?> get(@PathVariable String roleCode, Authentication authentication) {
         User actor = branchScope.requireUser(authentication);
-        Role role = roles.findById(id).filter(Role::isActive)
-                .filter(value -> value.getTenantId() == null
-                        || java.util.Objects.equals(value.getTenantId(), actor.getTenantId()))
+        String code = com.dinemaster.role.Roles.canonical(roleCode);
+        Role role = roles.findByCodeAndTenantIdAndActiveTrue(code, actor.getTenantId())
+                .or(() -> roles.findByCodeAndTenantIdIsNullAndActiveTrue(code))
                 .orElse(null);
         if (role == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(Map.of(
-                "id", role.getId(),
                 "code", role.getCode(),
                 "name", role.getName(),
-                "permissions", role.getPermissions().stream().map(Permission::getCode).sorted().toList()));
+                "permissions", rolePermissionService.permissionsFor(role.getCode(), actor.getTenantId())));
     }
 
     @GetMapping("/permissions")
@@ -68,6 +67,9 @@ public class RoleController {
     @PreAuthorize("hasAuthority('role:assign')")
     public ResponseEntity<?> create(@Valid @RequestBody RoleCreateRequest request, Authentication authentication) {
         User actor = branchScope.requireUser(authentication);
+        if (!isTrustedRoleAdministrator(actor)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Only tenant owners may manage role permissions"));
+        }
         if (actor.getTenantId() == null) {
             return ResponseEntity.status(403).body(Map.of("error", "A tenant is required to create a custom role"));
         }
@@ -101,7 +103,14 @@ public class RoleController {
         if (role == null && "SUPER_ADMIN".equals(com.dinemaster.role.Roles.canonical(actor.getRole()))) {
             role = roles.findByCodeAndTenantIdIsNullAndActiveTrue(code).orElse(null);
         }
+
         if (role == null) return ResponseEntity.notFound().build();
+        if (role.getTenantId() != null && !isTrustedRoleAdministrator(actor)) {
+            return ResponseEntity.status(403).body(Map.of("error", "Only tenant owners may manage role permissions"));
+        }
+        if (role.getTenantId() != null && code.equals(com.dinemaster.role.Roles.canonical(actor.getRole()))) {
+            return ResponseEntity.status(403).body(Map.of("error", "A user cannot modify their own role permissions"));
+        }
         Set<String> requested = request.permissions().stream().map(String::trim).collect(Collectors.toSet());
         Set<Permission> grants = findPermissions(requested);
         if (grants.size() != requested.size()) {
@@ -114,6 +123,13 @@ public class RoleController {
         return ResponseEntity.ok(Map.of("role", role.getCode(), "permissions", requested));
     }
 
+    @org.springframework.web.bind.annotation.PutMapping("/{roleCode}/permissions")
+    @PreAuthorize("hasAuthority('role:assign')")
+    public ResponseEntity<?> replacePermissionsPut(@PathVariable String roleCode,
+            @Valid @RequestBody RolePermissionUpdateRequest request, Authentication authentication) {
+        return replacePermissions(roleCode, request, authentication);
+    }
+
     private Set<Permission> findPermissions(Set<String> requested) {
         return permissions.findAll().stream().filter(permission -> requested.contains(permission.getCode()))
                 .collect(Collectors.toSet());
@@ -122,5 +138,10 @@ public class RoleController {
     private boolean containsPlatformPermission(Set<String> codes) {
         return codes.stream().anyMatch(code -> code.startsWith("tenant:")
                 || code.startsWith("licence:") || code.startsWith("support:"));
+    }
+
+    private boolean isTrustedRoleAdministrator(User actor) {
+        return actor.getTenantId() != null
+                && com.dinemaster.role.Roles.matches(actor.getRole(), "OWNER");
     }
 }

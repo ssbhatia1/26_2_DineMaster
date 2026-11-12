@@ -17,6 +17,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import com.dinemaster.security.BranchScopeService;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
@@ -29,13 +31,16 @@ public class BookingController {
     private final RestaurantRepository restaurantRepository;
     private final DiningTableRepository tableRepository;
     private final CustomerRepository customerRepository;
+    private final BranchScopeService branchScope;
 
     public BookingController(BookingRepository bookingRepository, RestaurantRepository restaurantRepository,
-            DiningTableRepository tableRepository, CustomerRepository customerRepository) {
+            DiningTableRepository tableRepository, CustomerRepository customerRepository,
+            BranchScopeService branchScope) {
         this.bookingRepository = bookingRepository;
         this.restaurantRepository = restaurantRepository;
         this.tableRepository = tableRepository;
         this.customerRepository = customerRepository;
+        this.branchScope = branchScope;
     }
 
     @GetMapping
@@ -47,7 +52,9 @@ public class BookingController {
     @PostMapping
     @PreAuthorize("hasAuthority('reservation:create')")
     @Transactional
-    public ResponseEntity<?> create(@Valid @RequestBody BookingRequest request) {
+    public ResponseEntity<?> create(
+            @Valid @RequestBody BookingRequest request, Authentication authentication) {
+        branchScope.requireBranch(authentication, request.restaurantId());
         Values values = resolve(request).orElse(null);
         if (values == null)
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid restaurant, table, or customer"));
@@ -59,7 +66,9 @@ public class BookingController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('reservation:update')")
     @Transactional
-    public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody BookingRequest request) {
+    public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody BookingRequest request,
+            Authentication authentication) {
+        branchScope.requireBranch(authentication, request.restaurantId());
         return bookingRepository.findById(id).flatMap(existing -> resolve(request).map(values -> {
             copy(request, existing, values.restaurant(), values.table(), values.customer());
             return (ResponseEntity<?>) ResponseEntity.ok(bookingRepository.save(existing));

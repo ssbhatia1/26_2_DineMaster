@@ -24,6 +24,7 @@ import 'screens/live_tracking_screen.dart';
 import 'screens/waiter_order_screen.dart';
 import 'services/server_service.dart';
 import 'services/sync_service.dart';
+import 'services/auth_token_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final themeNotifier = ValueNotifier<ThemeMode>(ThemeMode.light);
@@ -41,7 +42,15 @@ void main() async {
 
   final prefs = await SharedPreferences.getInstance();
 
-  final hasToken = prefs.getString('token') != null;
+  var accessToken = await AuthTokenStorage.readAccessToken();
+  if (accessToken == null || accessToken.isEmpty) {
+    accessToken = prefs.getString('token');
+    if (accessToken != null && accessToken.isNotEmpty) {
+      await AuthTokenStorage.save(accessToken: accessToken);
+      await prefs.remove('token');
+    }
+  }
+  final hasToken = accessToken != null && accessToken.isNotEmpty;
 
   // Always enforce clean light theme.
   themeNotifier.value = ThemeMode.light;
@@ -101,15 +110,15 @@ GoRouter _buildRouter(bool hasToken, [String? initialLocation]) {
             builder: (context, state) => const TablesScreen(),
           ),
           GoRoute(
-  path: '/dashboard/waiter_order',
-  builder: (context, state) {
-    final tableId = state.uri.queryParameters['tableId'];
+            path: '/dashboard/waiter_order',
+            builder: (context, state) {
+              final tableId = state.uri.queryParameters['tableId'];
 
-    return WaiterOrderScreen(
-      selectedTableId: tableId != null ? int.tryParse(tableId) : null,
-    );
-  },
-),
+              return WaiterOrderScreen(
+                selectedTableId: tableId != null ? int.tryParse(tableId) : null,
+              );
+            },
+          ),
           GoRoute(
             path: '/dashboard/kitchen',
             builder: (context, state) => const KitchenScreen(),

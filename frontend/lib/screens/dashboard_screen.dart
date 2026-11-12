@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/api/api_mode.dart';
 import '../core/database/database_helper.dart';
 import '../repositories/restaurant_repository.dart';
+import '../repositories/user_repository.dart';
 
 class DashboardScreen extends StatefulWidget {
   final Widget child;
@@ -53,10 +54,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final firstId = (restaurants.first['id'] as num).toInt();
           final savedId = DatabaseHelper.currentRestaurantId;
 
-          _selectedRestaurantId = restaurants.any(
-            (restaurant) =>
-                (restaurant['id'] as num).toInt() == savedId,
-          )
+          _selectedRestaurantId =
+              restaurants.any(
+                (restaurant) => (restaurant['id'] as num).toInt() == savedId,
+              )
               ? savedId
               : firstId;
 
@@ -182,10 +183,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF1E1E2F),
-            Color(0xFF0F0F1A),
-          ],
+          colors: [Color(0xFF1E1E2F), Color(0xFF0F0F1A)],
         ),
       ),
       child: Column(
@@ -194,11 +192,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(24),
             child: Row(
               children: [
-                Image.asset(
-                  'assets/images/logo.jpg',
-                  height: 40,
-                  width: 40,
-                ),
+                Image.asset('assets/images/logo.jpg', height: 40, width: 40),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -260,11 +254,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 size: 20,
               ),
               onPressed: () async {
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.remove('token');
-                await prefs.remove('username');
-                await prefs.remove('role');
-                await prefs.remove('remember_me');
+                await UserRepository().logout();
 
                 if (context.mounted) {
                   context.go('/');
@@ -283,8 +273,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
     final String location = GoRouterState.of(context).uri.path;
 
-    int activeIndex =
-        _navItems.indexWhere((item) => item['route'] == location);
+    int activeIndex = _navItems.indexWhere((item) => item['route'] == location);
 
     if (activeIndex == -1) {
       int bestMatchLength = 0;
@@ -382,11 +371,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         constraints: const BoxConstraints(),
                         tooltip: 'Logout',
                         onPressed: () async {
-                          final prefs = await SharedPreferences.getInstance();
-                          await prefs.remove('token');
-                          await prefs.remove('username');
-                          await prefs.remove('role');
-                          await prefs.remove('remember_me');
+                          await UserRepository().logout();
 
                           if (context.mounted) {
                             context.go('/');

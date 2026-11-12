@@ -13,11 +13,13 @@ import com.dinemaster.orders.entity.Order;
 import com.dinemaster.orders.entity.OrderItem;
 import com.dinemaster.orders.service.OrderService;
 import com.dinemaster.restaurant.entity.Restaurant;
+import com.dinemaster.security.BranchScopeService;
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,15 +29,19 @@ import java.util.List;
 public class OrderController {
 
     private final OrderService orderService;
+    private final BranchScopeService branchScope;
 
-    public OrderController(OrderService orderService) {
+    public OrderController(OrderService orderService, BranchScopeService branchScope) {
         this.orderService = orderService;
+        this.branchScope = branchScope;
     }
 
     @PostMapping
     @PreAuthorize("hasAuthority('order:create')")
     public ResponseEntity<OrderResponse> createOrder(
-            @Valid @RequestBody CreateOrderRequest request) {
+            @Valid @RequestBody CreateOrderRequest request,
+            Authentication authentication) {
+        branchScope.requireBranch(authentication, request.getRestaurantId());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(orderService.createOrder(request));
     }
@@ -43,7 +49,8 @@ public class OrderController {
     @GetMapping
     @PreAuthorize("hasAuthority('order:view')")
     public ResponseEntity<List<OrderResponse>> getOrders(
-            @RequestParam Long restaurantId) {
+            @RequestParam Long restaurantId, Authentication authentication) {
+        branchScope.requireBranch(authentication, restaurantId);
         return ResponseEntity.ok(
                 orderService.getOrdersByRestaurant(restaurantId));
     }
@@ -51,14 +58,16 @@ public class OrderController {
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('order:view')")
     public ResponseEntity<OrderResponse> getOrderById(
-            @PathVariable Long id) {
+            @PathVariable Long id, Authentication authentication) {
+        branchScope.requireBranch(authentication, orderService.getOrderRestaurantId(id));
         return ResponseEntity.ok(orderService.getOrderById(id));
     }
 
     @GetMapping("/{id}/items")
     @PreAuthorize("hasAuthority('order:view')")
     public ResponseEntity<List<OrderItemResponse>> getOrderItems(
-            @PathVariable Long id) {
+            @PathVariable Long id, Authentication authentication) {
+        branchScope.requireBranch(authentication, orderService.getOrderRestaurantId(id));
         return ResponseEntity.ok(orderService.getOrderItems(id));
     }
 
@@ -66,19 +75,23 @@ public class OrderController {
     @PreAuthorize("hasAnyAuthority('order:update','kot:update_status')")
     public ResponseEntity<OrderResponse> updateStatus(
             @PathVariable Long id,
-            @Valid @RequestBody OrderStatusRequest request) {
+            @Valid @RequestBody OrderStatusRequest request,
+            Authentication authentication) {
+        branchScope.requireBranch(authentication, orderService.getOrderRestaurantId(id));
         return ResponseEntity.ok(orderService.updateStatus(id, request));
     }
 
     @PostMapping("/{id}/hold")
     @PreAuthorize("hasAuthority('order:park')")
-    public ResponseEntity<OrderResponse> hold(@PathVariable Long id) {
+    public ResponseEntity<OrderResponse> hold(@PathVariable Long id, Authentication authentication) {
+        branchScope.requireBranch(authentication, orderService.getOrderRestaurantId(id));
         return ResponseEntity.ok(orderService.hold(id));
     }
 
     @PostMapping("/{id}/cancel")
     @PreAuthorize("hasAuthority('order:cancel')")
-    public ResponseEntity<OrderResponse> cancel(@PathVariable Long id) {
+    public ResponseEntity<OrderResponse> cancel(@PathVariable Long id, Authentication authentication) {
+        branchScope.requireBranch(authentication, orderService.getOrderRestaurantId(id));
         return ResponseEntity.ok(orderService.cancel(id));
     }
 
@@ -86,7 +99,9 @@ public class OrderController {
     @PreAuthorize("hasAuthority('payment:record')")
     public ResponseEntity<OrderResponse> recordPayment(
             @PathVariable Long id,
-            @Valid @RequestBody PaymentRequest request) {
+            @Valid @RequestBody PaymentRequest request,
+            Authentication authentication) {
+        branchScope.requireBranch(authentication, orderService.getOrderRestaurantId(id));
         return ResponseEntity.ok(orderService.recordPayment(id, request));
     }
 }

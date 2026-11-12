@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/database/database_helper.dart';
 import '../core/theme/app_colors.dart';
+import '../services/auth_token_storage.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -48,7 +49,14 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _navigateNext() async {
     final prefs = await SharedPreferences.getInstance();
     final rememberMe = prefs.getBool('remember_me') ?? false;
-    final token = prefs.getString('token');
+    var token = await AuthTokenStorage.readAccessToken();
+    if (token == null || token.isEmpty) {
+      token = prefs.getString('token');
+      if (token != null && token.isNotEmpty) {
+        await AuthTokenStorage.save(accessToken: token);
+        await prefs.remove('token');
+      }
+    }
     final hasToken = rememberMe && (token != null && token.isNotEmpty);
 
     if (!mounted) return;
@@ -69,27 +77,27 @@ class _SplashScreenState extends State<SplashScreen> {
           children: [
             // Application Logo
             Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withAlpha(40),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                    spreadRadius: 2,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withAlpha(40),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                        spreadRadius: 2,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: Image.asset(
-                  'assets/images/logo.jpg',
-                  height: 120,
-                  width: 120,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            )
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: Image.asset(
+                      'assets/images/logo.jpg',
+                      height: 120,
+                      width: 120,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                )
                 .animate()
                 .scale(duration: 600.ms, curve: Curves.easeOutBack)
                 .fadeIn(duration: 500.ms),
