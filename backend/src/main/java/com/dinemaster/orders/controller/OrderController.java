@@ -81,6 +81,13 @@ public class OrderController {
         return ResponseEntity.ok(orderService.updateStatus(id, request));
     }
 
+    @PostMapping("/{id}/accept-qr")
+    @PreAuthorize("hasAuthority('order:update')")
+    public ResponseEntity<OrderResponse> acceptQrOrder(@PathVariable Long id, Authentication authentication) {
+        branchScope.requireBranch(authentication, orderService.getOrderRestaurantId(id));
+        return ResponseEntity.ok(orderService.acceptQrOrder(id));
+    }
+
     @PostMapping("/{id}/hold")
     @PreAuthorize("hasAuthority('order:park')")
     public ResponseEntity<OrderResponse> hold(@PathVariable Long id, Authentication authentication) {

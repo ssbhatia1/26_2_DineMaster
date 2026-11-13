@@ -1,6 +1,11 @@
 server:
   port: ${SERVER_PORT:8081}
 
+dinemaster:
+  guest:
+    menu-base-url: ${GUEST_MENU_BASE_URL:/menu}
+    allowed-origin: ${GUEST_ALLOWED_ORIGIN:}
+
 spring:
   application:
     name: dinemaster-backend

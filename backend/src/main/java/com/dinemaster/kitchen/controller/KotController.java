@@ -73,6 +73,10 @@ public class KotController {
             Authentication authentication) {
         return orderRepository.findById(request.orderId()).map(order -> {
             branchScope.requireBranch(authentication, order.getRestaurant().getId());
+            if ("DRAFT".equalsIgnoreCase(order.getStatus())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("error", "QR draft orders must be accepted before kitchen processing"));
+            }
             if (request.kotNumber() == null || request.kotNumber().isBlank()) {
                 var existing = kotRepository.findByOrder_IdOrderByCreatedAtAsc(order.getId())
                         .stream()

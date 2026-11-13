@@ -7,6 +7,7 @@ import com.dinemaster.customer.entity.Customer;
 import com.dinemaster.diningtable.entity.DiningTable;
 import com.dinemaster.restaurant.entity.Restaurant;
 import com.dinemaster.user.entity.User;
+import com.dinemaster.qr.entity.TableSession;
 
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -35,6 +36,13 @@ public class Order {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "restaurant_id")
     private Restaurant restaurant;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "table_session_id")
+    private TableSession tableSession;
+
+    @Column(nullable = false, length = 20)
+    private String channel = "STAFF";
 
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount = BigDecimal.ZERO;
@@ -106,6 +114,11 @@ public class Order {
     public void setRestaurant(Restaurant restaurant) {
         this.restaurant = restaurant;
     }
+
+    public TableSession getTableSession() { return tableSession; }
+    public void setTableSession(TableSession tableSession) { this.tableSession = tableSession; }
+    public String getChannel() { return channel; }
+    public void setChannel(String channel) { this.channel = channel; }
 
     public BigDecimal getTotalAmount() { return totalAmount; }
     public void setTotalAmount(BigDecimal totalAmount) {

@@ -10,6 +10,8 @@ import com.dinemaster.orders.repository.OrderRepository;
 import com.dinemaster.restaurant.entity.Restaurant;
 import com.dinemaster.restaurant.repository.RestaurantRepository;
 import com.dinemaster.security.BranchScopeService;
+import com.dinemaster.qr.dto.QrSessionResponse;
+import com.dinemaster.qr.service.TableSessionService;
 import com.dinemaster.user.entity.User;
 import com.dinemaster.user.repository.UserBranchRepository;
 import com.dinemaster.user.repository.UserRepository;
@@ -58,10 +60,11 @@ public class TableController {
     private final UserRepository users;
     private final UserBranchRepository userBranches;
     private final BranchScopeService branchScope;
+    private final TableSessionService tableSessions;
 
     public TableController(DiningTableRepository tables, RestaurantRepository branches, FloorRepository floors,
             OrderRepository orders, UserRepository users, UserBranchRepository userBranches,
-            BranchScopeService branchScope) {
+            BranchScopeService branchScope, TableSessionService tableSessions) {
         this.tables = tables;
         this.branches = branches;
         this.floors = floors;
@@ -69,6 +72,7 @@ public class TableController {
         this.users = users;
         this.userBranches = userBranches;
         this.branchScope = branchScope;
+        this.tableSessions = tableSessions;
     }
 
     @GetMapping
@@ -100,6 +104,15 @@ public class TableController {
         if (table == null || table.getRestaurant() == null) return ResponseEntity.notFound().build();
         branchScope.requireBranch(authentication, table.getRestaurant().getId());
         return ResponseEntity.ok(toResponse(table));
+    }
+
+    @PostMapping("/{id}/qr-session")
+    @PreAuthorize("hasAuthority('table:update_status')")
+    public ResponseEntity<QrSessionResponse> openQrSession(@PathVariable Long id, Authentication authentication) {
+        DiningTable table = tables.findById(id).orElse(null);
+        if (table == null || table.getRestaurant() == null) return ResponseEntity.notFound().build();
+        branchScope.requireBranch(authentication, table.getRestaurant().getId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(tableSessions.open(id));
     }
 
     @PostMapping
@@ -142,6 +155,7 @@ public class TableController {
     }
 
     @PutMapping("/{id}/status")
+    @Transactional
     @PreAuthorize("hasAuthority('table:update_status')")
     public ResponseEntity<?> updateStatus(@PathVariable Long id, @Valid @RequestBody TableStatusRequest request,
             Authentication authentication) {
@@ -150,6 +164,7 @@ public class TableController {
 
     // Backward-compatible route for existing clients; new clients should use PUT with a version.
     @PatchMapping("/{id}/status")
+    @Transactional
     @PreAuthorize("hasAuthority('table:update_status')")
     public ResponseEntity<?> updateStatusLegacy(@PathVariable Long id, @RequestParam String status,
             Authentication authentication) {
@@ -188,6 +203,7 @@ public class TableController {
         if (table == null || table.getRestaurant() == null) return ResponseEntity.notFound().build();
         branchScope.requireBranch(authentication, table.getRestaurant().getId());
         if (orders.countOpenOrdersForTable(id) > 0) return error(HttpStatus.CONFLICT, "Table cannot be deactivated while an order is open");
+        tableSessions.closeForTable(id);
         table.setActive(false);
         try { tables.save(table); return ResponseEntity.noContent().build(); }
         catch (OptimisticLockingFailureException ex) { return error(HttpStatus.CONFLICT, "Table changed concurrently"); }
@@ -211,6 +227,7 @@ public class TableController {
             return error(HttpStatus.CONFLICT, "Illegal table status transition");
         }
         table.setStatus(next);
+        if ("AVAILABLE".equals(next)) tableSessions.closeForTable(table.getId());
         try { return ResponseEntity.ok(toResponse(tables.save(table))); }
         catch (OptimisticLockingFailureException ex) { return error(HttpStatus.CONFLICT, "Table status changed concurrently"); }
     }

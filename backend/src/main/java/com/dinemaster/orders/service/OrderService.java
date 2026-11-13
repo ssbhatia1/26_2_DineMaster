@@ -297,4 +297,14 @@ public class OrderService {
                                 .orElseThrow(() -> new ResponseStatusException(
                                                 HttpStatus.NOT_FOUND, "Order not found"));
         }
+
+        @Transactional
+        public OrderResponse acceptQrOrder(Long orderId) {
+                Order order = findOrder(orderId);
+                if (!"QR".equalsIgnoreCase(order.getChannel()) || !"DRAFT".equalsIgnoreCase(order.getStatus())) {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT, "Only a QR draft order can be accepted");
+                }
+                order.setStatus("Pending");
+                return OrderResponse.from(orderRepository.save(order));
+        }
 }
