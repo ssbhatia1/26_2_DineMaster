@@ -296,8 +296,8 @@ public class AuthService {
         var branches = userBranches.findBranchIds(user.getId());
         return new AuthSession(jwtService.createToken(user, deviceId, branches), rawRefresh,
                 accessLifetimeMs / 1000, UserResponse.from(user,
-                        rolePermissions.permissionsFor(user.getRole(), user.getTenantId()),
-                        user.getContactDetails(), branches), user.getTenantId(), branches,
+                        rolePermissions.permissionsFor(user.getRole(), user.getTenantId()), branches),
+                user.getTenantId(), branches,
                 deviceId, user.getPermissionVersion());
     }
 

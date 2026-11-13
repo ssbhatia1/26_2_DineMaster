@@ -710,6 +710,20 @@ Recommended order inside each feature: **Database → Repository → Service →
 | STAFF-09 | What is the retention policy for soft-deleted staff? | Data lifecycle |
 | STAFF-10 | Which staff fields may Waiter/Chef/Manager see? | Response masking and privacy |
 
+### Current backend defaults (confirm before production)
+
+The existing implementation uses these defaults to keep the MVP consistent. They are not product-owner approvals:
+
+- Username is globally unique; employee code is optional and unique per tenant.
+- A user has one effective role and may have multiple branch assignments. Managers are restricted to lower staff roles in their assigned branch.
+- Managers may reset passwords for staff they can manage. Creation/reset uses an admin-supplied temporary password; the staff member must change it after login. The admin must deliver it out of band.
+- Email is optional. `shiftTiming` is stored as a profile label; shift scheduling remains out of scope.
+- Deactivation uses `is_active`; there is no soft-delete timestamp or `DELETED` list filter.
+- Phone is shown in full to Restaurant Admin and masked for Manager. Phone-based directory search is limited to Restaurant Admin.
+- Current database IDs are numeric `BIGINT`, as used by the existing application schema, rather than the UUID examples in this design.
+
+Staff lifecycle changes are now written transactionally to `staff_sync_outbox`. The outbox is only the durable handoff point: a publisher that produces the M1 signed Edge snapshot and marks events delivered is still required before Edge sync acceptance criteria can be considered complete.
+
 ---
 
 # 16. Developer handoff checklist

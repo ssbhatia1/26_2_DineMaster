@@ -90,7 +90,7 @@ public class OrderService {
 
                 if (request.getTableId() != null) {
                         DiningTable table = diningTableRepository
-                                        .findById(request.getTableId())
+                                        .findForUpdateById(request.getTableId())
                                         .orElseThrow(() -> new ResponseStatusException(
                                                         HttpStatus.NOT_FOUND, "Table not found"));
 
@@ -101,8 +101,17 @@ public class OrderService {
                                                 "Table does not belong to this restaurant");
                         }
 
+                        if (!"Available".equalsIgnoreCase(table.getStatus())) {
+                                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                                "Table is not available for a new order");
+                        }
+                        if (orderRepository.countOpenOrdersForTable(table.getId()) > 0) {
+                                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                                                "Table already has an open order");
+                        }
+
                         order.setDiningTable(table);
-                        table.setStatus("Occupied");
+                        table.setStatus("Ordering");
                 }
 
                 if (request.getCustomerId() != null) {
@@ -129,6 +138,7 @@ public class OrderService {
                         }
                         order.setWaiter(waiter);
                         order.setOrderTaker(waiter.getName());
+                        if (order.getDiningTable() != null) order.getDiningTable().setWaiter(waiter);
                 }
 
                 BigDecimal subtotal = BigDecimal.ZERO;
@@ -278,6 +288,7 @@ public class OrderService {
                 order.setPaymentStatus("Paid");
                 order.setPaymentMethod(paymentMethod);
                 order.setStatus("Completed");
+                if (order.getDiningTable() != null) order.getDiningTable().setStatus("Cleaning");
                 return OrderResponse.from(orderRepository.save(order));
         }
 

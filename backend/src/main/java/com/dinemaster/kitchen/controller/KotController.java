@@ -160,16 +160,24 @@ public class KotController {
     @PostMapping("/{kotId}/items/{itemId}")
     @PreAuthorize("hasAuthority('kot:update_status')")
     @Transactional
-    public ResponseEntity<?> assignItem(@PathVariable Long kotId, @PathVariable Long itemId) {
+    public ResponseEntity<?> assignItem(@PathVariable Long kotId, @PathVariable Long itemId,
+            Authentication authentication) {
         Kot kot = kotRepository.findById(kotId).orElse(null);
         OrderItem item = orderItemRepository.findById(itemId).orElse(null);
         if (kot == null || item == null)
             return ResponseEntity.notFound().build();
+        branchScope.requireBranch(authentication, kot.getOrder().getRestaurant().getId());
         if (!kot.getOrder().getId().equals(item.getOrder().getId())) {
             return ResponseEntity.badRequest().body(Map.of("error", "Item belongs to another order"));
         }
-        item.setKot(kot);
-        return ResponseEntity.ok(orderItemRepository.save(item));
+        int updated = orderItemRepository.assignToKot(item.getId(), kot.getOrder().getId(), kot.getId());
+        if (updated == 0) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(Map.of(
+                "itemId", item.getId(),
+                "kotId", kot.getId(),
+                "orderId", kot.getOrder().getId(),
+                "productId", item.getProduct().getId(),
+                "status", item.getStatus()));
     }
 
     @DeleteMapping("/{kotId}/items/{itemId}")

@@ -29,7 +29,12 @@ public final class ApiErrorResponse {
 
     public static String requestId(HttpServletRequest request) {
         String supplied = request == null ? null : request.getHeader("X-Request-Id");
-        return supplied != null && SAFE_REQUEST_ID.matcher(supplied).matches()
-                ? supplied : UUID.randomUUID().toString();
+        if (supplied != null && SAFE_REQUEST_ID.matcher(supplied).matches()) return supplied;
+        if (request == null) return UUID.randomUUID().toString();
+        Object existing = request.getAttribute("api.requestId");
+        if (existing instanceof String value && SAFE_REQUEST_ID.matcher(value).matches()) return value;
+        String generated = UUID.randomUUID().toString();
+        request.setAttribute("api.requestId", generated);
+        return generated;
     }
 }

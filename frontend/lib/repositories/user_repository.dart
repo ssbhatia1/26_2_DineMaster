@@ -87,12 +87,17 @@ class UserRepository {
       if (user.id == null) {
         throw ArgumentError('User ID is required for update');
       }
-      await _apiClient.putJson('/api/v1/users/${user.id}', _toApiMap(user));
-      if (user.branchIds.isNotEmpty) {
-        await _apiClient.patchJson('/api/v1/users/${user.id}/branches', {
-          'branchIds': user.branchIds,
-        });
-      }
+      await _apiClient.putJson('/api/v1/users/${user.id}', {
+        'fullName': user.name,
+        'phone': user.contactDetails,
+        'shiftTiming': user.shiftTiming,
+      });
+      await _apiClient.putJson('/api/v1/users/${user.id}/roles', {
+        'roleCodes': [user.role],
+      });
+      await _apiClient.putJson('/api/v1/users/${user.id}/branches', {
+        'branchIds': user.branchIds,
+      });
       return 1;
     }
     final db = await _dbHelper.database;

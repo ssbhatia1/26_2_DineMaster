@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -38,6 +39,22 @@ public class Restaurant {
 
     @Column(name = "tenant_id", nullable = false)
     private Long tenantId;
+
+    @Column(nullable = false, length = 20)
+    private String code;
+
+    @Column(nullable = false, length = 50)
+    private String timezone = "Asia/Kolkata";
+
+    @Column(name = "is_active", nullable = false)
+    private boolean active = true;
+
+    @Version
+    @Column(nullable = false)
+    private int version = 1;
+
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
@@ -91,6 +108,16 @@ public class Restaurant {
     public Long getTenantId() { return tenantId; }
 
     public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
+    public String getTimezone() { return timezone; }
+    public void setTimezone(String timezone) { this.timezone = timezone; }
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
+    public int getVersion() { return version; }
+    public void setVersion(int version) { this.version = version; }
+    public OffsetDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(OffsetDateTime deletedAt) { this.deletedAt = deletedAt; }
 
     public OffsetDateTime getCreatedAt() {
         return createdAt;

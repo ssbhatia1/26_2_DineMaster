@@ -568,7 +568,7 @@
     },
     {
       "name": "03 - Roles & Permissions",
-      "description": "Role catalogue and permission grants. /api/v1/roles. Requires role:assign; custom roles require a tenant OWNER.",
+      "description": "Role catalogue and permission grants. /api/v1/roles. SUPER_ADMIN manages global role grants such as OWNER. Tenant OWNER manages MANAGER and tenant custom roles, and may grant only permissions the OWNER has. Changes replace the complete permission set.",
       "item": [
         {
           "name": "List roles",
@@ -640,7 +640,7 @@
               }
             },
             "url": "{{baseUrl}}/api/v1/roles/SHIFT_SUPERVISOR/permissions",
-            "description": "Body matches RolePermissionUpdateRequest. Replaces all grants. You cannot modify your own tenant role."
+            "description": "Body matches RolePermissionUpdateRequest. Replaces all grants. SUPER_ADMIN can manage global roles, including OWNER. Tenant OWNER can manage MANAGER (creating a tenant override when needed) and tenant custom roles, but cannot edit OWNER or grant permissions they do not have."
           }
         },
         {
@@ -872,7 +872,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Asha Sharma\",\n  \"username\": \"asha.cashier\",\n  \"role\": \"CASHIER\",\n  \"contactDetails\": \"+91-9876543210\",\n  \"shiftTiming\": \"10:00-18:00\",\n  \"email\": \"asha@example.com\",\n  \"employeeCode\": \"EMP-1001\",\n  \"joinedOn\": \"2026-11-11\"\n}",
+              "raw": "{\n  \"fullName\": \"Asha Sharma\",\n  \"phone\": \"+91-9876543210\",\n  \"shiftTiming\": \"10:00-18:00\",\n  \"email\": \"asha@example.com\",\n  \"employeeCode\": \"EMP-1001\",\n  \"joinedOn\": \"2026-11-11\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -880,7 +880,7 @@
               }
             },
             "url": "{{baseUrl}}/api/v1/users/{{userId}}",
-            "description": "Body matches UserRequest but password, active and branchIds must be omitted (dedicated endpoints exist). Role must match the existing role here."
+            "description": "Profile-only StaffUpdateRequest. Editable fields are fullName, email, phone, employeeCode, joinedOn and shiftTiming. Role, branches, status and password use their dedicated endpoints."
           }
         },
         {

@@ -38,6 +38,12 @@ public class TableRequest {
     @Positive(message = "Restaurant ID must be positive")
     private Long restaurantId;
 
+    @Positive
+    private Long floorId;
+
+    private int positionX;
+    private int positionY;
+
     private boolean active = true;
     private boolean reservable = true;
     private String notes;
@@ -97,6 +103,13 @@ public class TableRequest {
     public void setRestaurantId(Long restaurantId) {
         this.restaurantId = restaurantId;
     }
+
+    public Long getFloorId() { return floorId; }
+    public void setFloorId(Long floorId) { this.floorId = floorId; }
+    public int getPositionX() { return positionX; }
+    public void setPositionX(int positionX) { this.positionX = positionX; }
+    public int getPositionY() { return positionY; }
+    public void setPositionY(int positionY) { this.positionY = positionY; }
 
     public boolean isActive() {
         return active;

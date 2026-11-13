@@ -49,7 +49,7 @@ public final class RolePermissions {
                     "bill:reprint", "payment:record", "shift:open", "shift:close", "offer:view", "customer:view",
                     "customer:manage", "dashboard:view", "report:sales", "notification:view", "sync:view_status"));
             case "WAITER" -> permissions.addAll(Set.of(
-                    "table:view", "reservation:view", "reservation:create", "reservation:update", "menu:view",
+                    "table:view", "table:update_status", "reservation:view", "reservation:create", "reservation:update", "menu:view",
                     "order:create", "order:view", "order:update", "order:cancel", "order:park", "order:reopen",
                     "kot:view", "kot:update_status", "kot:reprint", "customer:view", "notification:view"));
             case "CHEF" -> permissions.addAll(Set.of(
@@ -61,6 +61,11 @@ public final class RolePermissions {
                     "inventory:adjust", "inventory:count", "supplier:view", "supplier:manage", "expense:view",
                     "expense:create", "dashboard:view", "report:inventory", "report:export", "notification:view"));
             default -> { }
+        }
+        if ("SUPER_ADMIN".equals(role)) {
+            for (String builtInRole : Set.of("OWNER", "MANAGER", "CASHIER", "WAITER", "CHEF", "INVENTORY_MANAGER")) {
+                permissions.addAll(forRole(builtInRole));
+            }
         }
         return Set.copyOf(permissions);
     }

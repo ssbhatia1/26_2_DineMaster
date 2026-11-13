@@ -19,12 +19,15 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.TreeMap;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(AuthService.AuthFailure.class)
     public ResponseEntity<Map<String, Object>> handleAuthFailure(
@@ -133,6 +136,8 @@ public class ApiExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(
             Exception exception, HttpServletRequest request) {
+        log.error("Unhandled API error requestId={} method={} uri={}",
+                ApiErrorResponse.requestId(request), request.getMethod(), request.getRequestURI(), exception);
         return ApiErrorResponse.of(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
                 "An unexpected server error occurred.", null, request);
     }

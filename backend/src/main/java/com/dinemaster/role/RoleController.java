@@ -84,6 +84,9 @@ public class RoleController {
         if (grants.size() != requested.size()) {
             return ResponseEntity.badRequest().body(Map.of("error", "One or more permission codes do not exist"));
         }
+        if (!actorHasPermissions(actor, requested)) {
+            return ResponseEntity.status(403).body(Map.of("error", "A role cannot receive permissions its owner does not have"));
+        }
         if (containsPlatformPermission(requested)) {
             return ResponseEntity.status(403).body(Map.of("error", "Tenant roles cannot receive platform permissions"));
         }
@@ -99,9 +102,21 @@ public class RoleController {
             @Valid @RequestBody RolePermissionUpdateRequest request, Authentication authentication) {
         User actor = branchScope.requireUser(authentication);
         String code = com.dinemaster.role.Roles.canonical(roleCode);
-        Role role = roles.findByCodeAndTenantIdAndActiveTrue(code, actor.getTenantId()).orElse(null);
-        if (role == null && "SUPER_ADMIN".equals(com.dinemaster.role.Roles.canonical(actor.getRole()))) {
-            role = roles.findByCodeAndTenantIdIsNullAndActiveTrue(code).orElse(null);
+        boolean superAdmin = isSuperAdmin(actor);
+        Role role;
+        if (superAdmin) {
+            role = roles.findByCodeAndTenantIdAndActiveTrue(code, actor.getTenantId())
+                    .or(() -> roles.findByCodeAndTenantIdIsNullAndActiveTrue(code)).orElse(null);
+        } else {
+            role = roles.findByCodeAndTenantIdAndActiveTrue(code, actor.getTenantId()).orElse(null);
+            if (role == null && isTrustedRoleAdministrator(actor) && "MANAGER".equals(code)) {
+                Role defaults = roles.findByCodeAndTenantIdIsNullAndActiveTrue(code).orElse(null);
+                if (defaults != null) {
+                    role = new Role(defaults.getCode(), defaults.getName(), actor.getTenantId());
+                    role.setPermissions(new java.util.LinkedHashSet<>(defaults.getPermissions()));
+                    role = roles.save(role);
+                }
+            }
         }
 
         if (role == null) return ResponseEntity.notFound().build();
@@ -115,6 +130,9 @@ public class RoleController {
         Set<Permission> grants = findPermissions(requested);
         if (grants.size() != requested.size()) {
             return ResponseEntity.badRequest().body(Map.of("error", "One or more permission codes do not exist"));
+        }
+        if (!actorHasPermissions(actor, requested)) {
+            return ResponseEntity.status(403).body(Map.of("error", "A role cannot receive permissions its owner does not have"));
         }
         if (role.getTenantId() != null && containsPlatformPermission(requested)) {
             return ResponseEntity.status(403).body(Map.of("error", "Tenant roles cannot receive platform permissions"));
@@ -143,5 +161,14 @@ public class RoleController {
     private boolean isTrustedRoleAdministrator(User actor) {
         return actor.getTenantId() != null
                 && com.dinemaster.role.Roles.matches(actor.getRole(), "OWNER");
+    }
+
+    private boolean actorHasPermissions(User actor, Set<String> requested) {
+        return isSuperAdmin(actor) || rolePermissionService.permissionsFor(actor.getRole(), actor.getTenantId())
+                .containsAll(requested);
+    }
+
+    private boolean isSuperAdmin(User actor) {
+        return "SUPER_ADMIN".equals(com.dinemaster.role.Roles.canonical(actor.getRole()));
     }
 }

@@ -41,7 +41,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
                     where ub.user_id = u.id and ub.branch_id = :branchId))
               and (:query is null or lower(u.name) like lower(concat('%', :query, '%'))
                     or lower(u.username) like lower(concat('%', :query, '%'))
-                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%'))
+                    or (:phoneSearchAllowed = true and lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%')))
                     or lower(coalesce(u.employee_code, '')) like lower(concat('%', :query, '%'))
                     or lower(coalesce(u.email, '')) like lower(concat('%', :query, '%')))
             """,
@@ -55,13 +55,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
                     where ub.user_id = u.id and ub.branch_id = :branchId))
               and (:query is null or lower(u.name) like lower(concat('%', :query, '%'))
                     or lower(u.username) like lower(concat('%', :query, '%'))
-                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%'))
+                    or (:phoneSearchAllowed = true and lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%')))
                     or lower(coalesce(u.employee_code, '')) like lower(concat('%', :query, '%'))
                     or lower(coalesce(u.email, '')) like lower(concat('%', :query, '%')))
             """, nativeQuery = true)
     Page<User> searchTenantUsers(@Param("tenantId") Long tenantId,
             @Param("role") String role, @Param("active") Boolean active,
-            @Param("branchId") Long branchId, @Param("query") String query, Pageable pageable);
+            @Param("branchId") Long branchId, @Param("query") String query,
+            @Param("phoneSearchAllowed") boolean phoneSearchAllowed, Pageable pageable);
 
     @Query(value = """
             select u.* from users u
@@ -76,7 +77,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
                     where ub.user_id = u.id and ub.branch_id = :branchId))
               and (:query is null or lower(u.name) like lower(concat('%', :query, '%'))
                     or lower(u.username) like lower(concat('%', :query, '%'))
-                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%'))
+                    or (:phoneSearchAllowed = true and lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%')))
                     or lower(coalesce(u.employee_code, '')) like lower(concat('%', :query, '%'))
                     or lower(coalesce(u.email, '')) like lower(concat('%', :query, '%')))
             """,
@@ -93,14 +94,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
                     where ub.user_id = u.id and ub.branch_id = :branchId))
               and (:query is null or lower(u.name) like lower(concat('%', :query, '%'))
                     or lower(u.username) like lower(concat('%', :query, '%'))
-                    or lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%'))
+                    or (:phoneSearchAllowed = true and lower(coalesce(u.contact_details, '')) like lower(concat('%', :query, '%')))
                     or lower(coalesce(u.employee_code, '')) like lower(concat('%', :query, '%'))
                     or lower(coalesce(u.email, '')) like lower(concat('%', :query, '%')))
             """, nativeQuery = true)
     Page<User> searchTenantUsersInBranches(@Param("tenantId") Long tenantId,
             @Param("visibleBranches") List<Long> visibleBranches, @Param("role") String role,
             @Param("active") Boolean active, @Param("branchId") Long branchId,
-            @Param("query") String query, Pageable pageable);
+            @Param("query") String query, @Param("phoneSearchAllowed") boolean phoneSearchAllowed,
+            Pageable pageable);
 
     @Query(value = "select count(*) from users where upper(role) = upper(:role) and is_active = true", nativeQuery = true)
     long countActiveByRole(@Param("role") String role);

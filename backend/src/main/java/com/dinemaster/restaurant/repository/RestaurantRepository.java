@@ -12,4 +12,12 @@ public interface RestaurantRepository
         extends JpaRepository<Restaurant, Long> {
 
     List<Restaurant> findAllByTenantId(Long tenantId);
+
+    List<Restaurant> findAllByTenantIdAndDeletedAtIsNullOrderById(Long tenantId);
+
+    List<Restaurant> findAllByIdInAndTenantIdAndDeletedAtIsNull(List<Long> ids, Long tenantId);
+
+    java.util.Optional<Restaurant> findByIdAndTenantIdAndDeletedAtIsNull(Long id, Long tenantId);
+
+    boolean existsByTenantIdAndCodeIgnoreCaseAndDeletedAtIsNull(Long tenantId, String code);
 }

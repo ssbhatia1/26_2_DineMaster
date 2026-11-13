@@ -16,6 +16,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Version;
 
 @Entity
 @Table(
@@ -62,6 +63,19 @@ public class DiningTable {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "restaurant_id")
     private Restaurant restaurant;
+
+    @Column(name = "floor_id")
+    private Long floorId;
+
+    @Column(name = "position_x", nullable = false)
+    private int positionX;
+
+    @Column(name = "position_y", nullable = false)
+    private int positionY;
+
+    @Version
+    @Column(nullable = false)
+    private int version = 1;
 
     public DiningTable() {
     }
@@ -161,4 +175,12 @@ public class DiningTable {
     public void setRestaurant(Restaurant restaurant) {
         this.restaurant = restaurant;
     }
+
+    public Long getFloorId() { return floorId; }
+    public void setFloorId(Long floorId) { this.floorId = floorId; }
+    public int getPositionX() { return positionX; }
+    public void setPositionX(int positionX) { this.positionX = positionX; }
+    public int getPositionY() { return positionY; }
+    public void setPositionY(int positionY) { this.positionY = positionY; }
+    public int getVersion() { return version; }
 }

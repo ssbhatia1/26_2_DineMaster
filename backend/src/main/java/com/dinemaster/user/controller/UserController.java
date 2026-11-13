@@ -10,12 +10,14 @@ import com.dinemaster.user.repository.UserBranchRepository;
 import com.dinemaster.user.repository.UserRoleRepository;
 import com.dinemaster.role.RoleRepository;
 import com.dinemaster.user.dto.UserRequest;
+import com.dinemaster.user.dto.StaffUpdateRequest;
 import com.dinemaster.user.dto.UserResponse;
 import com.dinemaster.user.dto.PasswordResetRequest;
 import com.dinemaster.user.dto.UserRoleUpdateRequest;
 import com.dinemaster.user.dto.UserLifecycleRequest;
 import com.dinemaster.user.entity.User;
 import com.dinemaster.user.repository.UserRepository;
+import com.dinemaster.user.service.StaffSyncOutboxService;
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -52,11 +54,13 @@ public class UserController {
     private final UserRoleRepository userRoles;
     private final RoleRepository roles;
     private final AuthAuditLogRepository auditLogs;
+    private final StaffSyncOutboxService staffSyncOutbox;
 
     public UserController(UserRepository repository, PasswordEncoder encoder, RefreshTokenRepository refreshTokens,
             AuthAuditService audit, RolePermissionService rolePermissions,
             BranchScopeService branchScope, UserBranchRepository userBranches,
-            UserRoleRepository userRoles, RoleRepository roles, AuthAuditLogRepository auditLogs) {
+            UserRoleRepository userRoles, RoleRepository roles, AuthAuditLogRepository auditLogs,
+            StaffSyncOutboxService staffSyncOutbox) {
         this.repository = repository;
         this.encoder = encoder;
         this.refreshTokens = refreshTokens;
@@ -67,6 +71,7 @@ public class UserController {
         this.userRoles = userRoles;
         this.roles = roles;
         this.auditLogs = auditLogs;
+        this.staffSyncOutbox = staffSyncOutbox;
     }
 
     @GetMapping
@@ -109,10 +114,11 @@ public class UserController {
             List<Long> visibleBranches = userBranches.findBranchIds(actor.getId());
             if (visibleBranches.isEmpty()) results = Page.empty(pageable);
             else results = repository.searchTenantUsersInBranches(actor.getTenantId(), visibleBranches,
-                    role, active, branchId, normalizeQuery(query), pageable);
+                    role, active, branchId, normalizeQuery(query),
+                    Roles.matches(actor.getRole(), "OWNER"), pageable);
         } else {
             results = repository.searchTenantUsers(actor.getTenantId(), role, active, branchId,
-                    normalizeQuery(query), pageable);
+                    normalizeQuery(query), Roles.matches(actor.getRole(), "OWNER"), pageable);
         }
         return ResponseEntity.ok(Map.of("content", results.getContent().stream().map(user ->
                         UserResponse.from(user, rolePermissions.permissionsFor(user.getRole(), user.getTenantId()),
@@ -164,6 +170,7 @@ public class UserController {
         User saved = repository.save(user);
         userRoles.replaceRole(saved.getId(), saved.getTenantId(), saved.getRole());
         userBranches.replaceBranches(saved.getId(), assignedBranches);
+        staffSyncOutbox.record(saved, "STAFF_CREATED");
         audit.record(saved.getId(), saved.getUsername(), "USER_CREATED", true, actor.getId(), actor.getTenantId(),
                 assignedBranches.get(0), null);
         return ResponseEntity.status(HttpStatus.CREATED).body(
@@ -174,7 +181,7 @@ public class UserController {
     @PutMapping("/{id}")
     @Transactional
     @PreAuthorize("hasAnyRole('OWNER','MANAGER') and hasAuthority('user:update')")
-    public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody UserRequest request, Authentication authentication) {
+    public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody StaffUpdateRequest request, Authentication authentication) {
         User user = repository.findById(id).orElse(null);
         if (user == null)
             return ResponseEntity.notFound().build();
@@ -182,53 +189,22 @@ public class UserController {
         if (!java.util.Objects.equals(user.getTenantId(), actor.getTenantId()))
             return ResponseEntity.notFound().build();
         if (!branchScope.canManageUser(actor, user)) return ResponseEntity.notFound().build();
-        if (request.password() != null && !request.password().isBlank())
-            return ResponseEntity.badRequest().body(Map.of("error", "Use the reset-password endpoint to change a password"));
-        if (request.active() != null || request.branchIds() != null)
-            return ResponseEntity.badRequest().body(Map.of("error", "Use the dedicated status and branches endpoints"));
-        String requestedRole = request.effectiveRole();
-        if (requestedRole != null && !Roles.matches(user.getRole(), requestedRole))
-            return ResponseEntity.badRequest().body(Map.of("error", "Use the roles endpoint to change roles"));
-        boolean changingActive = request.active() != null && request.active() != user.isActive();
-        boolean deactivating = user.isActive() && Boolean.FALSE.equals(request.active());
-        if (changingActive && !hasAuthority(authentication, "user:deactivate"))
-            return ResponseEntity.status(403).body(Map.of("error", "You cannot change the user's active status"));
-        if (deactivating && isSameUser(authentication, user))
-            return ResponseEntity.status(403).body(Map.of("error", "You cannot deactivate your own account"));
-        if (deactivating && Roles.matches(user.getRole(), "OWNER")
-                && repository.countActiveByRoleAndTenantId("OWNER", user.getTenantId()) <= 1)
-            return ResponseEntity.status(409).body(Map.of("error", "The last Restaurant Admin cannot be deactivated"));
-        if (changingActive) user.setPermissionVersion(user.getPermissionVersion() + 1);
-        boolean selfUpdate = isSameUser(authentication, user);
-        if (requestedRole != null && selfUpdate && !com.dinemaster.role.Roles.matches(user.getRole(), requestedRole))
-            return ResponseEntity.status(403).body(Map.of("error", "You cannot change your own role"));
-        if (requestedRole != null && !com.dinemaster.role.Roles.matches(user.getRole(), requestedRole)
-                && !hasAuthority(authentication, "role:assign"))
-            return ResponseEntity.status(403).body(Map.of("error", "You cannot assign roles"));
-        if (requestedRole != null && !canManageRole(authentication, requestedRole))
-            return ResponseEntity.status(403).body(Map.of("error", "You cannot assign this role"));
-        if (!user.getUsername().equals(request.username()) && repository.existsByUsername(request.username().trim()))
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "Username already exists"));
+        if (request.fullName() != null && request.fullName().isBlank())
+            return ResponseEntity.unprocessableEntity().body(Map.of("error", "fullName must not be blank"));
         if (request.employeeCode() != null && !request.employeeCode().equals(user.getEmployeeCode())
+                && !request.employeeCode().isBlank()
                 && repository.existsByTenantIdAndEmployeeCode(actor.getTenantId(), request.employeeCode().trim()))
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", "Employee code already exists"));
-        String previousRole = user.getRole();
-        copy(request, user, false);
-        if (requestedRole != null && !Roles.matches(previousRole, user.getRole())) {
-            user.setPermissionVersion(user.getPermissionVersion() + 1);
-        }
+        if (request.fullName() != null) user.setName(request.fullName().trim());
+        if (request.email() != null) user.setEmail(request.email().isBlank() ? null : request.email().trim());
+        if (request.phone() != null) user.setContactDetails(request.phone().isBlank() ? null : request.phone().trim());
+        if (request.employeeCode() != null) user.setEmployeeCode(request.employeeCode().isBlank() ? null : request.employeeCode().trim());
+        if (request.joinedOn() != null) user.setJoinedOn(request.joinedOn());
+        if (request.shiftTiming() != null) user.setShiftTiming(request.shiftTiming().isBlank() ? null : request.shiftTiming().trim());
         User saved = repository.save(user);
-        if (requestedRole != null && !Roles.matches(previousRole, saved.getRole()))
-            userRoles.replaceRole(saved.getId(), saved.getTenantId(), saved.getRole());
-        if (!com.dinemaster.role.Roles.matches(previousRole, saved.getRole()))
-            audit.record(saved.getId(), saved.getUsername(), "USER_ROLE_CHANGED", true,
-                    actor.getId(), actor.getTenantId(), null, previousRole + " -> " + saved.getRole());
-        else audit.record(saved.getId(), saved.getUsername(), "USER_UPDATED", true,
+        staffSyncOutbox.record(saved, "STAFF_UPDATED");
+        audit.record(saved.getId(), saved.getUsername(), "USER_UPDATED", true,
                 actor.getId(), actor.getTenantId(), null, null);
-        if (deactivating) {
-            audit.record(saved.getId(), saved.getUsername(), "USER_DEACTIVATE", true);
-            revokeRefreshTokens(saved.getId());
-        }
         return ResponseEntity.ok(UserResponse.from(saved, rolePermissions.permissionsFor(saved.getRole(), saved.getTenantId()),
                 visibleContact(actor, saved), userBranches.findBranchIds(saved.getId())));
     }
@@ -258,18 +234,19 @@ public class UserController {
         if (!branchScope.canManageUser(actor, user)) return ResponseEntity.notFound().build();
         if (isSameUser(authentication, user))
             return ResponseEntity.status(403).body(Map.of("error", "You cannot deactivate your own account"));
-        if (!branchScope.canManageUser(actor, user))
-            return ResponseEntity.status(403).body(Map.of("error", "You cannot deactivate this role"));
         if (com.dinemaster.role.Roles.matches(user.getRole(), "OWNER")
                 && repository.countActiveByRoleAndTenantId("OWNER", user.getTenantId()) <= 1)
             return ResponseEntity.status(409).body(Map.of("error", "The last Restaurant Admin cannot be deactivated"));
+        if (!user.isActive()) return ResponseEntity.noContent().build();
         user.setActive(false);
         user.setPermissionVersion(user.getPermissionVersion() + 1);
         repository.save(user);
+        staffSyncOutbox.record(user, "STAFF_DEACTIVATED");
         audit.record(user.getId(), user.getUsername(), "USER_DEACTIVATE", true,
                 actor.getId(), actor.getTenantId(), null, reason);
         revokeRefreshTokens(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(Map.of("id", user.getId(), "status", "INACTIVE",
+                "deactivatedAt", OffsetDateTime.now()));
     }
 
     @PostMapping("/{id}/reactivate")
@@ -284,6 +261,7 @@ public class UserController {
             target.setActive(true);
             target.setPermissionVersion(target.getPermissionVersion() + 1);
             repository.save(target);
+            staffSyncOutbox.record(target, "STAFF_REACTIVATED");
             audit.record(id, target.getUsername(), "USER_REACTIVATE", true, actor.getId(), actor.getTenantId(), null,
                     request == null ? null : request.reason());
         }
@@ -303,10 +281,12 @@ public class UserController {
         if (codes.size() != 1 || !canManageRole(authentication, codes.get(0)))
             return ResponseEntity.status(403).body(Map.of("error", "Requested role assignment is not allowed"));
         String previous = target.getRole();
+        if (Roles.matches(previous, codes.get(0))) return ResponseEntity.noContent().build();
         target.setRole(codes.get(0));
         target.setPermissionVersion(target.getPermissionVersion() + 1);
         userRoles.replaceRoles(id, target.getTenantId(), codes);
         repository.save(target);
+        staffSyncOutbox.record(target, "STAFF_ROLE_CHANGED");
         audit.record(id, target.getUsername(), "USER_ROLE_CHANGED", true, actor.getId(), actor.getTenantId(), null,
                 previous + " -> " + codes.get(0));
         revokeRefreshTokens(id);
@@ -330,6 +310,7 @@ public class UserController {
         user.setMustChangePassword(true);
         user.setPermissionVersion(user.getPermissionVersion() + 1);
         repository.save(user);
+        staffSyncOutbox.record(user, "STAFF_CREDENTIAL_RESET");
         audit.record(user.getId(), user.getUsername(), "PASSWORD_RESET", true, actor.getId(), actor.getTenantId(),
                 null, request.reason());
         revokeRefreshTokens(id);
@@ -396,9 +377,12 @@ public class UserController {
         } catch (org.springframework.security.access.AccessDeniedException denied) {
             return ResponseEntity.notFound().build();
         }
+        if (new java.util.HashSet<>(userBranches.findBranchIds(id))
+                .equals(new java.util.HashSet<>(request.branchIds()))) return ResponseEntity.noContent().build();
         userBranches.replaceBranches(id, request.branchIds());
         target.setPermissionVersion(target.getPermissionVersion() + 1);
         repository.save(target);
+        staffSyncOutbox.record(target, "STAFF_BRANCHES_CHANGED");
         audit.record(id, target.getUsername(), "USER_BRANCHES_CHANGED", true, actor.getId(), actor.getTenantId(),
                 request.branchIds().isEmpty() ? null : request.branchIds().get(0), request.branchIds().toString());
         revokeRefreshTokens(id);
@@ -424,10 +408,6 @@ public class UserController {
         });
     }
 
-    private boolean hasAuthority(Authentication authentication, String authority) {
-        return authentication.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals(authority));
-    }
-
     private boolean isSameUser(Authentication authentication, User user) {
         return authentication != null && authentication.getName().equals(user.getUsername());
     }
@@ -440,10 +420,13 @@ public class UserController {
             user.setPassword(encoder.encode(request.password()));
         if (request.active() != null)
             user.setActive(request.active());
-        user.setContactDetails(request.effectiveContactDetails());
-        user.setShiftTiming(request.shiftTiming());
-        user.setEmail(request.email());
-        user.setEmployeeCode(request.employeeCode());
+        String contact = request.effectiveContactDetails();
+        user.setContactDetails(contact == null || contact.isBlank() ? null : contact.trim());
+        user.setShiftTiming(request.shiftTiming() == null || request.shiftTiming().isBlank()
+                ? null : request.shiftTiming().trim());
+        user.setEmail(request.email() == null || request.email().isBlank() ? null : request.email().trim());
+        user.setEmployeeCode(request.employeeCode() == null || request.employeeCode().isBlank()
+                ? null : request.employeeCode().trim());
         user.setJoinedOn(request.joinedOn());
     }
 
