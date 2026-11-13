@@ -78,6 +78,9 @@ env:
 jobs:
   build:
     runs-on: ${{ inputs.runner }}
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -108,7 +111,7 @@ jobs:
 
       - name: Prepare dist directory
         shell: bash
-        run: mkdir -p build/dist
+        run: mkdir -p "$GITHUB_WORKSPACE/build/dist"
 
       # ============ PREPARE SIGNING (conditional by platform) ============
       - name: Set up Android signing
@@ -204,10 +207,10 @@ jobs:
           }
 
           Write-Host "Compiling Windows Setup Wizard installer (.exe)..."
-          & $isccPath "/DMyAppVersion=${{ inputs.version-name }}" "/DMyAppSourceDir=$env:GITHUB_WORKSPACE\build\windows\x64\runner\Release" "/O$distDir" "/F${{ inputs.archive-name }}-windows-setup" "$env:GITHUB_WORKSPACE\windows\installer\dinemaster_setup.iss"
+          & $isccPath "/DMyAppVersion=${{ inputs.version-name }}" "/DMyAppSourceDir=$env:GITHUB_WORKSPACE\frontend\build\windows\x64\runner\Release" "/O$distDir" "/F${{ inputs.archive-name }}-windows-setup" "$env:GITHUB_WORKSPACE\frontend\windows\installer\dinemaster_setup.iss"
 
           Write-Host "Creating portable zip archive..."
-          Compress-Archive -Path "$env:GITHUB_WORKSPACE\build\windows\x64\runner\Release\*" -DestinationPath "$distDir\${{ inputs.archive-name }}-windows-x64.zip" -Force
+          Compress-Archive -Path "$env:GITHUB_WORKSPACE\frontend\build\windows\x64\runner\Release\*" -DestinationPath "$distDir\${{ inputs.archive-name }}-windows-x64.zip" -Force
 
       - name: Build Linux
         if: ${{ inputs.platform == 'linux' }}

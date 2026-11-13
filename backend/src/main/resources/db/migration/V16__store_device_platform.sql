@@ -1,0 +1,2 @@
+ALTER TABLE auth_devices
+    ADD COLUMN platform VARCHAR(50) NOT NULL DEFAULT 'UNKNOWN';
